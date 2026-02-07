@@ -44,13 +44,28 @@ final class HelperClient: @unchecked Sendable {
         return response?["ok"] as? Bool ?? false
     }
 
+    /// Result of a type command from the helper, including skipped character info.
+    struct TypeResponse {
+        let ok: Bool
+        let skippedCharacters: String
+        let warning: String?
+    }
+
     /// Type text via Karabiner virtual keyboard.
-    func type(text: String) -> Bool {
-        let response = sendCommandWithReconnect([
+    /// Returns structured response including any skipped characters.
+    func type(text: String) -> TypeResponse {
+        guard let response = sendCommandWithReconnect([
             "action": "type",
             "text": text,
-        ])
-        return response?["ok"] as? Bool ?? false
+        ]) else {
+            return TypeResponse(ok: false, skippedCharacters: "", warning: nil)
+        }
+
+        return TypeResponse(
+            ok: response["ok"] as? Bool ?? false,
+            skippedCharacters: response["skipped_characters"] as? String ?? "",
+            warning: response["warning"] as? String
+        )
     }
 
     /// Swipe between two screen-absolute points.

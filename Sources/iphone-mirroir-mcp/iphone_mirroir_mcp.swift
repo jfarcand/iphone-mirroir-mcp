@@ -86,12 +86,10 @@ struct IPhoneMirroirMCP {
                     return .error("Missing required parameters: x, y (numbers)")
                 }
 
-                if input.tap(x: x, y: y) {
-                    return .text("Tapped at (\(Int(x)), \(Int(y)))")
-                } else {
-                    return .error(
-                        "Failed to tap. Is iPhone Mirroring running and window visible?")
+                if let error = input.tap(x: x, y: y) {
+                    return .error(error)
                 }
+                return .text("Tapped at (\(Int(x)), \(Int(y)))")
             }
         ))
 
@@ -146,18 +144,16 @@ struct IPhoneMirroirMCP {
 
                 let duration = args["duration_ms"]?.asInt() ?? 300
 
-                if input.swipe(
+                if let error = input.swipe(
                     fromX: fromX, fromY: fromY,
                     toX: toX, toY: toY,
                     durationMs: duration
                 ) {
-                    return .text(
-                        "Swiped from (\(Int(fromX)),\(Int(fromY))) to (\(Int(toX)),\(Int(toY)))"
-                    )
-                } else {
-                    return .error(
-                        "Failed to swipe. Is iPhone Mirroring running and window visible?")
+                    return .error(error)
                 }
+                return .text(
+                    "Swiped from (\(Int(fromX)),\(Int(fromY))) to (\(Int(toX)),\(Int(toY)))"
+                )
             }
         ))
 
@@ -184,12 +180,19 @@ struct IPhoneMirroirMCP {
                     return .error("Missing required parameter: text (string)")
                 }
 
-                if input.typeText(text) {
-                    return .text("Typed \(text.count) characters")
-                } else {
-                    return .error(
-                        "Failed to type text. Is iPhone Mirroring running and focused?")
+                let result = input.typeText(text)
+                guard result.success else {
+                    return .error(result.error ?? "Failed to type text")
                 }
+
+                if result.skippedCharacters.isEmpty {
+                    return .text("Typed \(text.count) characters")
+                }
+                let typedCount = text.count - result.skippedCharacters.count
+                return .text(
+                    "Typed \(typedCount)/\(text.count) characters. "
+                    + "Skipped (no US QWERTY mapping): \(result.skippedCharacters)"
+                )
             }
         ))
 
@@ -292,7 +295,7 @@ struct IPhoneMirroirMCP {
                     let pt = status["pointing_ready"] as? Bool ?? false
                     helperStatus = "Helper: connected (keyboard=\(kb), pointing=\(pt))"
                 } else {
-                    helperStatus = "Helper: not running (tap/type/swipe use CGEvent fallback)"
+                    helperStatus = "Helper: not running (tap/type/swipe unavailable)"
                 }
 
                 return .text("\(mirroringStatus)\n\(helperStatus)")
