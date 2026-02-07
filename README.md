@@ -7,12 +7,13 @@ No simulator. No jailbreak. No app on the phone. Your actual device.
 ## What Works
 
 - **Screenshots** — captures the mirrored iPhone screen as PNG
-- **Taps** — click anywhere on the iPhone screen
-- **Swipes** — drag between two points
-- **Typing** — type text into any focused text field (US QWERTY)
-- **Navigation** — Home, App Switcher, Spotlight via menu bar actions
+- **Taps** — click anywhere on the iPhone screen via Karabiner virtual pointing device
+- **Swipes** — drag between two points with configurable duration
+- **Typing** — type text into any focused field via AppleScript System Events
+- **Keyboard shortcuts** — Cmd+N, Return, etc. work through iPhone Mirroring
+- **Navigation** — Home, App Switcher, Spotlight via macOS menu bar actions
 
-All input goes through a Karabiner DriverKit virtual HID device, which bypasses iPhone Mirroring's DRM-protected surface.
+Taps and swipes use a Karabiner DriverKit virtual pointing device to bypass iPhone Mirroring's DRM-protected surface. Typing uses AppleScript to activate the iPhone Mirroring window and send keystrokes through System Events.
 
 ## Security Warning
 
@@ -39,7 +40,7 @@ brew install iphone-mirroir-mcp
 sudo brew services start iphone-mirroir-mcp
 ```
 
-Open Karabiner-Elements and approve the DriverKit extension when prompted. Then run `brew info iphone-mirroir-mcp` and follow the caveats to configure the Karabiner ignore rule and set up your MCP client.
+Open Karabiner-Elements and approve the DriverKit extension when prompted. Then run `brew info iphone-mirroir-mcp` and follow the caveats to configure your MCP client.
 
 ### From source
 
@@ -84,13 +85,23 @@ Grant both to your terminal app.
 | `screenshot` | — | Capture the iPhone screen as base64 PNG |
 | `tap` | `x`, `y` | Tap at coordinates (relative to mirroring window) |
 | `swipe` | `from_x`, `from_y`, `to_x`, `to_y`, `duration_ms`? | Swipe between two points (default 300ms) |
-| `type_text` | `text` | Type into the focused text field (US QWERTY) |
+| `type_text` | `text` | Type text — activates iPhone Mirroring and sends keystrokes |
 | `press_home` | — | Go to home screen |
 | `press_app_switcher` | — | Open app switcher |
 | `spotlight` | — | Open Spotlight search |
-| `status` | — | Connection state and device readiness |
+| `status` | — | Connection state, window geometry, and device readiness |
 
 Coordinates are in points relative to the mirroring window's top-left corner. Screenshots are Retina 2x — divide pixel coordinates by 2 to get tap coordinates.
+
+### Typing workflow
+
+`type_text` activates iPhone Mirroring as the frontmost app via System Events, then sends keystrokes. This means:
+- The iPhone Mirroring window takes focus briefly during typing
+- After typing, your previous app regains focus
+- Works with any keyboard layout (not limited to US QWERTY)
+- iOS autocorrect applies — type carefully or disable it on the iPhone
+
+For navigating within apps, combine `spotlight` + `type_text` + keyboard shortcuts (via `osascript`). For example, Cmd+N in Messages opens a new conversation.
 
 ## Architecture
 
@@ -101,7 +112,9 @@ MCP Client (stdin/stdout JSON-RPC)
 iphone-mirroir-mcp (user process)
     ├── MirroringBridge    — AXUIElement window discovery + menu actions
     ├── ScreenCapture      — screencapture -l <windowID>
-    ├── InputSimulation    — coordinate mapping, focus management
+    ├── InputSimulation    — AppleScript typing, coordinate mapping
+    │       ├── type_text  → System Events: set frontmost + keystroke
+    │       └── tap/swipe  → HelperClient (Unix socket IPC)
     └── HelperClient       — Unix socket client
             │
             ▼  /var/run/iphone-mirroir-helper.sock
@@ -116,7 +129,11 @@ iphone-mirroir-helper (root LaunchDaemon)
     macOS HID System → iPhone Mirroring
 ```
 
-The helper runs as root because Karabiner's virtual HID sockets are in a root-only directory. It creates a virtual keyboard and a virtual pointing device through Karabiner's DriverKit extension. Clicks warp the system cursor to the target, send a Karabiner pointing report, then restore the cursor. Typing clicks the iPhone Mirroring title bar first to ensure keyboard focus, then sends HID keyboard reports.
+**Taps/swipes**: The helper warps the system cursor to the target coordinates, sends a Karabiner virtual pointing device button press, then restores the cursor. This bypasses iPhone Mirroring's DRM surface which blocks regular CGEvent input.
+
+**Typing**: The MCP server uses AppleScript to set iPhone Mirroring as frontmost via System Events, then sends `keystroke` commands. This routes keystrokes to iPhone Mirroring without needing the Karabiner virtual keyboard.
+
+**Navigation**: Home, Spotlight, and App Switcher use macOS Accessibility APIs to trigger iPhone Mirroring's menu bar actions directly (no window focus needed).
 
 ## Updating
 
@@ -145,7 +162,7 @@ brew uninstall iphone-mirroir-mcp
 
 **`keyboard_ready: false`** — Karabiner's DriverKit extension isn't running. Open Karabiner-Elements and approve the extension.
 
-**Typing goes to terminal instead of iPhone** — The Karabiner ignore rule is missing. Run `brew info iphone-mirroir-mcp` for the config snippet, or re-run `./install.sh` (source install configures it automatically).
+**Typing goes to terminal instead of iPhone** — Make sure you're running v0.3.0+. Older versions used Karabiner HID keyboard which sent keystrokes to whatever had focus. v0.3.0 uses AppleScript to activate iPhone Mirroring before typing.
 
 **Taps don't register** — Check that the helper is running:
 ```bash
@@ -154,6 +171,8 @@ echo '{"action":"status"}' | nc -U /var/run/iphone-mirroir-helper.sock
 If not responding, restart: `sudo brew services restart iphone-mirroir-mcp` or `sudo ./scripts/reinstall-helper.sh`.
 
 **"Mirroring paused" screenshots** — The MCP server auto-resumes paused sessions. If it persists, click the iPhone Mirroring window manually once.
+
+**iOS autocorrect mangling typed text** — iOS applies autocorrect to typed text. Disable autocorrect in iPhone Settings > General > Keyboard, or type words followed by spaces to confirm them before autocorrect triggers.
 
 ## License
 
