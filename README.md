@@ -30,71 +30,43 @@ The MCP server only works while iPhone Mirroring is active. Closing the window o
 
 ## Install
 
-### 1. Install Karabiner-Elements
+### Prerequisites
+
+1. [Karabiner-Elements](https://karabiner-elements.pqrs.org/) installed and activated:
 
 ```bash
 brew install --cask karabiner-elements
 ```
 
-Open Karabiner-Elements, approve the DriverKit system extension when macOS prompts. Verify it's running:
+Open Karabiner-Elements, approve the DriverKit system extension when macOS prompts.
+
+2. Xcode Command Line Tools:
 
 ```bash
-ls /Library/Application\ Support/org.pqrs/tmp/rootonly/vhidd_server/*.sock
-# Should show one or more .sock files
+xcode-select --install
 ```
 
-### 2. Configure Karabiner to ignore the virtual keyboard
+### Option A: Homebrew
 
-Karabiner's event grabber will intercept keyboard events from the virtual HID device unless you tell it to ignore it. Add this `devices` entry to your Karabiner profile:
-
-**File**: `~/.config/karabiner/karabiner.json`
-
-```json
-{
-    "profiles": [
-        {
-            "devices": [
-                {
-                    "identifiers": {
-                        "is_keyboard": true,
-                        "product_id": 592,
-                        "vendor_id": 1452
-                    },
-                    "ignore": true
-                }
-            ],
-            "name": "Default profile",
-            "selected": true,
-            "virtual_hid_keyboard": { "keyboard_type_v2": "ansi" }
-        }
-    ]
-}
+```bash
+brew tap jfarcand/tap
+brew install iphone-mirroir-mcp
+sudo brew services start iphone-mirroir-mcp
 ```
 
-If you have existing Karabiner rules, just add the `devices` array to your active profile. The key values are `vendor_id: 1452` (0x5ac) and `product_id: 592` (0x250).
+Follow the caveats printed after install (`brew info iphone-mirroir-mcp`).
 
-### 3. Build and install
+### Option B: From source
 
 ```bash
 git clone https://github.com/jfarcand/iphone-mirroir-mcp.git
 cd iphone-mirroir-mcp
-
-# Build both binaries and install the helper daemon (prompts for sudo password)
-./scripts/install-helper.sh
+./install.sh
 ```
 
-This installs:
-- `/usr/local/bin/iphone-mirroir-helper` — privileged daemon that talks to Karabiner
-- `/Library/LaunchDaemons/com.jfarcand.iphone-mirroir-helper.plist` — auto-starts on boot
+The installer builds both binaries, configures the Karabiner ignore rule, and installs the helper daemon. It prompts for sudo once.
 
-Verify the helper is running:
-
-```bash
-echo '{"action":"status"}' | nc -U /var/run/iphone-mirroir-helper.sock
-# Should return: {"ok":true,"keyboard_ready":true,"pointing_ready":true}
-```
-
-### 4. Add to your MCP client
+### Add to your MCP client
 
 Add to your `.mcp.json` (Claude Code, Cursor, etc.):
 
@@ -102,13 +74,16 @@ Add to your `.mcp.json` (Claude Code, Cursor, etc.):
 {
   "mcpServers": {
     "iphone-mirroring": {
-      "command": "/absolute/path/to/iphone-mirroir-mcp/.build/release/iphone-mirroir-mcp"
+      "command": "/path/to/iphone-mirroir-mcp"
     }
   }
 }
 ```
 
-### 5. Grant permissions
+For Homebrew: use the path printed by `brew info iphone-mirroir-mcp`.
+For source: use `.build/release/iphone-mirroir-mcp` in the cloned directory.
+
+### Grant permissions
 
 Open iPhone Mirroring, then run a `screenshot` tool call. macOS will prompt for:
 - **Screen Recording** — needed for `screencapture`
