@@ -60,8 +60,13 @@ final class CommandServer {
             throw HelperError.bindFailed(errno: errno)
         }
 
-        // Allow any user to connect (MCP server runs as normal user)
-        chmod(helperSocketPath, 0o666)
+        // Allow local users (staff group) to connect. On macOS, all interactive
+        // users are in the staff group, so this restricts access to local users
+        // while preventing access from other system daemons.
+        chmod(helperSocketPath, 0o660)
+        // Set group to staff so the MCP server (running as a normal user) can connect
+        let staffGroupID: gid_t = 20 // macOS built-in staff group
+        chown(helperSocketPath, 0, staffGroupID)
 
         guard listen(listenFd, 4) == 0 else {
             Darwin.close(listenFd)
@@ -205,6 +210,7 @@ final class CommandServer {
     }
 
     /// Type text by mapping each character to HID keycodes.
+    /// Characters without a US QWERTY HID mapping are skipped and reported in the response.
     private func handleType(_ json: [String: Any]) -> Data {
         guard let text = json["text"] as? String, !text.isEmpty else {
             return makeErrorResponse("type requires non-empty text (string)")
@@ -214,9 +220,13 @@ final class CommandServer {
             return makeErrorResponse("Karabiner keyboard device not ready")
         }
 
+        var skippedChars = [String]()
+
         for char in text {
             guard let mapping = HIDKeyMap.lookup(char) else {
-                logHelper("No HID mapping for character: '\(char)' (U+\(String(char.unicodeScalars.first!.value, radix: 16)))")
+                let codepoint = char.unicodeScalars.first.map { "U+\(String($0.value, radix: 16, uppercase: true))" } ?? "?"
+                logHelper("No HID mapping for character: '\(char)' (\(codepoint))")
+                skippedChars.append(String(char))
                 continue
             }
 
@@ -224,7 +234,14 @@ final class CommandServer {
             usleep(15_000) // 15ms between keystrokes
         }
 
-        return makeOkResponse()
+        if skippedChars.isEmpty {
+            return makeOkResponse()
+        }
+        return safeJSON([
+            "ok": true,
+            "skipped_characters": skippedChars.joined(),
+            "warning": "Some characters have no US QWERTY HID mapping and were not typed",
+        ])
     }
 
     /// Swipe from one screen-absolute point to another.
@@ -325,17 +342,30 @@ final class CommandServer {
             "keyboard_ready": karabiner.isKeyboardReady,
             "pointing_ready": karabiner.isPointingReady,
         ]
-        return try! JSONSerialization.data(withJSONObject: status)
+        return safeJSON(status)
     }
 
     // MARK: - JSON Response Helpers
 
+    /// Fallback response used when JSON serialization itself fails.
+    private static let fallbackErrorData = Data(#"{"ok":false,"error":"internal serialization error"}"#.utf8)
+
     private func makeOkResponse() -> Data {
-        return try! JSONSerialization.data(withJSONObject: ["ok": true])
+        return safeJSON(["ok": true])
     }
 
     private func makeErrorResponse(_ message: String) -> Data {
-        return try! JSONSerialization.data(withJSONObject: ["ok": false, "error": message])
+        return safeJSON(["ok": false, "error": message])
+    }
+
+    /// Serialize a dictionary to JSON, returning a hardcoded error response on failure.
+    private func safeJSON(_ obj: [String: Any]) -> Data {
+        do {
+            return try JSONSerialization.data(withJSONObject: obj)
+        } catch {
+            logHelper("JSON serialization failed: \(error)")
+            return Self.fallbackErrorData
+        }
     }
 }
 

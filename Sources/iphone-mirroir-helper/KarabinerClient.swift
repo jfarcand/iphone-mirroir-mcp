@@ -387,7 +387,9 @@ final class KarabinerClient {
                 guard buf[0] == 0x63, buf[1] == 0x70 else { continue }
                 let responseType = buf[4]
 
-                if responseType == KarabinerResponse.virtualHidKeyboardReady.rawValue, bytesRead >= 6 {
+                if responseType == KarabinerResponse.driverVersionMismatched.rawValue {
+                    throw KarabinerError.driverVersionMismatch
+                } else if responseType == KarabinerResponse.virtualHidKeyboardReady.rawValue, bytesRead >= 6 {
                     isKeyboardReady = buf[5] != 0
                     log("Keyboard ready: \(isKeyboardReady)")
                 } else if responseType == KarabinerResponse.virtualHidPointingReady.rawValue, bytesRead >= 6 {
@@ -496,6 +498,7 @@ enum KarabinerError: Error, CustomStringConvertible {
     case socketCreationFailed(errno: Int32)
     case bindFailed(errno: Int32, path: String)
     case devicesNotReady
+    case driverVersionMismatch
 
     var description: String {
         switch self {
@@ -507,6 +510,8 @@ enum KarabinerError: Error, CustomStringConvertible {
             return "Failed to bind socket at \(path): \(String(cString: strerror(e)))"
         case .devicesNotReady:
             return "Virtual HID devices did not become ready within timeout"
+        case .driverVersionMismatch:
+            return "Karabiner driver version mismatch. The helper's protocol version (\(protocolVersion)) does not match the installed Karabiner DriverKit extension. Reinstall Karabiner-Elements or rebuild the helper."
         }
     }
 }
