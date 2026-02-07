@@ -3,6 +3,7 @@
 
 import Darwin
 import Foundation
+import HelperLib
 
 // MARK: - Protocol Constants
 
@@ -34,96 +35,6 @@ private enum KarabinerResponse: UInt8 {
     case driverVersionMismatched = 3
     case virtualHidKeyboardReady = 4
     case virtualHidPointingReady = 5
-}
-
-// MARK: - Packed Report Structures
-
-/// Keyboard initialization parameters (12 bytes, packed).
-/// Matches virtual_hid_keyboard_parameters in parameters.hpp.
-private struct KeyboardParameters {
-    var vendorID: UInt32 = 0x16c0
-    var productID: UInt32 = 0x27db
-    var countryCode: UInt32 = 0
-
-    func toBytes() -> [UInt8] {
-        var copy = self
-        return withUnsafeBytes(of: &copy) { Array($0) }
-    }
-}
-
-/// Pointing device input report (8 bytes, packed).
-/// Matches pointing_input in pointing_input.hpp.
-struct PointingInput {
-    var buttons: UInt32 = 0
-    var x: Int8 = 0
-    var y: Int8 = 0
-    var verticalWheel: Int8 = 0
-    var horizontalWheel: Int8 = 0
-
-    func toBytes() -> [UInt8] {
-        var copy = self
-        return withUnsafeBytes(of: &copy) { Array($0) }
-    }
-}
-
-/// Keyboard input report (67 bytes, packed).
-/// Matches keyboard_input in keyboard_input.hpp.
-struct KeyboardInput {
-    var reportID: UInt8 = 1
-    var modifiers: UInt8 = 0
-    var reserved: UInt8 = 0
-    var keys: (
-        UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16,
-        UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16,
-        UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16,
-        UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16
-    ) = (
-        0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0
-    )
-
-    mutating func insertKey(_ keyCode: UInt16) {
-        withUnsafeMutableBytes(of: &keys) { buf in
-            let keysPtr = buf.bindMemory(to: UInt16.self)
-            // Find first empty slot
-            for i in 0..<32 {
-                if keysPtr[i] == 0 {
-                    keysPtr[i] = keyCode
-                    return
-                }
-            }
-        }
-    }
-
-    mutating func clearKeys() {
-        keys = (
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0
-        )
-    }
-
-    func toBytes() -> [UInt8] {
-        var copy = self
-        return withUnsafeBytes(of: &copy) { Array($0) }
-    }
-}
-
-/// Keyboard modifier flags matching the Karabiner modifier bitmask.
-struct KeyboardModifier: OptionSet {
-    let rawValue: UInt8
-
-    static let leftControl  = KeyboardModifier(rawValue: 0x01)
-    static let leftShift    = KeyboardModifier(rawValue: 0x02)
-    static let leftOption   = KeyboardModifier(rawValue: 0x04)
-    static let leftCommand  = KeyboardModifier(rawValue: 0x08)
-    static let rightControl = KeyboardModifier(rawValue: 0x10)
-    static let rightShift   = KeyboardModifier(rawValue: 0x20)
-    static let rightOption  = KeyboardModifier(rawValue: 0x40)
-    static let rightCommand = KeyboardModifier(rawValue: 0x80)
 }
 
 // MARK: - Karabiner Client

@@ -10,6 +10,10 @@ let package = Package(
         .macOS(.v14)
     ],
     targets: [
+        .target(
+            name: "HelperLib",
+            path: "Sources/HelperLib"
+        ),
         .executableTarget(
             name: "iphone-mirroir-mcp",
             linkerSettings: [
@@ -20,10 +24,15 @@ let package = Package(
         ),
         .executableTarget(
             name: "iphone-mirroir-helper",
+            dependencies: ["HelperLib"],
             linkerSettings: [
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("CoreFoundation"),
             ]
+        ),
+        .testTarget(
+            name: "HelperLibTests",
+            dependencies: ["HelperLib"]
         ),
     ]
 )

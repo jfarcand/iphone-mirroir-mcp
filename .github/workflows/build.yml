@@ -19,6 +19,9 @@ jobs:
       - name: Build (release)
         run: swift build -c release
 
+      - name: Unit tests
+        run: swift test
+
       - name: Binary info
         run: |
           ls -lh .build/release/iphone-mirroir-mcp .build/release/iphone-mirroir-helper
@@ -48,6 +51,69 @@ jobs:
           expected = {'screenshot','tap','swipe','type_text','press_home','press_app_switcher','spotlight','status'}
           assert set(tools) == expected, f'Missing tools: {expected - set(tools)}'
           print(f'tools/list: {len(tools)} tools registered')
+          "
+
+      - name: Test tool schemas
+        run: |
+          printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' \
+            | .build/release/iphone-mirroir-mcp 2>/dev/null \
+            | python3 -c "
+          import sys, json
+          lines = sys.stdin.readlines()
+          obj = json.loads(lines[1])
+          tools = {t['name']: t for t in obj['result']['tools']}
+
+          # tap requires x and y
+          tap = tools['tap']['inputSchema']
+          assert 'x' in tap['properties'], 'tap missing x'
+          assert 'y' in tap['properties'], 'tap missing y'
+          assert set(tap.get('required', [])) == {'x', 'y'}, 'tap should require x and y'
+
+          # swipe requires from_x, from_y, to_x, to_y
+          swipe = tools['swipe']['inputSchema']
+          assert all(k in swipe['properties'] for k in ['from_x','from_y','to_x','to_y']), 'swipe missing coords'
+
+          # type_text requires text
+          tt = tools['type_text']['inputSchema']
+          assert 'text' in tt['properties'], 'type_text missing text'
+
+          # screenshot has no required params
+          ss = tools['screenshot']['inputSchema']
+          assert ss.get('required', []) == [] or 'properties' not in ss or len(ss['properties']) == 0
+
+          print('Tool schemas: OK')
+          "
+
+      - name: Test unknown method returns error
+        run: |
+          printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"nonexistent/method","params":{}}\n' \
+            | .build/release/iphone-mirroir-mcp 2>/dev/null \
+            | python3 -c "
+          import sys, json
+          lines = sys.stdin.readlines()
+          resp = json.loads(lines[1])
+          assert 'error' in resp, f'Expected error response, got: {resp}'
+          assert resp['error']['code'] != 0, 'Error code should be non-zero'
+          print(f'Unknown method error: code={resp[\"error\"][\"code\"]}')
+          "
+
+      - name: Test invalid JSON is handled
+        run: |
+          printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\nthis is not json\n' \
+            | .build/release/iphone-mirroir-mcp 2>/dev/null \
+            | python3 -c "
+          import sys, json
+          lines = sys.stdin.readlines()
+          # First line should be valid initialize response
+          init_resp = json.loads(lines[0])
+          assert 'result' in init_resp, 'Initialize should succeed'
+          # Second line should be a parse error (-32700)
+          if len(lines) > 1:
+              err = json.loads(lines[1])
+              assert 'error' in err, f'Expected error for bad JSON, got: {err}'
+              print(f'Invalid JSON error: code={err[\"error\"][\"code\"]}')
+          else:
+              print('Server dropped invalid JSON (acceptable)')
           "
 
   release:
