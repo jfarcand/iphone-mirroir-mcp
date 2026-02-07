@@ -21,13 +21,24 @@ fi
 
 echo "Stopping helper..."
 launchctl bootout "system/$LABEL" 2>/dev/null || true
+sleep 2
+
+# Kill any lingering process
+pkill -9 -f iphone-mirroir-helper 2>/dev/null || true
+sleep 1
 
 echo "Copying binary..."
 cp "$BINARY_SRC" "$BINARY_DST"
 chmod 755 "$BINARY_DST"
 
+# Clean up stale socket
+rm -f /var/run/iphone-mirroir-helper.sock
+
 echo "Starting helper..."
-launchctl bootstrap system "$PLIST"
+if ! launchctl bootstrap system "$PLIST" 2>/dev/null; then
+    echo "Bootstrap failed, trying kickstart..."
+    launchctl kickstart -k "system/$LABEL" 2>/dev/null || true
+fi
 
 sleep 2
 echo "Checking status..."

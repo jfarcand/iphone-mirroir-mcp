@@ -218,6 +218,10 @@ final class CommandServer {
 
     /// Type text by mapping each character to HID keycodes.
     /// Characters without a US QWERTY HID mapping are skipped and reported in the response.
+    ///
+    /// When `focus_x`/`focus_y` are provided, clicks those screen-absolute coordinates
+    /// first to give the target window keyboard focus. This happens atomically within
+    /// the same command — no IPC round-trip gap where another window could steal focus.
     private func handleType(_ json: [String: Any]) -> Data {
         guard let text = json["text"] as? String, !text.isEmpty else {
             return makeErrorResponse("type requires non-empty text (string)")
@@ -225,6 +229,49 @@ final class CommandServer {
 
         guard karabiner.isKeyboardReady else {
             return makeErrorResponse("Karabiner keyboard device not ready")
+        }
+
+        // Atomic focus: click the title bar to give the window keyboard focus,
+        // keep the cursor parked there with physical mouse disconnected during
+        // the entire typing operation. Only restore cursor after all typing is done.
+        var savedPosition: CGPoint = .zero
+        let hasFocusClick: Bool
+        if let focusX = (json["focus_x"] as? NSNumber)?.doubleValue,
+           let focusY = (json["focus_y"] as? NSNumber)?.doubleValue,
+           karabiner.isPointingReady {
+            hasFocusClick = true
+            let target = CGPoint(x: focusX, y: focusY)
+            savedPosition = CGEvent(source: nil)?.location ?? .zero
+            logHelper("handleType: focus click at (\(focusX), \(focusY)), cursor saved at (\(Int(savedPosition.x)), \(Int(savedPosition.y)))")
+
+            CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
+            CGWarpMouseCursorPosition(target)
+            usleep(10_000)
+
+            // Karabiner nudge to sync virtual device with warped cursor
+            var nudgeRight = PointingInput()
+            nudgeRight.x = 1
+            karabiner.postPointingReport(nudgeRight)
+            usleep(5_000)
+            var nudgeBack = PointingInput()
+            nudgeBack.x = -1
+            karabiner.postPointingReport(nudgeBack)
+            usleep(10_000)
+
+            // Click down + up to give the window focus
+            var down = PointingInput()
+            down.buttons = 0x01
+            karabiner.postPointingReport(down)
+            usleep(80_000)
+            var up = PointingInput()
+            up.buttons = 0x00
+            karabiner.postPointingReport(up)
+
+            usleep(200_000) // 200ms for focus to settle before typing
+            // Cursor stays on target, physical mouse stays disconnected
+        } else {
+            hasFocusClick = false
+            logHelper("handleType: no focus click (focus_x=\(String(describing: json["focus_x"])), focus_y=\(String(describing: json["focus_y"])), pointing=\(karabiner.isPointingReady))")
         }
 
         var skippedChars = [String]()
@@ -239,6 +286,12 @@ final class CommandServer {
 
             karabiner.typeKey(keycode: mapping.keycode, modifiers: mapping.modifiers)
             usleep(15_000) // 15ms between keystrokes
+        }
+
+        // Restore cursor and reconnect physical mouse after all typing is done
+        if hasFocusClick {
+            CGWarpMouseCursorPosition(savedPosition)
+            CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
         }
 
         if skippedChars.isEmpty {

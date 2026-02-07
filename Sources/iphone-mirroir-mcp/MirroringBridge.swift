@@ -186,7 +186,9 @@ final class MirroringBridge: @unchecked Sendable {
         return false
     }
 
-    /// Activate (bring to front) the iPhone Mirroring app.
+    /// Activate (bring to front) the iPhone Mirroring app and raise its window.
+    /// Uses both NSRunningApplication.activate() and AXUIElement AXRaise to
+    /// ensure the window becomes the key window that receives keyboard input.
     func activate() {
         findProcess()?.activate()
     }

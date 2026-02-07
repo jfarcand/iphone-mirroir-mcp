@@ -1,6 +1,7 @@
 // ABOUTME: Simulates user input (tap, swipe, keyboard) on the iPhone Mirroring window.
 // ABOUTME: Delegates to the privileged Karabiner helper daemon for all DRM-protected input.
 
+import AppKit
 import CoreGraphics
 import Foundation
 
@@ -85,30 +86,43 @@ final class InputSimulation: @unchecked Sendable {
         return "Helper swipe failed"
     }
 
-    /// Type text by sending keyboard events via Karabiner virtual HID.
-    /// Clicks the iPhone Mirroring title bar first to ensure keyboard focus.
-    /// Returns a TypeResult with success status and any skipped characters.
+    /// Type text using AppleScript keystroke via System Events.
+    /// First activates iPhone Mirroring to make it the frontmost app,
+    /// then sends keystrokes through System Events which routes to the frontmost app.
     func typeText(_ text: String) -> TypeResult {
-        guard helperClient.isAvailable else {
-            return TypeResult(
-                success: false, skippedCharacters: "",
-                warning: nil, error: helperClient.unavailableMessage)
+        // Escape special AppleScript characters in the text
+        let escaped = text
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+
+        let script = NSAppleScript(source: """
+            tell application "System Events"
+                tell process "iPhone Mirroring"
+                    set frontmost to true
+                end tell
+                delay 0.5
+                keystroke "\(escaped)"
+            end tell
+            """)
+
+        var errorInfo: NSDictionary?
+        script?.executeAndReturnError(&errorInfo)
+
+        if let err = errorInfo {
+            let msg = (err[NSAppleScript.errorMessage] as? String) ?? "AppleScript error"
+            return TypeResult(success: false, skippedCharacters: "",
+                              warning: nil, error: msg)
         }
 
-        focusWindowViaClick()
-
-        let result = helperClient.type(text: text)
-        return TypeResult(
-            success: result.ok,
-            skippedCharacters: result.skippedCharacters,
-            warning: result.warning,
-            error: result.ok ? nil : "Helper type command failed")
+        return TypeResult(success: true, skippedCharacters: "",
+                          warning: nil, error: nil)
     }
 
     /// Send a special key press (e.g., Return, Escape, Delete).
     /// Uses CGEvent directly — these work for menu-level keys even without the helper.
     func pressKey(_ keyCode: CGKeyCode) -> Bool {
-        focusWindowViaClick()
+        bridge.activate()
+        clickTitleBarViaCGEvent()
 
         guard let keyDown = CGEvent(keyboardEventSource: eventSource, virtualKey: keyCode, keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: eventSource, virtualKey: keyCode, keyDown: false)
@@ -123,20 +137,27 @@ final class InputSimulation: @unchecked Sendable {
 
     // MARK: - Private Helpers
 
-    /// Give iPhone Mirroring keyboard focus by clicking its title bar.
-    /// A click on the title bar makes the window the key window without
-    /// triggering any iPhone touch input. More reliable than AX/AppleScript
-    /// activation from a subprocess.
-    private func focusWindowViaClick() {
+    /// Give iPhone Mirroring keyboard focus by clicking its title bar via CGEvent.
+    /// Uses in-process CGEvent (no IPC to the helper) so focus is acquired immediately.
+    /// The title bar is regular macOS UI (not DRM-protected), so CGEvent clicks work here.
+    private func clickTitleBarViaCGEvent() {
         guard let info = bridge.getWindowInfo() else { return }
 
         // Click the center of the title bar (14 points below the top of the
         // window frame, which is above the iPhone content area).
-        let titleBarX = Double(info.position.x) + Double(info.size.width) / 2.0
-        let titleBarY = Double(info.position.y) + 14.0
+        let titleBarX = CGFloat(info.position.x) + info.size.width / 2.0
+        let titleBarY = CGFloat(info.position.y) + 14.0
+        let point = CGPoint(x: titleBarX, y: titleBarY)
 
-        _ = helperClient.click(x: titleBarX, y: titleBarY)
-        usleep(200_000) // 200ms for focus to settle
+        guard let mouseDown = CGEvent(mouseEventSource: eventSource, mouseType: .leftMouseDown,
+                                      mouseCursorPosition: point, mouseButton: .left),
+              let mouseUp = CGEvent(mouseEventSource: eventSource, mouseType: .leftMouseUp,
+                                    mouseCursorPosition: point, mouseButton: .left)
+        else { return }
+
+        mouseDown.post(tap: .cghidEventTap)
+        usleep(50_000) // 50ms click hold
+        mouseUp.post(tap: .cghidEventTap)
     }
 }
 

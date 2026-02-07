@@ -279,7 +279,9 @@ struct IPhoneMirroirMCP {
                     let info = bridge.getWindowInfo()
                     let sizeDesc =
                         info.map { "\(Int($0.size.width))x\(Int($0.size.height))" } ?? "unknown"
-                    mirroringStatus = "Connected — mirroring active (window: \(sizeDesc))"
+                    let posDesc =
+                        info.map { "pos=(\(Int($0.position.x)),\(Int($0.position.y)))" } ?? "pos=unknown"
+                    mirroringStatus = "Connected — mirroring active (window: \(sizeDesc), \(posDesc))"
                 case .paused:
                     mirroringStatus = "Paused — connection paused, can resume"
                 case .notRunning:

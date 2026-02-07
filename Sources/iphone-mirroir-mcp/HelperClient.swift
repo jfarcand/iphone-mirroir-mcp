@@ -52,12 +52,20 @@ final class HelperClient: @unchecked Sendable {
     }
 
     /// Type text via Karabiner virtual keyboard.
-    /// Returns structured response including any skipped characters.
-    func type(text: String) -> TypeResponse {
-        guard let response = sendCommandWithReconnect([
+    /// When `focusX`/`focusY` are provided, the helper clicks those screen-absolute
+    /// coordinates first to give the target window keyboard focus, then types
+    /// atomically in the same command.
+    func type(text: String, focusX: Double? = nil, focusY: Double? = nil) -> TypeResponse {
+        var command: [String: Any] = [
             "action": "type",
             "text": text,
-        ]) else {
+        ]
+        if let fx = focusX, let fy = focusY {
+            command["focus_x"] = fx
+            command["focus_y"] = fy
+        }
+
+        guard let response = sendCommandWithReconnect(command) else {
             return TypeResponse(ok: false, skippedCharacters: "", warning: nil)
         }
 
