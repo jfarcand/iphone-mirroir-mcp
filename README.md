@@ -157,8 +157,9 @@ sudo ./scripts/reinstall-helper.sh
 sudo brew services stop iphone-mirroir-mcp
 brew uninstall iphone-mirroir-mcp
 
-# From source
-./scripts/uninstall-helper.sh
+# From source — removes helper daemon, Karabiner config changes,
+# and optionally Karabiner-Elements itself
+./uninstall.sh
 ```
 
 ## Troubleshooting
