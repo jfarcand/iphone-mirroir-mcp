@@ -33,7 +33,7 @@ fi
 
 # --- Step 2: Install Karabiner-Elements if missing ---
 
-if ! ls "$KARABINER_SOCK_DIR"/*.sock >/dev/null 2>&1; then
+if ! sudo bash -c "ls '$KARABINER_SOCK_DIR'/*.sock" >/dev/null 2>&1; then
     if [ -d "/Applications/Karabiner-Elements.app" ]; then
         echo ""
         echo "Karabiner-Elements is installed but the DriverKit extension is not running."
@@ -67,7 +67,7 @@ if ! ls "$KARABINER_SOCK_DIR"/*.sock >/dev/null 2>&1; then
     echo ""
     echo "Waiting for Karabiner DriverKit extension (up to ${KARABINER_WAIT_TIMEOUT}s)..."
     elapsed=0
-    while ! ls "$KARABINER_SOCK_DIR"/*.sock >/dev/null 2>&1; do
+    while ! sudo bash -c "ls '$KARABINER_SOCK_DIR'/*.sock" >/dev/null 2>&1; do
         if [ "$elapsed" -ge "$KARABINER_WAIT_TIMEOUT" ]; then
             echo ""
             echo "Timed out waiting for Karabiner DriverKit extension."
@@ -163,9 +163,25 @@ sudo chown root:wheel "/Library/LaunchDaemons/$PLIST_NAME.plist"
 sudo chmod 644 "/Library/LaunchDaemons/$PLIST_NAME.plist"
 sudo launchctl bootstrap system "/Library/LaunchDaemons/$PLIST_NAME.plist"
 
-# Wait for helper to start and verify
-sleep 2
-STATUS=$(echo '{"action":"status"}' | nc -U /var/run/iphone-mirroir-helper.sock 2>/dev/null || echo "")
+# Wait for helper to start and verify — the daemon may need several restarts
+# via KeepAlive before the Karabiner virtual HID device becomes ready
+HELPER_SOCK="/var/run/iphone-mirroir-helper.sock"
+HELPER_TIMEOUT=30
+echo "Waiting for helper daemon (up to ${HELPER_TIMEOUT}s)..."
+elapsed=0
+STATUS=""
+while [ "$elapsed" -lt "$HELPER_TIMEOUT" ]; do
+    sleep 2
+    elapsed=$((elapsed + 2))
+    if [ -S "$HELPER_SOCK" ]; then
+        STATUS=$(echo '{"action":"status"}' | nc -U "$HELPER_SOCK" 2>/dev/null || echo "")
+        if [ -n "$STATUS" ] && echo "$STATUS" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get('ok') else 1)" 2>/dev/null; then
+            break
+        fi
+    fi
+    printf "\r  waiting... %ds" "$elapsed"
+done
+printf "\r                    \n"
 
 # --- Step 6: Verify setup ---
 
