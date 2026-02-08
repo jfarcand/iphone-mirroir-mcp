@@ -67,6 +67,10 @@ if [ -d "/Applications/Karabiner-Elements.app" ]; then
             echo ""
             echo "--- Removing Karabiner-Elements ---"
 
+            # Quit the GUI app first
+            osascript -e 'quit app "Karabiner-Elements"' 2>/dev/null || true
+            sleep 1
+
             # Stop user-level agents
             for agent in \
                 org.pqrs.service.agent.Karabiner-Menu \
@@ -85,6 +89,21 @@ if [ -d "/Applications/Karabiner-Elements.app" ]; then
                 sudo launchctl bootout system/"$daemon" 2>/dev/null || true
             done
 
+            # Kill any remaining Karabiner processes directly
+            sudo killall Karabiner-VirtualHIDDevice-Daemon 2>/dev/null || true
+            sudo killall Karabiner-Core-Service 2>/dev/null || true
+            killall Karabiner-Elements 2>/dev/null || true
+            killall Karabiner-Menu 2>/dev/null || true
+            killall Karabiner-NotificationWindow 2>/dev/null || true
+            killall karabiner_console_user_server 2>/dev/null || true
+            sudo killall karabiner_session_monitor 2>/dev/null || true
+            sleep 1
+
+            # Remove launch plists (before files, so daemons don't restart)
+            sudo rm -f /Library/LaunchDaemons/org.pqrs.*.plist
+            sudo rm -f /Library/LaunchAgents/org.pqrs.*.plist
+            rm -f "$HOME/Library/LaunchAgents"/org.pqrs.*.plist 2>/dev/null || true
+
             # Remove applications
             sudo rm -rf /Applications/Karabiner-Elements.app
             sudo rm -rf /Applications/Karabiner-EventViewer.app
@@ -95,13 +114,14 @@ if [ -d "/Applications/Karabiner-Elements.app" ]; then
             # Remove user config
             rm -rf "$HOME/.config/karabiner"
 
-            # Remove launch plists
-            sudo rm -f /Library/LaunchDaemons/org.pqrs.*.plist
-            sudo rm -f /Library/LaunchAgents/org.pqrs.*.plist
-            rm -f "$HOME/Library/LaunchAgents/org.pqrs.*.plist"
-
-            echo "Karabiner-Elements removed."
-            echo "Note: The DriverKit system extension may remain until next reboot."
+            # Verify cleanup
+            remaining=$(ps aux | grep -i -e karabiner -e "org.pqrs" | grep -v grep | wc -l)
+            if [ "$remaining" -gt 1 ]; then
+                echo "Karabiner-Elements removed."
+                echo "Note: The DriverKit kernel extension (1 process) persists until reboot."
+            else
+                echo "Karabiner-Elements fully removed."
+            fi
             ;;
         *)
             echo "Keeping Karabiner-Elements installed."
