@@ -16,6 +16,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "iphone-mirroir-mcp",
+            dependencies: ["HelperLib"],
             linkerSettings: [
                 .linkedFramework("ApplicationServices"),
                 .linkedFramework("CoreGraphics"),

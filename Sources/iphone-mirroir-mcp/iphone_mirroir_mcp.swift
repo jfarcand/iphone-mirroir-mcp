@@ -196,6 +196,55 @@ struct IPhoneMirroirMCP {
             }
         ))
 
+        // press_key — send a special key press with optional modifiers
+        server.registerTool(MCPToolDefinition(
+            name: "press_key",
+            description: """
+                Send a special key press to the mirrored iPhone with optional modifiers. \
+                Supported keys: return, escape, tab, delete, space, up, down, left, right. \
+                Optional modifiers: command, shift, option, control. \
+                Examples: press Return to confirm, Escape to cancel, Cmd+N for new.
+                """,
+            inputSchema: [
+                "type": .string("object"),
+                "properties": .object([
+                    "key": .object([
+                        "type": .string("string"),
+                        "description": .string(
+                            "Key name: return, escape, tab, delete, space, up, down, left, right"),
+                    ]),
+                    "modifiers": .object([
+                        "type": .string("array"),
+                        "items": .object([
+                            "type": .string("string"),
+                        ]),
+                        "description": .string(
+                            "Optional modifier keys: command, shift, option, control"),
+                    ]),
+                ]),
+                "required": .array([.string("key")]),
+            ],
+            handler: { args in
+                guard let keyName = args["key"]?.asString() else {
+                    return .error("Missing required parameter: key (string)")
+                }
+
+                let modifiers = args["modifiers"]?.asStringArray() ?? []
+
+                let result = input.pressKeyViaAppleScript(
+                    keyName: keyName, modifiers: modifiers
+                )
+                guard result.success else {
+                    return .error(result.error ?? "Failed to press key")
+                }
+
+                if modifiers.isEmpty {
+                    return .text("Pressed \(keyName)")
+                }
+                return .text("Pressed \(modifiers.joined(separator: "+"))+\(keyName)")
+            }
+        ))
+
         // press_home — navigate to iPhone home screen
         server.registerTool(MCPToolDefinition(
             name: "press_home",
@@ -322,5 +371,10 @@ extension JSONValue {
     func asInt() -> Int? {
         if case .number(let n) = self { return Int(n) }
         return nil
+    }
+
+    func asStringArray() -> [String]? {
+        guard case .array(let items) = self else { return nil }
+        return items.compactMap { $0.asString() }
     }
 }

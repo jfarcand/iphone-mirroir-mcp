@@ -4,6 +4,7 @@
 import AppKit
 import CoreGraphics
 import Foundation
+import HelperLib
 
 /// Result of a type operation, including any characters the helper couldn't map.
 struct TypeResult {
@@ -16,28 +17,14 @@ struct TypeResult {
 /// Simulates touch and keyboard input on the iPhone Mirroring window.
 /// All coordinates are relative to the mirroring window's content area.
 ///
-/// Requires the Karabiner helper daemon for all input operations.
-/// iPhone Mirroring uses a DRM-protected surface that blocks CGEvent input.
+/// Requires the Karabiner helper daemon for tap/swipe operations.
+/// Keyboard input uses AppleScript via System Events (no helper needed).
 final class InputSimulation: @unchecked Sendable {
     private let bridge: MirroringBridge
     let helperClient = HelperClient()
 
-    /// Reusable event source for pressKey (the only CGEvent-based operation).
-    private let eventSource: CGEventSource?
-
     init(bridge: MirroringBridge) {
         self.bridge = bridge
-
-        let source = CGEventSource(stateID: .hidSystemState)
-        if let source {
-            source.localEventsSuppressionInterval = 0.0
-            source.setLocalEventsFilterDuringSuppressionState(
-                [.permitLocalMouseEvents, .permitLocalKeyboardEvents,
-                 .permitSystemDefinedEvents],
-                state: .eventSuppressionStateSuppressionInterval
-            )
-        }
-        self.eventSource = source
     }
 
     /// Tap at a position relative to the mirroring window.
@@ -90,10 +77,7 @@ final class InputSimulation: @unchecked Sendable {
     /// First activates iPhone Mirroring to make it the frontmost app,
     /// then sends keystrokes through System Events which routes to the frontmost app.
     func typeText(_ text: String) -> TypeResult {
-        // Escape special AppleScript characters in the text
-        let escaped = text
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
+        let escaped = AppleScriptKeyMap.escapeForAppleScript(text)
 
         let script = NSAppleScript(source: """
             tell application "System Events"
@@ -118,55 +102,33 @@ final class InputSimulation: @unchecked Sendable {
                           warning: nil, error: nil)
     }
 
-    /// Send a special key press (e.g., Return, Escape, Delete).
-    /// Uses CGEvent directly — these work for menu-level keys even without the helper.
-    func pressKey(_ keyCode: CGKeyCode) -> Bool {
-        bridge.activate()
-        clickTitleBarViaCGEvent()
+    /// Send a special key press (Return, Escape, arrows, etc.) with optional modifiers.
+    /// Uses AppleScript `key code` via System Events — the same proven approach as typeText.
+    func pressKeyViaAppleScript(keyName: String, modifiers: [String] = []) -> TypeResult {
+        guard let code = AppleScriptKeyMap.keyCode(for: keyName) else {
+            let supported = AppleScriptKeyMap.supportedKeys.joined(separator: ", ")
+            return TypeResult(
+                success: false, skippedCharacters: "",
+                warning: nil,
+                error: "Unknown key: \"\(keyName)\". Supported keys: \(supported)"
+            )
+        }
 
-        guard let keyDown = CGEvent(keyboardEventSource: eventSource, virtualKey: keyCode, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: eventSource, virtualKey: keyCode, keyDown: false)
-        else { return false }
+        let scriptSource = AppleScriptKeyMap.buildKeyPressScript(
+            keyCode: code, modifiers: modifiers
+        )
+        let script = NSAppleScript(source: scriptSource)
 
-        keyDown.post(tap: .cghidEventTap)
-        usleep(50_000)
-        keyUp.post(tap: .cghidEventTap)
+        var errorInfo: NSDictionary?
+        script?.executeAndReturnError(&errorInfo)
 
-        return true
+        if let err = errorInfo {
+            let msg = (err[NSAppleScript.errorMessage] as? String) ?? "AppleScript error"
+            return TypeResult(success: false, skippedCharacters: "",
+                              warning: nil, error: msg)
+        }
+
+        return TypeResult(success: true, skippedCharacters: "",
+                          warning: nil, error: nil)
     }
-
-    // MARK: - Private Helpers
-
-    /// Give iPhone Mirroring keyboard focus by clicking its title bar via CGEvent.
-    /// Uses in-process CGEvent (no IPC to the helper) so focus is acquired immediately.
-    /// The title bar is regular macOS UI (not DRM-protected), so CGEvent clicks work here.
-    private func clickTitleBarViaCGEvent() {
-        guard let info = bridge.getWindowInfo() else { return }
-
-        // Click the center of the title bar (14 points below the top of the
-        // window frame, which is above the iPhone content area).
-        let titleBarX = CGFloat(info.position.x) + info.size.width / 2.0
-        let titleBarY = CGFloat(info.position.y) + 14.0
-        let point = CGPoint(x: titleBarX, y: titleBarY)
-
-        guard let mouseDown = CGEvent(mouseEventSource: eventSource, mouseType: .leftMouseDown,
-                                      mouseCursorPosition: point, mouseButton: .left),
-              let mouseUp = CGEvent(mouseEventSource: eventSource, mouseType: .leftMouseUp,
-                                    mouseCursorPosition: point, mouseButton: .left)
-        else { return }
-
-        mouseDown.post(tap: .cghidEventTap)
-        usleep(50_000) // 50ms click hold
-        mouseUp.post(tap: .cghidEventTap)
-    }
-}
-
-// MARK: - Common Key Codes
-
-enum KeyCode {
-    static let returnKey: CGKeyCode = 36
-    static let escape: CGKeyCode = 53
-    static let delete: CGKeyCode = 51
-    static let space: CGKeyCode = 49
-    static let tab: CGKeyCode = 48
 }
