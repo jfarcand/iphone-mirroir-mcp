@@ -37,7 +37,11 @@ if ! ls "$KARABINER_SOCK_DIR"/*.sock >/dev/null 2>&1; then
     if [ -d "/Applications/Karabiner-Elements.app" ]; then
         echo ""
         echo "Karabiner-Elements is installed but the DriverKit extension is not running."
-        echo "Open Karabiner-Elements and approve the system extension when prompted."
+        echo "To approve the DriverKit system extension:"
+        echo "  1. Open Karabiner-Elements"
+        echo "  2. Open System Settings > General > Login Items & Extensions"
+        echo "  3. Under 'Karabiner-Elements', enable all toggles"
+        echo "  4. Enter your password when prompted"
     else
         echo ""
         echo "Karabiner-Elements is required for tap and swipe input."
@@ -49,7 +53,15 @@ if ! ls "$KARABINER_SOCK_DIR"/*.sock >/dev/null 2>&1; then
         echo ""
         echo "Karabiner-Elements installed. Opening it now..."
         open -a "Karabiner-Elements"
-        echo "Approve the system extension when macOS prompts you."
+        echo ""
+        echo "To approve the DriverKit system extension:"
+        echo "  1. Select ANSI keyboard type when Karabiner prompts you"
+        echo "  2. Open System Settings > General > Login Items & Extensions"
+        echo "  3. Under 'Karabiner-Elements', enable all toggles"
+        echo "  4. Enter your password when prompted"
+        echo ""
+        echo "If macOS shows a 'System Extension Blocked' alert, click"
+        echo "'Open System Settings' and approve it there."
     fi
 
     echo ""

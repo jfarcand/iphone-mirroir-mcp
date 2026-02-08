@@ -48,7 +48,7 @@ brew install iphone-mirroir-mcp
 sudo brew services start iphone-mirroir-mcp
 ```
 
-Open Karabiner-Elements and approve the DriverKit extension when prompted. Then add to your `.mcp.json` (Claude Code, Cursor, etc.):
+Open Karabiner-Elements, select **ANSI** keyboard type, then approve the DriverKit extension: **System Settings > General > Login Items & Extensions** — enable all toggles under Karabiner-Elements. Then add to your `.mcp.json` (Claude Code, Cursor, etc.):
 
 ```json
 {
@@ -163,7 +163,7 @@ brew uninstall iphone-mirroir-mcp
 
 ## Troubleshooting
 
-**`keyboard_ready: false`** — Karabiner's DriverKit extension isn't running. Open Karabiner-Elements and approve the extension.
+**`keyboard_ready: false`** — Karabiner's DriverKit extension isn't running. Open Karabiner-Elements, then go to **System Settings > General > Login Items & Extensions** and enable all toggles under Karabiner-Elements. You may need to enter your password.
 
 **Typing goes to the wrong app instead of iPhone** — Make sure you're running v0.3.0+. Older versions used Karabiner HID keyboard which sent keystrokes to whatever window had focus. v0.3.0 uses AppleScript to activate iPhone Mirroring before typing.
 
