@@ -1,0 +1,169 @@
+name: Install
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  install-test:
+    runs-on: macos-15
+    env:
+      PLIST_NAME: com.jfarcand.iphone-mirroir-helper
+      HELPER_BIN: iphone-mirroir-helper
+      MCP_BIN: iphone-mirroir-mcp
+      SOCKET_PATH: /var/run/iphone-mirroir-helper.sock
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Build ---
+
+      - name: Build release binaries
+        run: swift build -c release
+
+      - name: Verify binaries exist and are executable
+        run: |
+          test -x .build/release/$MCP_BIN || { echo "FAIL: $MCP_BIN not found or not executable"; exit 1; }
+          test -x .build/release/$HELPER_BIN || { echo "FAIL: $HELPER_BIN not found or not executable"; exit 1; }
+          file .build/release/$MCP_BIN
+          file .build/release/$HELPER_BIN
+          echo "Both binaries built successfully."
+
+      # --- Karabiner-Elements ---
+
+      - name: Install Karabiner-Elements
+        run: brew install --cask karabiner-elements
+
+      - name: Verify Karabiner app installed
+        run: |
+          test -d "/Applications/Karabiner-Elements.app" \
+            || { echo "FAIL: Karabiner-Elements.app not in /Applications"; exit 1; }
+          echo "Karabiner-Elements.app installed."
+
+      # --- Karabiner config ---
+
+      - name: Generate Karabiner config with ignore rule
+        run: |
+          CONFIG="$HOME/.config/karabiner/karabiner.json"
+          mkdir -p "$(dirname "$CONFIG")"
+
+          # No existing config on a fresh runner, so create one (same logic as install.sh)
+          cat > "$CONFIG" << 'KARABINER_EOF'
+          {
+              "profiles": [
+                  {
+                      "devices": [
+                          {
+                              "identifiers": {
+                                  "is_keyboard": true,
+                                  "product_id": 592,
+                                  "vendor_id": 1452
+                              },
+                              "ignore": true
+                          }
+                      ],
+                      "name": "Default profile",
+                      "selected": true,
+                      "virtual_hid_keyboard": { "keyboard_type_v2": "ansi" }
+                  }
+              ]
+          }
+          KARABINER_EOF
+          echo "Created Karabiner config."
+
+      - name: Verify Karabiner config contains ignore rule
+        run: |
+          python3 -c "
+          import json, sys, os
+          config_path = os.path.expanduser('~/.config/karabiner/karabiner.json')
+          with open(config_path) as f:
+              config = json.load(f)
+          devices = config['profiles'][0]['devices']
+          match = [d for d in devices
+                   if d.get('identifiers', {}).get('product_id') == 592
+                   and d.get('identifiers', {}).get('vendor_id') == 1452
+                   and d.get('ignore') is True]
+          assert len(match) == 1, f'Expected 1 ignore rule, found {len(match)}'
+          print('Karabiner ignore rule: OK')
+          "
+
+      # --- Helper daemon ---
+
+      - name: Install helper binary
+        run: |
+          sudo cp .build/release/$HELPER_BIN /usr/local/bin/
+          sudo chmod 755 /usr/local/bin/$HELPER_BIN
+          test -x /usr/local/bin/$HELPER_BIN
+          echo "Helper binary installed to /usr/local/bin/"
+
+      - name: Install and load helper daemon
+        run: |
+          sudo cp Resources/$PLIST_NAME.plist /Library/LaunchDaemons/
+          sudo chown root:wheel /Library/LaunchDaemons/$PLIST_NAME.plist
+          sudo chmod 644 /Library/LaunchDaemons/$PLIST_NAME.plist
+          sudo launchctl bootstrap system /Library/LaunchDaemons/$PLIST_NAME.plist
+          echo "Daemon loaded."
+
+      - name: Wait for helper daemon to start
+        run: |
+          # Give the daemon time to create its socket
+          for i in $(seq 1 15); do
+            if [ -S "$SOCKET_PATH" ]; then
+              echo "Socket appeared after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          test -S "$SOCKET_PATH" || { echo "FAIL: socket not found at $SOCKET_PATH after 15s"; exit 1; }
+
+      - name: Verify daemon is listed in launchctl
+        run: |
+          sudo launchctl list "$PLIST_NAME" || { echo "FAIL: daemon not in launchctl"; exit 1; }
+          echo "Daemon listed in launchctl: OK"
+
+      - name: Query helper daemon status
+        run: |
+          RESPONSE=$(echo '{"action":"status"}' | nc -U "$SOCKET_PATH" 2>/dev/null || echo "")
+          if [ -z "$RESPONSE" ]; then
+            echo "FAIL: no response from helper daemon"
+            echo "--- daemon log ---"
+            sudo cat /var/log/iphone-mirroir-helper.log 2>/dev/null || echo "(no log)"
+            exit 1
+          fi
+
+          echo "Raw response: $RESPONSE"
+
+          python3 -c "
+          import json, sys
+          data = json.loads('''$RESPONSE''')
+          assert data.get('ok') is True, f'Expected ok:true, got: {data}'
+          # pointing_ready will be false in CI (Karabiner DriverKit not approved)
+          print(f'Helper status: ok={data[\"ok\"]} pointing_ready={data.get(\"pointing_ready\", \"N/A\")}')
+          "
+
+      # --- MCP binary from install path ---
+
+      - name: Verify MCP binary responds to JSON-RPC initialize
+        run: |
+          echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+            | .build/release/$MCP_BIN 2>/dev/null \
+            | python3 -c "
+          import sys, json
+          obj = json.loads(sys.stdin.readline())
+          assert obj['result']['serverInfo']['name'] == 'iphone-mirroir-mcp'
+          print('MCP initialize from install path: OK')
+          "
+
+      # --- Cleanup ---
+
+      - name: Cleanup daemon and installed files
+        if: always()
+        run: |
+          sudo launchctl bootout system/$PLIST_NAME 2>/dev/null || true
+          sudo rm -f /Library/LaunchDaemons/$PLIST_NAME.plist
+          sudo rm -f /usr/local/bin/$HELPER_BIN
+          sudo rm -f $SOCKET_PATH
+          echo "Cleanup complete."
