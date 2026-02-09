@@ -41,6 +41,27 @@ The MCP server only works while iPhone Mirroring is active. Closing the window o
 
 ## Install
 
+### npx (quickest)
+
+```bash
+npx iphone-mirroir-mcp
+```
+
+This downloads the pre-built binary from GitHub releases and runs it. Add to your `.mcp.json` (Claude Code, Cursor, etc.):
+
+```json
+{
+  "mcpServers": {
+    "iphone-mirroring": {
+      "command": "npx",
+      "args": ["-y", "iphone-mirroir-mcp"]
+    }
+  }
+}
+```
+
+### Homebrew
+
 ```bash
 brew install --cask karabiner-elements   # if not already installed
 brew tap jfarcand/tap
@@ -48,7 +69,7 @@ brew install iphone-mirroir-mcp
 sudo brew services start iphone-mirroir-mcp
 ```
 
-Open Karabiner-Elements, select **ANSI** keyboard type, then approve the DriverKit extension: **System Settings > General > Login Items & Extensions** — enable all toggles under Karabiner-Elements. Then add to your `.mcp.json` (Claude Code, Cursor, etc.):
+Then add to your `.mcp.json`:
 
 ```json
 {
@@ -59,6 +80,10 @@ Open Karabiner-Elements, select **ANSI** keyboard type, then approve the DriverK
   }
 }
 ```
+
+### Setup (all install methods)
+
+Open Karabiner-Elements, select **ANSI** keyboard type, then approve the DriverKit extension: **System Settings > General > Login Items & Extensions** — enable all toggles under Karabiner-Elements.
 
 The first time you take a screenshot, macOS will prompt for **Screen Recording** and **Accessibility** permissions. Grant both.
 
