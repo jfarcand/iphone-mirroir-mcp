@@ -8,6 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 PLIST_NAME="com.jfarcand.iphone-mirroir-helper"
 HELPER_BIN="iphone-mirroir-helper"
+SOCKET="/var/run/iphone-mirroir-helper.sock"
+LOG="/var/log/iphone-mirroir-helper.log"
 
 echo "=== Building iphone-mirroir-helper ==="
 cd "$PROJECT_DIR"
@@ -29,40 +31,62 @@ if sudo launchctl list "$PLIST_NAME" >/dev/null 2>&1; then
     sleep 2
 fi
 
+# Remove stale socket from previous run
+sudo rm -f "$SOCKET"
+
 # Install and load LaunchDaemon plist
 sudo cp "Resources/$PLIST_NAME.plist" /Library/LaunchDaemons/
 sudo chown root:wheel "/Library/LaunchDaemons/$PLIST_NAME.plist"
 sudo chmod 644 "/Library/LaunchDaemons/$PLIST_NAME.plist"
 sudo launchctl bootstrap system "/Library/LaunchDaemons/$PLIST_NAME.plist"
 
-# Verify the daemon is running
+# Verify the daemon registered with launchd
 echo ""
 echo "=== Verifying ==="
-if sudo launchctl list "$PLIST_NAME" >/dev/null 2>&1; then
-    PID=$(sudo launchctl list "$PLIST_NAME" 2>/dev/null | awk 'NR==2{print $1}')
-    echo "Helper daemon is running (PID: ${PID:--})"
-else
-    echo "WARNING: Helper daemon failed to start. Check logs:"
-    echo "  sudo cat /var/log/iphone-mirroir-helper.log"
+if ! sudo launchctl list "$PLIST_NAME" >/dev/null 2>&1; then
+    echo "FAILED: Helper daemon did not register with launchd."
+    echo "  Check logs: sudo cat $LOG"
+    exit 1
+fi
+echo "Daemon registered with launchd"
+
+# Wait for Karabiner virtual HID initialization and socket creation.
+# Karabiner needs ~30-40s after a fresh restart to activate both keyboard
+# and pointing devices. The helper blocks on this before opening the socket.
+echo "Waiting for Karabiner virtual HID initialization (this takes ~30s)..."
+MAX_WAIT=60
+WAITED=0
+while [ $WAITED -lt $MAX_WAIT ]; do
+    if [ -S "$SOCKET" ]; then
+        break
+    fi
+
+    # Check if the daemon is still alive
+    if ! sudo launchctl list "$PLIST_NAME" >/dev/null 2>&1; then
+        echo ""
+        echo "FAILED: Helper daemon exited during Karabiner initialization."
+        echo "  Check logs: sudo cat $LOG"
+        exit 1
+    fi
+
+    sleep 2
+    WAITED=$((WAITED + 2))
+    printf "\r  %ds / %ds" "$WAITED" "$MAX_WAIT"
+done
+echo ""
+
+if [ ! -S "$SOCKET" ]; then
+    echo "FAILED: Socket not found after ${MAX_WAIT}s."
+    echo "  Karabiner-Elements may not be installed or its DriverKit extension is not activated."
+    echo "  Check logs: sudo cat $LOG"
     exit 1
 fi
 
-# Verify the socket is ready (helper needs a moment to create it)
-SOCKET="/var/run/iphone-mirroir-helper.sock"
-for i in 1 2 3 4 5; do
-    if [ -S "$SOCKET" ]; then
-        echo "Socket ready: $SOCKET"
-        break
-    fi
-    sleep 1
-done
-if [ ! -S "$SOCKET" ]; then
-    echo "WARNING: Socket not found at $SOCKET after 5s. Check logs:"
-    echo "  sudo cat /var/log/iphone-mirroir-helper.log"
-fi
+echo "Socket ready: $SOCKET"
 
 echo ""
 echo "=== Done ==="
+echo "Helper daemon installed and ready."
 echo "To stop:      sudo launchctl bootout system/$PLIST_NAME"
 echo "To uninstall: ./scripts/uninstall-helper.sh"
-echo "Logs:         /var/log/iphone-mirroir-helper.log"
+echo "Logs:         $LOG"

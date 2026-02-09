@@ -551,12 +551,13 @@ final class CommandServer {
         karabiner.postPointingReport(nudge)
         usleep(10_000)
 
-        // Button down — start moving immediately to avoid triggering iOS
-        // long-press/rearrange gesture recognizer on home screen icons
+        // Button down with brief dwell for touch registration, then move
+        // immediately. Too long (30ms+) triggers iOS long-press/jiggle mode
+        // on home screen icons. Too short (<5ms) and the touch may not register.
         var down = PointingInput()
         down.buttons = 0x01
         karabiner.postPointingReport(down)
-        usleep(5_000)
+        usleep(15_000)
 
         // Interpolate movement
         let steps = 40
