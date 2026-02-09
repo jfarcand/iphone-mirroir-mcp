@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Unix socket client connecting to the privileged Karabiner helper daemon.
 // ABOUTME: Sends JSON commands (click, type, swipe) and receives JSON responses over IPC.
 
@@ -41,6 +44,33 @@ final class HelperClient: @unchecked Sendable {
             "x": x,
             "y": y,
         ])
+        return response?["ok"] as? Bool ?? false
+    }
+
+    /// Long press at screen-absolute coordinates for the specified duration.
+    func longPress(x: Double, y: Double, durationMs: Int = 500) -> Bool {
+        let response = sendCommandWithReconnect([
+            "action": "long_press",
+            "x": x,
+            "y": y,
+            "duration_ms": durationMs,
+        ])
+        return response?["ok"] as? Bool ?? false
+    }
+
+    /// Double-tap at screen-absolute coordinates.
+    func doubleTap(x: Double, y: Double) -> Bool {
+        let response = sendCommandWithReconnect([
+            "action": "double_tap",
+            "x": x,
+            "y": y,
+        ])
+        return response?["ok"] as? Bool ?? false
+    }
+
+    /// Trigger a shake gesture on the mirrored iPhone.
+    func shake() -> Bool {
+        let response = sendCommandWithReconnect(["action": "shake"])
         return response?["ok"] as? Bool ?? false
     }
 

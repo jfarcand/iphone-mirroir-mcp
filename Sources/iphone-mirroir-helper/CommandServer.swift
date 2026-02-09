@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Unix stream socket server accepting JSON commands from the MCP server.
 // ABOUTME: Dispatches click/type/swipe/move/status commands to KarabinerClient with CGWarp cursor control.
 
@@ -14,8 +17,11 @@ let helperSocketPath = "/var/run/iphone-mirroir-helper.sock"
 ///
 /// Supported commands:
 /// - click: CGWarp to (x,y), Karabiner button down/up, restore cursor
+/// - long_press: CGWarp to (x,y), Karabiner button down, hold for duration, button up
+/// - double_tap: CGWarp to (x,y), two rapid Karabiner click cycles
 /// - type: Map characters to HID keycodes, send via Karabiner keyboard
 /// - press_key: Send a special key (return, escape, arrows) via Karabiner keyboard
+/// - shake: Send Ctrl+Cmd+Z via Karabiner keyboard (triggers iOS shake gesture)
 /// - swipe: CGWarp + Karabiner button down, interpolate movement, button up
 /// - move: Send relative mouse movement via Karabiner pointing
 /// - status: Report device readiness
@@ -145,6 +151,10 @@ final class CommandServer {
         switch action {
         case "click":
             return handleClick(json)
+        case "long_press":
+            return handleLongPress(json)
+        case "double_tap":
+            return handleDoubleTap(json)
         case "type":
             return handleType(json)
         case "swipe":
@@ -153,6 +163,8 @@ final class CommandServer {
             return handleMove(json)
         case "press_key":
             return handlePressKey(json)
+        case "shake":
+            return handleShake()
         case "status":
             return handleStatus()
         default:
@@ -213,6 +225,120 @@ final class CommandServer {
         usleep(10_000)
 
         // Restore cursor position and reconnect physical mouse
+        CGWarpMouseCursorPosition(savedPosition)
+        CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
+
+        return makeOkResponse()
+    }
+
+    /// Long press at screen-absolute coordinates.
+    /// Same flow as click, but holds the button down for a configurable duration.
+    /// Default hold is 500ms (iOS standard long-press threshold).
+    /// Minimum hold is 100ms to avoid confusion with a regular tap.
+    private func handleLongPress(_ json: [String: Any]) -> Data {
+        guard let x = (json["x"] as? NSNumber)?.doubleValue,
+              let y = (json["y"] as? NSNumber)?.doubleValue
+        else {
+            return makeErrorResponse("long_press requires x and y (numbers)")
+        }
+
+        let durationMs = max((json["duration_ms"] as? NSNumber)?.intValue ?? 500, 100)
+
+        guard karabiner.isPointingReady else {
+            return makeErrorResponse("Karabiner pointing device not ready")
+        }
+
+        let target = CGPoint(x: x, y: y)
+        let savedPosition = CGEvent(source: nil)?.location ?? .zero
+
+        CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
+        CGWarpMouseCursorPosition(target)
+        usleep(10_000)
+
+        // Karabiner nudge to sync virtual device with warped cursor
+        var nudgeRight = PointingInput()
+        nudgeRight.x = 1
+        karabiner.postPointingReport(nudgeRight)
+        usleep(5_000)
+
+        var nudgeBack = PointingInput()
+        nudgeBack.x = -1
+        karabiner.postPointingReport(nudgeBack)
+        usleep(10_000)
+
+        // Button down — hold for the requested duration
+        var down = PointingInput()
+        down.buttons = 0x01
+        karabiner.postPointingReport(down)
+        usleep(UInt32(durationMs) * 1000)
+
+        // Button up
+        var up = PointingInput()
+        up.buttons = 0x00
+        karabiner.postPointingReport(up)
+        usleep(10_000)
+
+        CGWarpMouseCursorPosition(savedPosition)
+        CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
+
+        return makeOkResponse()
+    }
+
+    /// Double-tap at screen-absolute coordinates.
+    /// Performs two rapid click cycles with a short inter-tap gap.
+    /// Timing: 40ms hold + 50ms gap + 40ms hold = 130ms total,
+    /// well within iOS's ~300ms double-tap recognition window.
+    private func handleDoubleTap(_ json: [String: Any]) -> Data {
+        guard let x = (json["x"] as? NSNumber)?.doubleValue,
+              let y = (json["y"] as? NSNumber)?.doubleValue
+        else {
+            return makeErrorResponse("double_tap requires x and y (numbers)")
+        }
+
+        guard karabiner.isPointingReady else {
+            return makeErrorResponse("Karabiner pointing device not ready")
+        }
+
+        let target = CGPoint(x: x, y: y)
+        let savedPosition = CGEvent(source: nil)?.location ?? .zero
+
+        CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
+        CGWarpMouseCursorPosition(target)
+        usleep(10_000)
+
+        // Karabiner nudge to sync virtual device with warped cursor
+        var nudgeRight = PointingInput()
+        nudgeRight.x = 1
+        karabiner.postPointingReport(nudgeRight)
+        usleep(5_000)
+
+        var nudgeBack = PointingInput()
+        nudgeBack.x = -1
+        karabiner.postPointingReport(nudgeBack)
+        usleep(10_000)
+
+        // First tap
+        var down1 = PointingInput()
+        down1.buttons = 0x01
+        karabiner.postPointingReport(down1)
+        usleep(40_000) // 40ms hold
+
+        var up1 = PointingInput()
+        up1.buttons = 0x00
+        karabiner.postPointingReport(up1)
+        usleep(50_000) // 50ms inter-tap gap
+
+        // Second tap
+        var down2 = PointingInput()
+        down2.buttons = 0x01
+        karabiner.postPointingReport(down2)
+        usleep(40_000) // 40ms hold
+
+        var up2 = PointingInput()
+        up2.buttons = 0x00
+        karabiner.postPointingReport(up2)
+        usleep(10_000)
+
         CGWarpMouseCursorPosition(savedPosition)
         CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
 
@@ -422,6 +548,21 @@ final class CommandServer {
         let modifiers = HIDSpecialKeyMap.modifiers(from: modifierNames)
 
         karabiner.typeKey(keycode: hidKeyCode, modifiers: modifiers)
+        return makeOkResponse()
+    }
+
+    /// Trigger a shake gesture by sending Ctrl+Cmd+Z via the virtual keyboard.
+    /// This key combination triggers shake-to-undo in iOS apps and opens debug
+    /// menus in development tools like Expo Go and React Native.
+    private func handleShake() -> Data {
+        guard karabiner.isKeyboardReady else {
+            return makeErrorResponse("Karabiner keyboard device not ready")
+        }
+
+        // HID keycode 0x1D = 'z' key (USB HID Usage Page 0x07)
+        let zKeycode: UInt16 = 0x1D
+        let modifiers: KeyboardModifier = [.leftControl, .leftCommand]
+        karabiner.typeKey(keycode: zKeycode, modifiers: modifiers)
         return makeOkResponse()
     }
 

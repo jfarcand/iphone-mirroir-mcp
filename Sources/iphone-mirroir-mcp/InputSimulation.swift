@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Simulates user input (tap, swipe, keyboard) on the iPhone Mirroring window.
 // ABOUTME: Delegates to the privileged Karabiner helper daemon for taps and swipes.
 
@@ -73,6 +76,90 @@ final class InputSimulation: @unchecked Sendable {
             return nil // success
         }
         return "Helper swipe failed"
+    }
+
+    /// Long press at a position relative to the mirroring window.
+    /// Returns nil on success, or an error message on failure.
+    func longPress(x: Double, y: Double, durationMs: Int = 500) -> String? {
+        guard let info = bridge.getWindowInfo() else {
+            return "iPhone Mirroring window not found"
+        }
+
+        guard helperClient.isAvailable else {
+            return helperClient.unavailableMessage
+        }
+
+        let screenX = Double(info.position.x) + x
+        let screenY = Double(info.position.y) + y
+
+        if helperClient.longPress(x: screenX, y: screenY, durationMs: durationMs) {
+            return nil
+        }
+        return "Helper long press failed"
+    }
+
+    /// Double-tap at a position relative to the mirroring window.
+    /// Returns nil on success, or an error message on failure.
+    func doubleTap(x: Double, y: Double) -> String? {
+        guard let info = bridge.getWindowInfo() else {
+            return "iPhone Mirroring window not found"
+        }
+
+        guard helperClient.isAvailable else {
+            return helperClient.unavailableMessage
+        }
+
+        let screenX = Double(info.position.x) + x
+        let screenY = Double(info.position.y) + y
+
+        if helperClient.doubleTap(x: screenX, y: screenY) {
+            return nil
+        }
+        return "Helper double tap failed"
+    }
+
+    /// Trigger a shake gesture on the mirrored iPhone.
+    /// Sends Ctrl+Cmd+Z which triggers shake-to-undo in iOS apps.
+    func shake() -> TypeResult {
+        guard helperClient.isAvailable else {
+            return TypeResult(success: false, skippedCharacters: "",
+                              warning: nil, error: helperClient.unavailableMessage)
+        }
+
+        ensureMirroringFrontmost()
+
+        if helperClient.shake() {
+            return TypeResult(success: true, skippedCharacters: "",
+                              warning: nil, error: nil)
+        }
+        return TypeResult(success: false, skippedCharacters: "",
+                          warning: nil, error: "Helper shake command failed")
+    }
+
+    /// Launch an app by name using Spotlight search.
+    /// Opens Spotlight, types the app name, waits for results, and presses Return.
+    /// Returns nil on success, or an error message on failure.
+    func launchApp(name: String) -> String? {
+        // Step 1: Open Spotlight via menu action
+        guard bridge.triggerMenuAction(menu: "View", item: "Spotlight") else {
+            return "Failed to open Spotlight. Is iPhone Mirroring running?"
+        }
+        usleep(800_000) // 800ms for Spotlight to appear and be ready for input
+
+        // Step 2: Type the app name
+        let typeResult = typeText(name)
+        guard typeResult.success else {
+            return typeResult.error ?? "Failed to type app name"
+        }
+        usleep(1_000_000) // 1s for search results to populate
+
+        // Step 3: Press Return to launch the top result
+        let keyResult = pressKey(keyName: "return")
+        guard keyResult.success else {
+            return keyResult.error ?? "Failed to press Return"
+        }
+
+        return nil
     }
 
     /// Ensure iPhone Mirroring is the frontmost app so it receives keyboard input.

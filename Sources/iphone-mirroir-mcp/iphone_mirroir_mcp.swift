@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Entry point for the iPhone Mirroring MCP server.
 // ABOUTME: Registers all MCP tools and starts the JSON-RPC server loop over stdio.
 
@@ -244,6 +247,141 @@ struct IPhoneMirroirMCP {
                     return .text("Pressed \(keyName)")
                 }
                 return .text("Pressed \(modifiers.joined(separator: "+"))+\(keyName)")
+            }
+        ))
+
+        // long_press — hold tap at coordinates for a configurable duration
+        server.registerTool(MCPToolDefinition(
+            name: "long_press",
+            description: """
+                Long press at a specific position on the mirrored iPhone screen. \
+                Holds the tap for a configurable duration (default 500ms). \
+                Use for context menus, drag initiation, and any gesture that \
+                requires holding a touch. Coordinates are relative to the \
+                iPhone Mirroring window.
+                """,
+            inputSchema: [
+                "type": .string("object"),
+                "properties": .object([
+                    "x": .object([
+                        "type": .string("number"),
+                        "description": .string(
+                            "X coordinate relative to the mirroring window (0 = left edge)"),
+                    ]),
+                    "y": .object([
+                        "type": .string("number"),
+                        "description": .string(
+                            "Y coordinate relative to the mirroring window (0 = top edge)"),
+                    ]),
+                    "duration_ms": .object([
+                        "type": .string("number"),
+                        "description": .string(
+                            "Hold duration in milliseconds (default: 500, minimum: 100)"),
+                    ]),
+                ]),
+                "required": .array([.string("x"), .string("y")]),
+            ],
+            handler: { args in
+                guard let x = args["x"]?.asNumber(), let y = args["y"]?.asNumber() else {
+                    return .error("Missing required parameters: x, y (numbers)")
+                }
+
+                let duration = args["duration_ms"]?.asInt() ?? 500
+
+                if let error = input.longPress(x: x, y: y, durationMs: duration) {
+                    return .error(error)
+                }
+                return .text("Long pressed at (\(Int(x)), \(Int(y))) for \(duration)ms")
+            }
+        ))
+
+        // double_tap — two rapid taps at coordinates
+        server.registerTool(MCPToolDefinition(
+            name: "double_tap",
+            description: """
+                Double-tap at a specific position on the mirrored iPhone screen. \
+                Performs two rapid taps for gestures like zoom, text selection, \
+                and widget activation. Coordinates are relative to the \
+                iPhone Mirroring window.
+                """,
+            inputSchema: [
+                "type": .string("object"),
+                "properties": .object([
+                    "x": .object([
+                        "type": .string("number"),
+                        "description": .string(
+                            "X coordinate relative to the mirroring window (0 = left edge)"),
+                    ]),
+                    "y": .object([
+                        "type": .string("number"),
+                        "description": .string(
+                            "Y coordinate relative to the mirroring window (0 = top edge)"),
+                    ]),
+                ]),
+                "required": .array([.string("x"), .string("y")]),
+            ],
+            handler: { args in
+                guard let x = args["x"]?.asNumber(), let y = args["y"]?.asNumber() else {
+                    return .error("Missing required parameters: x, y (numbers)")
+                }
+
+                if let error = input.doubleTap(x: x, y: y) {
+                    return .error(error)
+                }
+                return .text("Double-tapped at (\(Int(x)), \(Int(y)))")
+            }
+        ))
+
+        // shake — trigger a device shake gesture
+        server.registerTool(MCPToolDefinition(
+            name: "shake",
+            description: """
+                Trigger a shake gesture on the mirrored iPhone. \
+                Sends Ctrl+Cmd+Z which triggers shake-to-undo in iOS apps. \
+                Useful for: Expo Go developer menu, React Native debug menu, \
+                undo actions, and any app that responds to device shake.
+                """,
+            inputSchema: [
+                "type": .string("object"),
+                "properties": .object([:]),
+            ],
+            handler: { _ in
+                let result = input.shake()
+                guard result.success else {
+                    return .error(result.error ?? "Failed to trigger shake")
+                }
+                return .text("Triggered shake gesture (Ctrl+Cmd+Z)")
+            }
+        ))
+
+        // launch_app — open an app by name via Spotlight search
+        server.registerTool(MCPToolDefinition(
+            name: "launch_app",
+            description: """
+                Launch an app on the mirrored iPhone by name using Spotlight search. \
+                Opens Spotlight, types the app name, and presses Return to launch \
+                the top result. The app name should match the display name shown \
+                on the iPhone home screen.
+                """,
+            inputSchema: [
+                "type": .string("object"),
+                "properties": .object([
+                    "name": .object([
+                        "type": .string("string"),
+                        "description": .string("The app name to search for and launch"),
+                    ])
+                ]),
+                "required": .array([.string("name")]),
+            ],
+            handler: { args in
+                guard let appName = args["name"]?.asString() else {
+                    return .error("Missing required parameter: name (string)")
+                }
+
+                if let error = input.launchApp(name: appName) {
+                    return .error(error)
+                }
+                return .text("Launched '\(appName)' via Spotlight")
             }
         ))
 
