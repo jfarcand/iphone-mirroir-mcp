@@ -551,11 +551,12 @@ final class CommandServer {
         karabiner.postPointingReport(nudge)
         usleep(10_000)
 
-        // Button down
+        // Button down — start moving immediately to avoid triggering iOS
+        // long-press/rearrange gesture recognizer on home screen icons
         var down = PointingInput()
         down.buttons = 0x01
         karabiner.postPointingReport(down)
-        usleep(30_000)
+        usleep(5_000)
 
         // Interpolate movement
         let steps = 40
