@@ -23,16 +23,43 @@ Works with any app visible on the iPhone screen: App Store apps, TestFlight buil
 
 All touch and keyboard input flows through Karabiner DriverKit virtual HID devices because iPhone Mirroring routes input through a protected compositor layer that doesn't accept standard CGEvent injection. The MCP server activates iPhone Mirroring once when keyboard input begins (triggering a macOS Space switch if needed) and stays there — no back-and-forth switching between apps.
 
-## Example
+## Why iPhone Mirroring?
+
+Every other iPhone automation tool requires Appium, Xcode, WebDriverAgent, and a provisioning profile. This project takes a different approach: it controls the iPhone through macOS iPhone Mirroring using Karabiner virtual HID devices. No Xcode. No developer account. No provisioning profile.
+
+This means you can test real apps on a real device — Expo Go, Flutter, React Native dev builds, TestFlight betas, App Store apps — directly on your iPhone without a simulator. The AI agent sees exactly what a real user sees and interacts with the same touch targets, autocorrect, and keyboard behavior.
+
+## Examples
 
 ```
 You:  "Open Messages and send 'hello' to Alice"
 
-Agent: spotlight → type_text "Messages" → press_key return
+Agent: launch_app "Messages"
        → screenshot (sees conversation list)
        → tap on Alice's conversation
        → tap text field → type_text "hello"
-       → press_key return → screenshot (verify message sent)
+       → press_key return → screenshot (verify sent)
+```
+
+```
+You:  "Test the login flow in my Expo app"
+
+Agent: launch_app "Expo Go"
+       → screenshot (sees project list)
+       → tap on the project → screenshot (sees login screen)
+       → tap email field → type_text "test@example.com"
+       → tap password field → type_text "password123"
+       → tap "Sign In" button → screenshot (verify logged in)
+```
+
+```
+You:  "Record a video of scrolling through the Settings app"
+
+Agent: start_recording
+       → launch_app "Settings" → screenshot
+       → swipe up to scroll → swipe up again
+       → tap "General" → screenshot
+       → stop_recording (returns .mov file path)
 ```
 
 ## Security Warning
