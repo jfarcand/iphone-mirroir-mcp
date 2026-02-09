@@ -257,7 +257,6 @@ struct IPhoneMirroirMCP {
                 "properties": .object([:]),
             ],
             handler: { _ in
-                bridge.activate()
                 if bridge.triggerMenuAction(menu: "View", item: "Home Screen") {
                     return .text("Pressed Home — navigated to home screen")
                 } else {
@@ -278,7 +277,6 @@ struct IPhoneMirroirMCP {
                 "properties": .object([:]),
             ],
             handler: { _ in
-                bridge.activate()
                 if bridge.triggerMenuAction(menu: "View", item: "App Switcher") {
                     return .text("Opened App Switcher")
                 } else {
@@ -299,7 +297,6 @@ struct IPhoneMirroirMCP {
                 "properties": .object([:]),
             ],
             handler: { _ in
-                bridge.activate()
                 if bridge.triggerMenuAction(menu: "View", item: "Spotlight") {
                     return .text("Opened Spotlight search")
                 } else {

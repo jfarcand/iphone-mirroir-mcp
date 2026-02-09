@@ -81,11 +81,16 @@ final class InputSimulation: @unchecked Sendable {
 
         let script = NSAppleScript(source: """
             tell application "System Events"
+                set prevApp to name of first process whose frontmost is true
                 tell process "iPhone Mirroring"
                     set frontmost to true
                 end tell
-                delay 0.5
+                delay 0.3
                 keystroke "\(escaped)"
+                delay 0.1
+                tell process prevApp
+                    set frontmost to true
+                end tell
             end tell
             """)
 

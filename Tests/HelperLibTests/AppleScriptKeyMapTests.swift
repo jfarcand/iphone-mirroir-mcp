@@ -62,7 +62,18 @@ struct AppleScriptKeyMapTests {
     @Test("Script includes delay for activation")
     func scriptIncludesDelay() {
         let script = AppleScriptKeyMap.buildKeyPressScript(keyCode: 36)
-        #expect(script.contains("delay 0.5"))
+        #expect(script.contains("delay 0.3"))
+    }
+
+    @Test("Script restores previous frontmost app after keystroke")
+    func scriptRestoresFocus() {
+        let script = AppleScriptKeyMap.buildKeyPressScript(keyCode: 36)
+        #expect(script.contains("set prevApp to name of first process whose frontmost is true"))
+        #expect(script.contains("tell process prevApp"))
+        // The restore delay must come after the key code line
+        let keyCodeIndex = script.range(of: "key code 36")!.upperBound
+        let restoreDelayRange = script.range(of: "delay 0.1")!.lowerBound
+        #expect(restoreDelayRange > keyCodeIndex)
     }
 
     @Test("Single modifier produces using clause")
