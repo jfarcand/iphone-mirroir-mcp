@@ -25,6 +25,8 @@ echo "Installed /usr/local/bin/$HELPER_BIN"
 if sudo launchctl list "$PLIST_NAME" >/dev/null 2>&1; then
     echo "Stopping existing daemon..."
     sudo launchctl bootout system/"$PLIST_NAME" 2>/dev/null || true
+    # Wait for launchd to fully release the service before re-bootstrapping
+    sleep 2
 fi
 
 # Install and load LaunchDaemon plist
