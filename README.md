@@ -76,13 +76,15 @@ The MCP server only works while iPhone Mirroring is active. Closing the window o
 
 ## Install
 
-### npx (quickest)
+### Claude Code
 
 ```bash
-npx iphone-mirroir-mcp
+claude mcp add --transport stdio iphone-mirroring -- npx -y iphone-mirroir-mcp
 ```
 
-This downloads the pre-built binary from GitHub releases and runs it. Add to your `.mcp.json` (Claude Code, Cursor, etc.):
+### Cursor
+
+Add to `.cursor/mcp.json` in your project root:
 
 ```json
 {
@@ -95,6 +97,36 @@ This downloads the pre-built binary from GitHub releases and runs it. Add to you
 }
 ```
 
+### GitHub Copilot (VS Code)
+
+Add to `.vscode/mcp.json` in your workspace:
+
+```json
+{
+  "servers": {
+    "iphone-mirroring": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "iphone-mirroir-mcp"]
+    }
+  }
+}
+```
+
+### OpenAI Codex
+
+```bash
+codex mcp add iphone-mirroring -- npx -y iphone-mirroir-mcp
+```
+
+Or add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.iphone-mirroring]
+command = "npx"
+args = ["-y", "iphone-mirroir-mcp"]
+```
+
 ### Homebrew
 
 ```bash
@@ -104,17 +136,7 @@ brew install iphone-mirroir-mcp
 sudo brew services start iphone-mirroir-mcp
 ```
 
-Then add to your `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "iphone-mirroring": {
-      "command": "iphone-mirroir-mcp"
-    }
-  }
-}
-```
+Then point your MCP client to the binary at `iphone-mirroir-mcp` (it's in your PATH after `brew install`).
 
 ### Setup (all install methods)
 
