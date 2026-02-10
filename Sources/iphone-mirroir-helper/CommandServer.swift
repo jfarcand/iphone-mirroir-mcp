@@ -584,8 +584,9 @@ final class CommandServer {
             vAccum -= Double(vTick)
 
             var scroll = PointingInput()
-            scroll.horizontalWheel = hTick
-            scroll.verticalWheel = vTick
+            // Negate: scroll wheel convention is opposite to swipe direction
+            scroll.horizontalWheel = -hTick
+            scroll.verticalWheel = -vTick
             karabiner.postPointingReport(scroll)
             usleep(stepDelayUs)
         }
