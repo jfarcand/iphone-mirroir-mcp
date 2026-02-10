@@ -6,6 +6,7 @@
 
 import CoreGraphics
 import Foundation
+import HelperLib
 import Vision
 
 /// Runs OCR on the iPhone Mirroring window screenshot and returns detected
@@ -59,9 +60,8 @@ final class ScreenDescriber: @unchecked Sendable {
         defer { try? FileManager.default.removeItem(at: fileURL) }
 
         guard let data = try? Data(contentsOf: fileURL) else { return nil }
-        let base64 = data.base64EncodedString()
 
-        // Create CGImage for Vision
+        // Create CGImage for Vision (OCR runs on the clean image, before grid overlay)
         guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
               let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil)
         else { return nil }
@@ -75,11 +75,13 @@ final class ScreenDescriber: @unchecked Sendable {
         do {
             try handler.perform([request])
         } catch {
-            return DescribeResult(elements: [], screenshotBase64: base64)
+            let fallback = GridOverlay.addOverlay(to: data, windowSize: info.size) ?? data
+            return DescribeResult(elements: [], screenshotBase64: fallback.base64EncodedString())
         }
 
         guard let observations = request.results else {
-            return DescribeResult(elements: [], screenshotBase64: base64)
+            let fallback = GridOverlay.addOverlay(to: data, windowSize: info.size) ?? data
+            return DescribeResult(elements: [], screenshotBase64: fallback.base64EncodedString())
         }
 
         let windowWidth = Double(info.size.width)
@@ -99,6 +101,9 @@ final class ScreenDescriber: @unchecked Sendable {
                 confidence: candidate.confidence
             )
         }
+
+        let griddedData = GridOverlay.addOverlay(to: data, windowSize: info.size) ?? data
+        let base64 = griddedData.base64EncodedString()
 
         return DescribeResult(elements: elements, screenshotBase64: base64)
     }

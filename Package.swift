@@ -15,6 +15,7 @@ let package = Package(
             path: "Sources/HelperLib",
             linkerSettings: [
                 .linkedFramework("Carbon"),
+                .linkedFramework("CoreText"),
             ]
         ),
         .executableTarget(
