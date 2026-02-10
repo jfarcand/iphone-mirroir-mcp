@@ -1,6 +1,6 @@
 {
   "name": "iphone-mirroir-mcp",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "MCP server that controls a real iPhone through macOS iPhone Mirroring. Screenshot, tap, swipe, type — from any MCP client.",
   "mcpName": "io.github.jfarcand/iphone-mirroir-mcp",
   "license": "Apache-2.0",
@@ -28,6 +28,7 @@
   "files": [
     "bin/",
     "install.js",
+    "install-cmd.js",
     "setup.js",
     "README.md"
   ]

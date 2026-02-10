@@ -76,13 +76,26 @@ The MCP server only works while iPhone Mirroring is active. Closing the window o
 
 ## Install
 
-### Claude Code
+One command sets up everything — Karabiner, helper daemon, and your MCP client config:
+
+```bash
+npx -y iphone-mirroir-mcp install
+```
+
+The installer prompts you to select your MCP client (Claude Code, Cursor, GitHub Copilot, or OpenAI Codex) and writes the config automatically.
+
+After install, approve the DriverKit extension if prompted: **System Settings > General > Login Items & Extensions** — enable all toggles under Karabiner-Elements. The first time you take a screenshot, macOS will prompt for **Screen Recording** and **Accessibility** permissions. Grant both.
+
+<details>
+<summary>Manual per-client setup</summary>
+
+#### Claude Code
 
 ```bash
 claude mcp add --transport stdio iphone-mirroring -- npx -y iphone-mirroir-mcp
 ```
 
-### Cursor
+#### Cursor
 
 Add to `.cursor/mcp.json` in your project root:
 
@@ -97,7 +110,7 @@ Add to `.cursor/mcp.json` in your project root:
 }
 ```
 
-### GitHub Copilot (VS Code)
+#### GitHub Copilot (VS Code)
 
 Add to `.vscode/mcp.json` in your workspace:
 
@@ -113,7 +126,7 @@ Add to `.vscode/mcp.json` in your workspace:
 }
 ```
 
-### OpenAI Codex
+#### OpenAI Codex
 
 ```bash
 codex mcp add iphone-mirroring -- npx -y iphone-mirroir-mcp
@@ -127,7 +140,18 @@ command = "npx"
 args = ["-y", "iphone-mirroir-mcp"]
 ```
 
-### Homebrew
+#### Helper daemon only
+
+If your MCP client is already configured but the helper daemon isn't running:
+
+```bash
+npx iphone-mirroir-mcp setup
+```
+
+</details>
+
+<details>
+<summary>Homebrew</summary>
 
 ```bash
 brew install --cask karabiner-elements   # if not already installed
@@ -138,19 +162,7 @@ sudo brew services start iphone-mirroir-mcp
 
 Then point your MCP client to the binary at `iphone-mirroir-mcp` (it's in your PATH after `brew install`).
 
-### First-time setup
-
-The first time the agent tries to tap, type, or swipe, it will tell you the helper daemon isn't running. Run this once in your terminal:
-
-```bash
-npx iphone-mirroir-mcp setup
-```
-
-This installs [Karabiner-Elements](https://karabiner-elements.pqrs.org/) if needed, configures the DriverKit extension, and starts the helper daemon. It requires `sudo` for the daemon installation.
-
-After setup, approve the DriverKit extension: **System Settings > General > Login Items & Extensions** — enable all toggles under Karabiner-Elements.
-
-The first time you take a screenshot, macOS will prompt for **Screen Recording** and **Accessibility** permissions. Grant both.
+</details>
 
 <details>
 <summary>Install from source</summary>
