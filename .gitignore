@@ -9,3 +9,4 @@ DerivedData/
 .mcp.json
 .mcpregistry_*
 claude_docs/*
+update-helper.sh

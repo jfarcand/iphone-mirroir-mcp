@@ -68,6 +68,8 @@ Agent: start_recording
 
 The MCP server only works while iPhone Mirroring is active. Closing the window or locking the phone kills all input. The helper daemon listens on a local Unix socket only (no network). The helper runs as root (Karabiner's HID sockets require it) — the full source is ~2500 lines of Swift, audit it yourself.
 
+**Threat model**: The helper socket (`/var/run/iphone-mirroir-helper.sock`) is restricted to `root:staff` with mode 0660. On macOS, all interactive user accounts belong to the `staff` group, so any local user on the machine can send commands to the helper. This is appropriate for single-user Macs (the target use case). On shared machines, any local user account could drive the iPhone screen. There is no authentication handshake — the socket permission is the only access control.
+
 ## Requirements
 
 - macOS 15+ with iPhone Mirroring
@@ -207,6 +209,7 @@ Coordinates are in points relative to the mirroring window's top-left corner. Sc
 `type_text` and `press_key` route keyboard input through the Karabiner virtual HID keyboard via the helper daemon. If iPhone Mirroring isn't already frontmost, the MCP server activates it once (which may trigger a macOS Space switch) and stays there. Subsequent keyboard tool calls reuse the active window without switching again.
 
 - Characters are mapped to USB HID keycodes with automatic keyboard layout translation — non-US layouts (French AZERTY, German QWERTZ, etc.) are supported via UCKeyTranslate
+- **Known limitation**: On ISO keyboards (e.g., Canadian-CSA), a small number of characters tied to the ISO section key (`§`, `±`) cannot be typed via HID because macOS and iOS swap keycodes 0x64 and 0x35 differently. These characters are silently skipped. Clipboard paste is not available — iPhone Mirroring does not bridge the Mac clipboard when paste is triggered programmatically.
 - iOS autocorrect applies — type carefully or disable it on the iPhone
 
 ### Key press workflow
