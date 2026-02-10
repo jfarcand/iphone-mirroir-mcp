@@ -8,7 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
-const VERSION = "0.5.1";
+const VERSION = "0.5.2";
 const REPO = "jfarcand/iphone-mirroir-mcp";
 const BINARY = "iphone-mirroir-mcp";
 
@@ -37,13 +37,28 @@ function main() {
 
   console.log(`Downloading ${BINARY} v${VERSION} (darwin-${arch})...`);
 
+  // Save the JS wrapper before tar extraction (the tarball contains a native
+  // binary with the same name that would overwrite it)
+  const jsWrapper = path.join(binDir, "iphone-mirroir-mcp");
+  const jsWrapperBackup = path.join(binDir, "iphone-mirroir-mcp.js.bak");
+  if (fs.existsSync(jsWrapper)) {
+    fs.copyFileSync(jsWrapper, jsWrapperBackup);
+  }
+
   download(url, tmpFile, () => {
     // Extract all files: iphone-mirroir-mcp, iphone-mirroir-helper, plist
     execSync(`tar xzf "${tmpFile}" -C "${binDir}"`, { stdio: "inherit" });
 
-    // Rename MCP binary to -native to avoid conflicting with the JS wrapper
+    // Rename native binary to -native to avoid conflicting with the JS wrapper
     fs.renameSync(path.join(binDir, "iphone-mirroir-mcp"), nativeBin);
     fs.chmodSync(nativeBin, 0o755);
+
+    // Restore the JS wrapper that tar extraction overwrote
+    if (fs.existsSync(jsWrapperBackup)) {
+      fs.copyFileSync(jsWrapperBackup, jsWrapper);
+      fs.chmodSync(jsWrapper, 0o755);
+      fs.unlinkSync(jsWrapperBackup);
+    }
 
     // Make helper executable
     const helperBin = path.join(binDir, "iphone-mirroir-helper");
