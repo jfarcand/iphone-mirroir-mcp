@@ -47,12 +47,11 @@ public enum GridOverlay {
         ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
 
         // Grid line style: white at low alpha, 1px
-        ctx.setStrokeColor(
-            CGColor(
-                colorSpace: colorSpace,
-                components: [1.0, 1.0, 1.0, gridLineAlpha]
-            )!
-        )
+        guard let gridLineColor = CGColor(
+            colorSpace: colorSpace,
+            components: [1.0, 1.0, 1.0, gridLineAlpha]
+        ) else { return nil }
+        ctx.setStrokeColor(gridLineColor)
         ctx.setLineWidth(1.0)
 
         let spacing = gridSpacing
@@ -114,16 +113,18 @@ public enum GridOverlay {
         fontSize: CGFloat
     ) {
         let font = CTFontCreateWithName("Helvetica" as CFString, fontSize, nil)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let textColor = CGColor(
+            colorSpace: colorSpace,
+            components: [1.0, 1.0, 1.0, 1.0]
+        ) else { return }
         let attributes: [CFString: Any] = [
             kCTFontAttributeName: font,
-            kCTForegroundColorAttributeName: CGColor(
-                colorSpace: CGColorSpaceCreateDeviceRGB(),
-                components: [1.0, 1.0, 1.0, 1.0]
-            )!,
+            kCTForegroundColorAttributeName: textColor,
         ]
-        let attrString = CFAttributedStringCreate(
+        guard let attrString = CFAttributedStringCreate(
             nil, text as CFString, attributes as CFDictionary
-        )!
+        ) else { return }
         let line = CTLineCreateWithAttributedString(attrString)
         let bounds = CTLineGetBoundsWithOptions(line, .useOpticalBounds)
 
@@ -136,12 +137,11 @@ public enum GridOverlay {
         )
 
         // Semi-transparent black background pill
-        ctx.setFillColor(
-            CGColor(
-                colorSpace: CGColorSpaceCreateDeviceRGB(),
-                components: [0.0, 0.0, 0.0, 0.6]
-            )!
-        )
+        guard let pillColor = CGColor(
+            colorSpace: colorSpace,
+            components: [0.0, 0.0, 0.0, 0.6]
+        ) else { return }
+        ctx.setFillColor(pillColor)
         ctx.fill(pillRect)
 
         // Draw text

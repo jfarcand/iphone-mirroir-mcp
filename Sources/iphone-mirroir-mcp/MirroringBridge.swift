@@ -52,8 +52,13 @@ final class MirroringBridge: @unchecked Sendable {
         let result = AXUIElementCopyAttributeValue(
             appRef, kAXMainWindowAttribute as CFString, &windowValue
         )
-        guard result == .success, let window = windowValue else { return nil }
-        return (window as! AXUIElement, pid)
+        guard result == .success,
+              let window = windowValue,
+              CFGetTypeID(window) == AXUIElementGetTypeID()
+        else { return nil }
+        // Safe cast: CFTypeID check above confirms the type
+        let axWindow = unsafeBitCast(window, to: AXUIElement.self)
+        return (axWindow, pid)
     }
 
     /// Get the window info including CGWindowID for screenshots.
@@ -64,16 +69,16 @@ final class MirroringBridge: @unchecked Sendable {
         var posValue: CFTypeRef?
         AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &posValue)
         var position = CGPoint.zero
-        if let pv = posValue {
-            AXValueGetValue(pv as! AXValue, .cgPoint, &position)
+        if let pv = posValue, CFGetTypeID(pv) == AXValueGetTypeID() {
+            AXValueGetValue(unsafeBitCast(pv, to: AXValue.self), .cgPoint, &position)
         }
 
         // Get size
         var sizeValue: CFTypeRef?
         AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &sizeValue)
         var size = CGSize.zero
-        if let sv = sizeValue {
-            AXValueGetValue(sv as! AXValue, .cgSize, &size)
+        if let sv = sizeValue, CFGetTypeID(sv) == AXValueGetTypeID() {
+            AXValueGetValue(unsafeBitCast(sv, to: AXValue.self), .cgSize, &size)
         }
 
         // Find CGWindowID by matching against CGWindowListCopyWindowInfo
@@ -152,8 +157,11 @@ final class MirroringBridge: @unchecked Sendable {
         let menuBarResult = AXUIElementCopyAttributeValue(
             appRef, kAXMenuBarAttribute as CFString, &menuBarValue
         )
-        guard menuBarResult == .success, let menuBarRef = menuBarValue else { return false }
-        let menuBar = menuBarRef as! AXUIElement
+        guard menuBarResult == .success,
+              let menuBarRef = menuBarValue,
+              CFGetTypeID(menuBarRef) == AXUIElementGetTypeID()
+        else { return false }
+        let menuBar = unsafeBitCast(menuBarRef, to: AXUIElement.self)
 
         // Find the target menu
         var menuBarChildren: CFTypeRef?

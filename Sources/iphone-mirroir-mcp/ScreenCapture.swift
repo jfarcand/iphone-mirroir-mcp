@@ -30,8 +30,14 @@ final class ScreenCapture: @unchecked Sendable {
 
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
+            return nil
+        }
+
+        // Wait with timeout to prevent indefinite hangs
+        let completed = waitForProcess(process, timeoutSeconds: 10)
+        if !completed {
+            process.terminate()
             return nil
         }
 
@@ -44,5 +50,15 @@ final class ScreenCapture: @unchecked Sendable {
         guard let data = try? Data(contentsOf: fileURL) else { return nil }
 
         return data.base64EncodedString()
+    }
+
+    /// Wait for a process to exit within the given timeout.
+    /// Returns true if the process exited, false if the timeout was reached.
+    private func waitForProcess(_ process: Process, timeoutSeconds: Int) -> Bool {
+        let deadline = Date().addingTimeInterval(TimeInterval(timeoutSeconds))
+        while process.isRunning && Date() < deadline {
+            usleep(50_000) // 50ms polling interval
+        }
+        return !process.isRunning
     }
 }

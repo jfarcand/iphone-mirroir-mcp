@@ -50,8 +50,14 @@ final class ScreenDescriber: @unchecked Sendable {
         process.arguments = ["-l", String(info.windowID), "-x", "-o", tempPath]
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
+            return nil
+        }
+
+        // Wait with timeout to prevent indefinite hangs
+        let completed = waitForProcess(process, timeoutSeconds: 10)
+        if !completed {
+            process.terminate()
             return nil
         }
         guard process.terminationStatus == 0 else { return nil }
@@ -106,5 +112,15 @@ final class ScreenDescriber: @unchecked Sendable {
         let base64 = griddedData.base64EncodedString()
 
         return DescribeResult(elements: elements, screenshotBase64: base64)
+    }
+
+    /// Wait for a process to exit within the given timeout.
+    /// Returns true if the process exited, false if the timeout was reached.
+    private func waitForProcess(_ process: Process, timeoutSeconds: Int) -> Bool {
+        let deadline = Date().addingTimeInterval(TimeInterval(timeoutSeconds))
+        while process.isRunning && Date() < deadline {
+            usleep(50_000) // 50ms polling interval
+        }
+        return !process.isRunning
     }
 }
