@@ -9,7 +9,11 @@ import Testing
 struct JSONValueTests {
 
     private let decoder = JSONDecoder()
-    private let encoder = JSONEncoder()
+    private let encoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.outputFormatting = .sortedKeys
+        return e
+    }()
 
     // MARK: - Decoding
 
