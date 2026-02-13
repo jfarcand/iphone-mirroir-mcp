@@ -18,45 +18,49 @@ struct IPhoneMirroirMCP {
         // Parse CLI flags
         let args = CommandLine.arguments
         let skipPermissions = PermissionPolicy.parseSkipPermissions(from: args)
-        let debugMode = args.contains("--debug")
+        DebugLog.enabled = args.contains("--debug")
+        DebugLog.reset()
         let config = PermissionPolicy.loadConfig()
         let policy = PermissionPolicy(skipPermissions: skipPermissions, config: config)
 
         // Log startup info to stderr (always) and debug log file (when --debug)
-        var startupLines: [String] = []
-        if debugMode {
-            startupLines.append("[startup] Debug mode enabled (--debug)")
-        }
         if skipPermissions {
-            startupLines.append("[startup] Permission mode: all tools enabled (--dangerously-skip-permissions)")
+            DebugLog.log("startup", "Permission mode: all tools enabled (--dangerously-skip-permissions)")
         } else if let cfg = config {
-            startupLines.append("[startup] Permission mode: config-based (\(PermissionPolicy.configPath))")
-            startupLines.append("[startup]   allow: \(cfg.allow ?? [])")
-            startupLines.append("[startup]   deny: \(cfg.deny ?? [])")
-            startupLines.append("[startup]   blockedApps: \(cfg.blockedApps ?? [])")
+            DebugLog.log("startup", "Permission mode: config-based (\(PermissionPolicy.configPath))")
+            DebugLog.log("startup", "  allow: \(cfg.allow ?? [])")
+            DebugLog.log("startup", "  deny: \(cfg.deny ?? [])")
+            DebugLog.log("startup", "  blockedApps: \(cfg.blockedApps ?? [])")
         } else {
-            startupLines.append("[startup] Permission mode: fail-closed (readonly tools only)")
+            DebugLog.log("startup", "Permission mode: fail-closed (readonly tools only)")
         }
 
-        let logContent = startupLines.map { $0 + "\n" }.joined()
-        fputs(logContent, stderr)
-        if debugMode {
-            let debugLogPath = "/tmp/iphone-mirroir-mcp-debug.log"
-            // Truncate and rewrite the debug log on each server start
-            FileManager.default.createFile(atPath: debugLogPath, contents: Data(logContent.utf8))
+        if DebugLog.enabled {
+            // Truncate the debug log on each server start (startup lines already written above)
+        } else {
+            // Log startup to stderr even without --debug (lightweight, useful for MCP client logs)
+            if skipPermissions {
+                fputs("[startup] Permission mode: all tools enabled (--dangerously-skip-permissions)\n", stderr)
+            } else if let cfg = config {
+                fputs("[startup] Permission mode: config-based (\(PermissionPolicy.configPath))\n", stderr)
+                fputs("[startup]   allow: \(cfg.allow ?? [])\n", stderr)
+                fputs("[startup]   deny: \(cfg.deny ?? [])\n", stderr)
+                fputs("[startup]   blockedApps: \(cfg.blockedApps ?? [])\n", stderr)
+            } else {
+                fputs("[startup] Permission mode: fail-closed (readonly tools only)\n", stderr)
+            }
         }
 
-        // Redirect stderr for logging (stdout is reserved for MCP JSON-RPC)
         let bridge = MirroringBridge()
         let capture = ScreenCapture(bridge: bridge)
         let recorder = ScreenRecorder(bridge: bridge)
-        let input = InputSimulation(bridge: bridge, debug: debugMode)
+        let input = InputSimulation(bridge: bridge)
         let describer = ScreenDescriber(bridge: bridge)
-        let server = MCPServer(policy: policy, debug: debugMode)
+        let server = MCPServer(policy: policy)
 
         registerTools(server: server, bridge: bridge, capture: capture,
                       recorder: recorder, input: input, describer: describer,
-                      policy: policy, debug: debugMode)
+                      policy: policy)
 
         // Start the MCP server loop
         server.run()

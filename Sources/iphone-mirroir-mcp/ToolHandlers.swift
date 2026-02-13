@@ -15,14 +15,13 @@ extension IPhoneMirroirMCP {
         recorder: ScreenRecorder,
         input: InputSimulation,
         describer: ScreenDescriber,
-        policy: PermissionPolicy,
-        debug: Bool = false
+        policy: PermissionPolicy
     ) {
         registerScreenTools(server: server, bridge: bridge, capture: capture,
                             recorder: recorder, describer: describer)
         registerInputTools(server: server, bridge: bridge, input: input)
         registerNavigationTools(server: server, bridge: bridge, input: input,
-                                policy: policy, debug: debug)
+                                policy: policy)
         registerInfoTools(server: server, bridge: bridge, input: input)
     }
 
@@ -537,8 +536,7 @@ extension IPhoneMirroirMCP {
         server: MCPServer,
         bridge: MirroringBridge,
         input: InputSimulation,
-        policy: PermissionPolicy,
-        debug: Bool
+        policy: PermissionPolicy
     ) {
         // launch_app — open an app by name via Spotlight search
         server.registerTool(MCPToolDefinition(
@@ -565,9 +563,7 @@ extension IPhoneMirroirMCP {
                 }
 
                 let appDecision = policy.checkAppLaunch(appName)
-                if debug {
-                    fputs("[permission] checkAppLaunch(\(appName))=\(appDecision)\n", stderr)
-                }
+                DebugLog.log("permission", "checkAppLaunch(\(appName))=\(appDecision)")
                 if case .denied(let reason) = appDecision {
                     return .error(reason)
                 }

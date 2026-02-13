@@ -11,11 +11,8 @@ final class MCPServer: @unchecked Sendable {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
     private let policy: PermissionPolicy
-    private let debug: Bool
-
-    init(policy: PermissionPolicy, debug: Bool = false) {
+    init(policy: PermissionPolicy) {
         self.policy = policy
-        self.debug = debug
         encoder = JSONEncoder()
         decoder = JSONDecoder()
     }
@@ -110,9 +107,7 @@ final class MCPServer: @unchecked Sendable {
         }
 
         let decision = policy.checkTool(toolName)
-        if debug {
-            fputs("[permission] checkTool(\(toolName))=\(decision)\n", stderr)
-        }
+        DebugLog.log("permission", "checkTool(\(toolName))=\(decision)")
         if case .denied(let reason) = decision {
             let content: JSONValue = .array([
                 MCPContent.text(reason).toJSON()

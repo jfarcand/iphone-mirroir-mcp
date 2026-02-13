@@ -25,9 +25,31 @@ sudo rm -f "/usr/local/bin/$HELPER_BIN"
 sudo rm -f "/Library/LaunchDaemons/$PLIST_NAME.plist"
 sudo rm -f "/var/run/iphone-mirroir-helper.sock"
 sudo rm -f "/var/log/iphone-mirroir-helper.log"
+rm -f "/tmp/iphone-mirroir-mcp-debug.log"
 echo "Helper daemon removed."
 
-# --- Step 2: Remove Karabiner ignore rule ---
+# --- Step 2: Remove permissions config ---
+
+echo ""
+echo "--- Permissions config ---"
+
+MCP_CONFIG_DIR="$HOME/.config/iphone-mirroir-mcp"
+if [ -d "$MCP_CONFIG_DIR" ]; then
+    read -p "Remove permissions config ($MCP_CONFIG_DIR)? [y/N] " remove_config
+    case "$remove_config" in
+        [yY]*)
+            rm -rf "$MCP_CONFIG_DIR"
+            echo "Permissions config removed."
+            ;;
+        *)
+            echo "Keeping permissions config."
+            ;;
+    esac
+else
+    echo "No permissions config found."
+fi
+
+# --- Step 3: Remove Karabiner ignore rule ---
 
 echo ""
 echo "--- Karabiner config ---"
@@ -57,7 +79,7 @@ else
     echo "No Karabiner config found."
 fi
 
-# --- Step 3: Optionally remove Karabiner-Elements ---
+# --- Step 4: Optionally remove Karabiner-Elements ---
 
 # Detect Karabiner by app, brew cask, or running processes
 KARABINER_INSTALLED=false
