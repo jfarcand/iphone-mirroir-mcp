@@ -160,7 +160,7 @@ steps:
   - launch: "Slack"
   - wait_for: "Home"
   - tap: "Direct Messages"
-  - tap: "${RECIPIENT:-Phil Tremblay}"
+  - tap: "${RECIPIENT}"
   - tap: "Message"
   - type: "${MESSAGE:-Hey, just checking in!}"
   - press_key: "return"

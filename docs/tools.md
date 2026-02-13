@@ -102,4 +102,7 @@ Steps are intents — the AI maps each to the appropriate MCP tool calls:
 | `assert_visible` / `assert_not_visible` | checks via `describe_screen` |
 | `screenshot: "label"` | captures and labels in report |
 | `press_key` | calls `press_key` |
+| `press_home` | calls `press_home` to return to home screen |
 | `open_url` | calls `open_url` |
+| `shake` | calls `shake` |
+| `remember: "instruction"` | AI reads dynamic data from screen and holds it for later steps |
