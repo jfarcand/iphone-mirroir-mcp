@@ -5,6 +5,7 @@
 // ABOUTME: Manages start/stop lifecycle and returns the path to the recorded .mov file.
 
 import Foundation
+import HelperLib
 
 /// Records the iPhone Mirroring window as a video file.
 /// Uses the macOS `screencapture -v -l <windowID>` command which records
@@ -52,7 +53,7 @@ final class ScreenRecorder: @unchecked Sendable {
         }
 
         // Verify the process actually started (Screen Recording permission may block it)
-        usleep(500_000) // 500ms to detect early failure
+        usleep(EnvConfig.earlyFailureDetectUs)
         guard process.isRunning else {
             let status = process.terminationStatus
             return "Recording failed to start (exit code \(status)). "

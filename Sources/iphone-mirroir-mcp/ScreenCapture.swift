@@ -6,6 +6,7 @@
 
 import CoreGraphics
 import Foundation
+import HelperLib
 
 /// Captures the iPhone Mirroring window content as a screenshot.
 /// Uses the macOS `screencapture` command since CGWindowListCreateImage
@@ -57,7 +58,7 @@ final class ScreenCapture: @unchecked Sendable {
     private func waitForProcess(_ process: Process, timeoutSeconds: Int) -> Bool {
         let deadline = Date().addingTimeInterval(TimeInterval(timeoutSeconds))
         while process.isRunning && Date() < deadline {
-            usleep(50_000) // 50ms polling interval
+            usleep(EnvConfig.processPollUs)
         }
         return !process.isRunning
     }

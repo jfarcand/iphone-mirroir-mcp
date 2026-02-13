@@ -103,7 +103,7 @@ final class KarabinerClient {
         try connectToServer(path: serverPath)
 
         // Set receive timeout for polling responses
-        var tv = timeval(tv_sec: 0, tv_usec: 200_000) // 200ms
+        var tv = timeval(tv_sec: 0, tv_usec: EnvConfig.recvTimeoutUs)
         setsockopt(socketFd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
 
         isConnected = true
@@ -114,7 +114,7 @@ final class KarabinerClient {
         startHeartbeat()
 
         // Small delay to let the server process the heartbeat and create our response socket
-        usleep(100_000) // 100ms
+        usleep(EnvConfig.postHeartbeatSettleUs)
 
         // Initialize virtual devices
         initializeKeyboard()
@@ -176,7 +176,7 @@ final class KarabinerClient {
         down.buttons = buttonMask
         postPointingReport(down)
 
-        usleep(80_000) // 80ms hold
+        usleep(EnvConfig.clickHoldUs)
 
         var up = PointingInput()
         up.buttons = 0
@@ -209,7 +209,7 @@ final class KarabinerClient {
         let downOk = sendRequest(.postKeyboardInputReport, payload: downBytes)
         log("typeKey DOWN send: \(downOk)")
 
-        usleep(20_000) // 20ms hold
+        usleep(EnvConfig.keyHoldUs)
 
         // Key up (empty report releases all keys)
         let upReport = KeyboardInput()

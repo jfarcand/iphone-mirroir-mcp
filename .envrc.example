@@ -1,0 +1,38 @@
+# Environment variable overrides for iphone-mirroir-mcp timing constants.
+# Copy this file to .envrc and uncomment variables to customize.
+# All timing values are in microseconds (1ms = 1000us).
+
+# --- Cursor & Input Settling ---
+# export IPHONE_MIRROIR_CURSOR_SETTLE_US=10000       # Delay after cursor warp (10ms)
+# export IPHONE_MIRROIR_NUDGE_SETTLE_US=5000          # Delay after Karabiner nudge (5ms)
+# export IPHONE_MIRROIR_CLICK_HOLD_US=80000           # Click hold duration (80ms)
+# export IPHONE_MIRROIR_DOUBLE_TAP_HOLD_US=40000      # Per-tap hold in double-tap (40ms)
+# export IPHONE_MIRROIR_DOUBLE_TAP_GAP_US=50000       # Gap between double-tap taps (50ms)
+# export IPHONE_MIRROIR_DRAG_MODE_HOLD_US=150000      # Initial hold to trigger drag (150ms)
+# export IPHONE_MIRROIR_FOCUS_SETTLE_US=200000         # Focus settle after click (200ms)
+# export IPHONE_MIRROIR_KEYSTROKE_DELAY_US=15000       # Delay between keystrokes (15ms)
+
+# --- App Switching & Navigation ---
+# export IPHONE_MIRROIR_SPACE_SWITCH_SETTLE_US=300000  # macOS Space switch settle (300ms)
+# export IPHONE_MIRROIR_SPOTLIGHT_APPEARANCE_US=800000  # Spotlight appear delay (800ms)
+# export IPHONE_MIRROIR_SEARCH_RESULTS_POPULATE_US=1000000  # Search results delay (1s)
+# export IPHONE_MIRROIR_SAFARI_LOAD_US=1500000         # Safari load after launch (1.5s)
+# export IPHONE_MIRROIR_ADDRESS_BAR_ACTIVATE_US=500000  # Cmd+L address bar delay (500ms)
+# export IPHONE_MIRROIR_PRE_RETURN_US=300000           # Delay before pressing Return (300ms)
+
+# --- Process & System Polling ---
+# export IPHONE_MIRROIR_PROCESS_POLL_US=50000          # Process exit polling interval (50ms)
+# export IPHONE_MIRROIR_EARLY_FAILURE_DETECT_US=500000  # Early failure detection (500ms)
+# export IPHONE_MIRROIR_RESUME_FROM_PAUSED_US=2000000  # Resume from paused delay (2s)
+# export IPHONE_MIRROIR_POST_HEARTBEAT_SETTLE_US=100000  # Post-heartbeat settle (100ms)
+
+# --- Karabiner HID ---
+# export IPHONE_MIRROIR_KEY_HOLD_US=20000              # Key press hold duration (20ms)
+# export IPHONE_MIRROIR_RECV_TIMEOUT_US=200000         # Socket recv timeout (200ms)
+
+# --- Non-Timing Constants ---
+# export IPHONE_MIRROIR_DRAG_INTERPOLATION_STEPS=60    # Steps for drag interpolation
+# export IPHONE_MIRROIR_SWIPE_INTERPOLATION_STEPS=20   # Steps for swipe scroll
+# export IPHONE_MIRROIR_SCROLL_PIXEL_SCALE=8.0         # Pixel-to-scroll-unit scale
+# export IPHONE_MIRROIR_HID_TYPING_CHUNK_SIZE=15       # Max chars per HID chunk
+# export IPHONE_MIRROIR_STAFF_GROUP_ID=20              # macOS staff group GID

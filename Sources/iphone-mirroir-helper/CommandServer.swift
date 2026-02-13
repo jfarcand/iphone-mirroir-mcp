@@ -74,7 +74,7 @@ final class CommandServer {
         // while preventing access from other system daemons.
         chmod(helperSocketPath, 0o660)
         // Set group to staff so the MCP server (running as a normal user) can connect
-        let staffGroupID: gid_t = 20 // macOS built-in staff group
+        let staffGroupID = gid_t(EnvConfig.staffGroupID)
         chown(helperSocketPath, 0, staffGroupID)
 
         guard listen(listenFd, 4) == 0 else {

@@ -114,7 +114,7 @@ final class ScreenDescriber: @unchecked Sendable {
     private func waitForProcess(_ process: Process, timeoutSeconds: Int) -> Bool {
         let deadline = Date().addingTimeInterval(TimeInterval(timeoutSeconds))
         while process.isRunning && Date() < deadline {
-            usleep(50_000) // 50ms polling interval
+            usleep(EnvConfig.processPollUs)
         }
         return !process.isRunning
     }

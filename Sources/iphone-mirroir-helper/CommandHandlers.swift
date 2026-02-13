@@ -73,30 +73,30 @@ extension CommandServer {
 
         // Warp system cursor to target
         CGWarpMouseCursorPosition(target)
-        usleep(10_000) // 10ms for cursor settle
+        usleep(EnvConfig.cursorSettleUs)
 
         // Small Karabiner nudge to sync virtual device with warped cursor
         var nudgeRight = PointingInput()
         nudgeRight.x = 1
         karabiner.postPointingReport(nudgeRight)
-        usleep(5_000)
+        usleep(EnvConfig.nudgeSettleUs)
 
         var nudgeBack = PointingInput()
         nudgeBack.x = -1
         karabiner.postPointingReport(nudgeBack)
-        usleep(10_000)
+        usleep(EnvConfig.cursorSettleUs)
 
         // Button down
         var down = PointingInput()
         down.buttons = 0x01
         karabiner.postPointingReport(down)
-        usleep(80_000) // 80ms hold for reliable tap
+        usleep(EnvConfig.clickHoldUs)
 
         // Button up
         var up = PointingInput()
         up.buttons = 0x00
         karabiner.postPointingReport(up)
-        usleep(10_000)
+        usleep(EnvConfig.cursorSettleUs)
 
         // Restore cursor position and reconnect physical mouse
         CGWarpMouseCursorPosition(savedPosition)
@@ -127,18 +127,18 @@ extension CommandServer {
 
         CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
         CGWarpMouseCursorPosition(target)
-        usleep(10_000)
+        usleep(EnvConfig.cursorSettleUs)
 
         // Karabiner nudge to sync virtual device with warped cursor
         var nudgeRight = PointingInput()
         nudgeRight.x = 1
         karabiner.postPointingReport(nudgeRight)
-        usleep(5_000)
+        usleep(EnvConfig.nudgeSettleUs)
 
         var nudgeBack = PointingInput()
         nudgeBack.x = -1
         karabiner.postPointingReport(nudgeBack)
-        usleep(10_000)
+        usleep(EnvConfig.cursorSettleUs)
 
         // Button down — hold for the requested duration
         var down = PointingInput()
@@ -150,7 +150,7 @@ extension CommandServer {
         var up = PointingInput()
         up.buttons = 0x00
         karabiner.postPointingReport(up)
-        usleep(10_000)
+        usleep(EnvConfig.cursorSettleUs)
 
         CGWarpMouseCursorPosition(savedPosition)
         CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
@@ -178,40 +178,40 @@ extension CommandServer {
 
         CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
         CGWarpMouseCursorPosition(target)
-        usleep(10_000)
+        usleep(EnvConfig.cursorSettleUs)
 
         // Karabiner nudge to sync virtual device with warped cursor
         var nudgeRight = PointingInput()
         nudgeRight.x = 1
         karabiner.postPointingReport(nudgeRight)
-        usleep(5_000)
+        usleep(EnvConfig.nudgeSettleUs)
 
         var nudgeBack = PointingInput()
         nudgeBack.x = -1
         karabiner.postPointingReport(nudgeBack)
-        usleep(10_000)
+        usleep(EnvConfig.cursorSettleUs)
 
         // First tap
         var down1 = PointingInput()
         down1.buttons = 0x01
         karabiner.postPointingReport(down1)
-        usleep(40_000) // 40ms hold
+        usleep(EnvConfig.doubleTapHoldUs)
 
         var up1 = PointingInput()
         up1.buttons = 0x00
         karabiner.postPointingReport(up1)
-        usleep(50_000) // 50ms inter-tap gap
+        usleep(EnvConfig.doubleTapGapUs)
 
         // Second tap
         var down2 = PointingInput()
         down2.buttons = 0x01
         karabiner.postPointingReport(down2)
-        usleep(40_000) // 40ms hold
+        usleep(EnvConfig.doubleTapHoldUs)
 
         var up2 = PointingInput()
         up2.buttons = 0x00
         karabiner.postPointingReport(up2)
-        usleep(10_000)
+        usleep(EnvConfig.cursorSettleUs)
 
         CGWarpMouseCursorPosition(savedPosition)
         CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
@@ -244,30 +244,31 @@ extension CommandServer {
 
         // Warp to start position
         CGWarpMouseCursorPosition(CGPoint(x: fromX, y: fromY))
-        usleep(10_000)
+        usleep(EnvConfig.cursorSettleUs)
 
         // Sync Karabiner with nudge
         var nudgeRight = PointingInput()
         nudgeRight.x = 1
         karabiner.postPointingReport(nudgeRight)
-        usleep(5_000)
+        usleep(EnvConfig.nudgeSettleUs)
 
         var nudgeBack = PointingInput()
         nudgeBack.x = -1
         karabiner.postPointingReport(nudgeBack)
-        usleep(10_000)
+        usleep(EnvConfig.cursorSettleUs)
 
         // Button down with initial hold for iOS drag recognition
         var down = PointingInput()
         down.buttons = 0x01
         karabiner.postPointingReport(down)
-        usleep(150_000) // 150ms hold to trigger drag mode
+        usleep(EnvConfig.dragModeHoldUs)
 
         // Slow interpolated movement with fine steps
-        let steps = 60
+        let steps = EnvConfig.dragInterpolationSteps
         let totalDx = toX - fromX
         let totalDy = toY - fromY
-        let moveDurationMs = durationMs - 150 // subtract initial hold time
+        let dragModeHoldMs = Int(EnvConfig.dragModeHoldUs / 1000)
+        let moveDurationMs = durationMs - dragModeHoldMs // subtract initial hold time
         let stepDelayUs = UInt32(max(moveDurationMs, 1) * 1000 / steps)
 
         for i in 1...steps {
@@ -291,7 +292,7 @@ extension CommandServer {
         var up = PointingInput()
         up.buttons = 0x00
         karabiner.postPointingReport(up)
-        usleep(10_000)
+        usleep(EnvConfig.cursorSettleUs)
 
         CGWarpMouseCursorPosition(savedPosition)
         CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
@@ -329,28 +330,28 @@ extension CommandServer {
 
             CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
             CGWarpMouseCursorPosition(target)
-            usleep(10_000)
+            usleep(EnvConfig.cursorSettleUs)
 
             // Karabiner nudge to sync virtual device with warped cursor
             var nudgeRight = PointingInput()
             nudgeRight.x = 1
             karabiner.postPointingReport(nudgeRight)
-            usleep(5_000)
+            usleep(EnvConfig.nudgeSettleUs)
             var nudgeBack = PointingInput()
             nudgeBack.x = -1
             karabiner.postPointingReport(nudgeBack)
-            usleep(10_000)
+            usleep(EnvConfig.cursorSettleUs)
 
             // Click down + up to give the window focus
             var down = PointingInput()
             down.buttons = 0x01
             karabiner.postPointingReport(down)
-            usleep(80_000)
+            usleep(EnvConfig.clickHoldUs)
             var up = PointingInput()
             up.buttons = 0x00
             karabiner.postPointingReport(up)
 
-            usleep(200_000) // 200ms for focus to settle before typing
+            usleep(EnvConfig.focusSettleUs)
             // Cursor stays on target, physical mouse stays disconnected
         } else {
             hasFocusClick = false
@@ -368,7 +369,7 @@ extension CommandServer {
             }
 
             karabiner.typeKey(keycode: mapping.keycode, modifiers: mapping.modifiers)
-            usleep(15_000) // 15ms between keystrokes
+            usleep(EnvConfig.keystrokeDelayUs)
         }
 
         // Restore cursor and reconnect physical mouse after all typing is done
@@ -416,29 +417,29 @@ extension CommandServer {
         let midX = (fromX + toX) / 2.0
         let midY = (fromY + toY) / 2.0
         CGWarpMouseCursorPosition(CGPoint(x: midX, y: midY))
-        usleep(10_000)
+        usleep(EnvConfig.cursorSettleUs)
 
         // Sync Karabiner with nudge so the virtual device knows the cursor position
         var nudge = PointingInput()
         nudge.x = 1
         karabiner.postPointingReport(nudge)
-        usleep(5_000)
+        usleep(EnvConfig.nudgeSettleUs)
         nudge.x = -1
         karabiner.postPointingReport(nudge)
-        usleep(10_000)
+        usleep(EnvConfig.cursorSettleUs)
 
         // Send scroll wheel events to simulate the swipe gesture.
         // No button press — scroll wheel maps to iOS swipe/scroll, while
         // click-drag maps to touch-and-drag (which triggers icon jiggle mode).
         let totalDx = toX - fromX
         let totalDy = toY - fromY
-        let steps = 20
+        let steps = EnvConfig.swipeInterpolationSteps
         let stepDelayUs = UInt32(max(durationMs, 1) * 1000 / steps)
 
         // Scale pixel distance to scroll wheel units. Scroll wheel values are
         // much coarser than pixels — each unit scrolls several pixels.
         // Using a divisor to convert pixel distance to reasonable scroll ticks.
-        let scrollScale = 8.0
+        let scrollScale = EnvConfig.scrollPixelScale
         var hAccum = 0.0
         var vAccum = 0.0
         let hPerStep = totalDx / scrollScale / Double(steps)

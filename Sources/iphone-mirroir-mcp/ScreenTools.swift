@@ -32,7 +32,7 @@ extension IPhoneMirroirMCP {
                 let state = bridge.getState()
                 if state == .paused {
                     _ = bridge.pressResume()
-                    usleep(2_000_000) // Wait 2s for connection to resume
+                    usleep(EnvConfig.resumeFromPausedUs) // Wait 2s for connection to resume
                 }
 
                 guard let base64 = capture.captureBase64() else {
@@ -65,7 +65,7 @@ extension IPhoneMirroirMCP {
                 let state = bridge.getState()
                 if state == .paused {
                     _ = bridge.pressResume()
-                    usleep(2_000_000)
+                    usleep(EnvConfig.resumeFromPausedUs)
                 }
                 guard let result = describer.describe() else {
                     return .error(

@@ -269,7 +269,7 @@ final class InputSimulation: @unchecked Sendable {
             DebugLog.log("launchApp", "ERROR: failed to open Spotlight")
             return "Failed to open Spotlight. Is iPhone Mirroring running?"
         }
-        usleep(800_000) // 800ms for Spotlight to appear and be ready for input
+        usleep(EnvConfig.spotlightAppearanceUs)
 
         // Step 2: Type the app name
         let typeResult = typeText(name)
@@ -277,7 +277,7 @@ final class InputSimulation: @unchecked Sendable {
             DebugLog.log("launchApp", "ERROR: failed to type app name")
             return typeResult.error ?? "Failed to type app name"
         }
-        usleep(1_000_000) // 1s for search results to populate
+        usleep(EnvConfig.searchResultsPopulateUs)
 
         // Step 3: Press Return to launch the top result
         let keyResult = pressKey(keyName: "return")
@@ -301,7 +301,7 @@ final class InputSimulation: @unchecked Sendable {
         if let error = launchApp(name: "Safari") {
             return error
         }
-        usleep(1_500_000) // 1.5s for Safari to fully load
+        usleep(EnvConfig.safariLoadUs)
 
         // Step 2: Select the address bar with Cmd+L (works whether Safari was
         // already open or just launched, and clears any existing URL)
@@ -309,14 +309,14 @@ final class InputSimulation: @unchecked Sendable {
         guard selectResult.success else {
             return selectResult.error ?? "Failed to select address bar"
         }
-        usleep(500_000) // 500ms for address bar to activate
+        usleep(EnvConfig.addressBarActivateUs)
 
         // Step 3: Type the URL
         let typeResult = typeText(url)
         guard typeResult.success else {
             return typeResult.error ?? "Failed to type URL"
         }
-        usleep(300_000) // 300ms before pressing Return
+        usleep(EnvConfig.preReturnUs)
 
         // Step 4: Press Return to navigate
         let goResult = pressKey(keyName: "return")
@@ -368,7 +368,7 @@ final class InputSimulation: @unchecked Sendable {
         // Only wait for Space switch when we weren't already frontmost.
         // When already front, the AppleScript is a no-op and needs no settling time.
         if !alreadyFront {
-            usleep(300_000) // 300ms for Space switch to settle
+            usleep(EnvConfig.spaceSwitchSettleUs)
         }
 
         let afterApp = NSWorkspace.shared.frontmostApplication
@@ -456,7 +456,7 @@ final class InputSimulation: @unchecked Sendable {
 
     /// Type text via Karabiner HID in 15-character chunks.
     private func typeViaHID(_ text: String) -> TypeResult? {
-        let chunkSize = 15
+        let chunkSize = EnvConfig.hidTypingChunkSize
         var index = text.startIndex
         while index < text.endIndex {
             let end = text.index(index, offsetBy: chunkSize,
