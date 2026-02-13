@@ -35,7 +35,7 @@ The helper warps the system cursor to the target coordinates, sends a Karabiner 
 
 ### Typing and Key Presses
 
-The MCP server activates iPhone Mirroring via AppleScript System Events (the only reliable way to trigger a macOS Space switch), then sends HID keycodes through the helper's Karabiner virtual keyboard. Activation only happens when iPhone Mirroring isn't already frontmost, and the server does not restore the previous app — this eliminates the per-keystroke Space switching of earlier versions.
+The MCP server activates iPhone Mirroring via AppleScript System Events (the only reliable way to trigger a macOS Space switch), then sends HID keycodes through the helper's Karabiner virtual keyboard. Activation runs on every input call because `NSWorkspace.frontmostApplication` can report stale values when another app gained keyboard focus between MCP calls. When iPhone Mirroring is already frontmost, the activation is a no-op (~10ms) with no settling delay. The server does not restore the previous app — this eliminates the per-keystroke Space switching of earlier versions. See [limitations](limitations.md#focus-stealing) for details.
 
 ### Navigation
 

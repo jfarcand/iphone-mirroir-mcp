@@ -26,7 +26,7 @@ npx -y iphone-mirroir-mcp --debug --yolo
 
 **`keyboard_ready: false`** — Karabiner's DriverKit extension isn't running. Open Karabiner-Elements, then go to **System Settings > General > Login Items & Extensions** and enable all toggles under Karabiner-Elements. You may need to enter your password.
 
-**Typing goes to the wrong app instead of iPhone** — Make sure you're running v0.4.0+. The MCP server activates iPhone Mirroring via AppleScript before sending keystrokes through Karabiner. If this still fails, check that your terminal app has Accessibility permissions in System Settings.
+**Typing goes to the wrong app instead of iPhone** — The MCP server activates iPhone Mirroring via AppleScript before every input call. If keystrokes still land in the wrong app, check that your terminal has Accessibility permissions in System Settings. Note that focus stealing is expected — see [limitations](limitations.md#focus-stealing).
 
 **Taps don't register** — Check that the helper is running:
 ```bash
