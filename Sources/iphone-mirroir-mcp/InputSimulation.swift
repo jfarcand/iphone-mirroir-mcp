@@ -53,6 +53,19 @@ final class InputSimulation: @unchecked Sendable {
         }
     }
 
+    /// Validate that coordinates fall within the iPhone Mirroring window bounds.
+    /// Returns nil if valid, or a descriptive error message if out of bounds.
+    private func validateBounds(x: Double, y: Double, info: WindowInfo, tag: String) -> String? {
+        let w = Double(info.size.width)
+        let h = Double(info.size.height)
+        if x < 0 || x > w || y < 0 || y > h {
+            let msg = "Coordinates (\(Int(x)), \(Int(y))) are outside the iPhone Mirroring window (\(Int(w))x\(Int(h))). x must be 0-\(Int(w)), y must be 0-\(Int(h))."
+            DebugLog.log(tag, "REJECTED: \(msg)")
+            return msg
+        }
+        return nil
+    }
+
     /// Log window info and frontmost app state for any coordinate-based operation.
     private func logWindowState(_ tag: String, _ info: WindowInfo) {
         let frontApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
@@ -70,6 +83,10 @@ final class InputSimulation: @unchecked Sendable {
         guard helperClient.isAvailable else {
             DebugLog.log("tap", "ERROR: helper unavailable")
             return helperClient.unavailableMessage
+        }
+
+        if let boundsError = validateBounds(x: x, y: y, info: info, tag: "tap") {
+            return boundsError
         }
 
         logWindowState("tap", info)
@@ -97,6 +114,13 @@ final class InputSimulation: @unchecked Sendable {
         guard helperClient.isAvailable else {
             DebugLog.log("swipe", "ERROR: helper unavailable")
             return helperClient.unavailableMessage
+        }
+
+        if let boundsError = validateBounds(x: fromX, y: fromY, info: info, tag: "swipe") {
+            return boundsError
+        }
+        if let boundsError = validateBounds(x: toX, y: toY, info: info, tag: "swipe") {
+            return boundsError
         }
 
         logWindowState("swipe", info)
@@ -129,6 +153,10 @@ final class InputSimulation: @unchecked Sendable {
             return helperClient.unavailableMessage
         }
 
+        if let boundsError = validateBounds(x: x, y: y, info: info, tag: "longPress") {
+            return boundsError
+        }
+
         logWindowState("longPress", info)
         ensureMirroringFrontmost()
 
@@ -152,6 +180,10 @@ final class InputSimulation: @unchecked Sendable {
         guard helperClient.isAvailable else {
             DebugLog.log("doubleTap", "ERROR: helper unavailable")
             return helperClient.unavailableMessage
+        }
+
+        if let boundsError = validateBounds(x: x, y: y, info: info, tag: "doubleTap") {
+            return boundsError
         }
 
         logWindowState("doubleTap", info)
@@ -180,6 +212,13 @@ final class InputSimulation: @unchecked Sendable {
         guard helperClient.isAvailable else {
             DebugLog.log("drag", "ERROR: helper unavailable")
             return helperClient.unavailableMessage
+        }
+
+        if let boundsError = validateBounds(x: fromX, y: fromY, info: info, tag: "drag") {
+            return boundsError
+        }
+        if let boundsError = validateBounds(x: toX, y: toY, info: info, tag: "drag") {
+            return boundsError
         }
 
         logWindowState("drag", info)
@@ -289,8 +328,12 @@ final class InputSimulation: @unchecked Sendable {
     }
 
     /// Ensure iPhone Mirroring is the frontmost app so it receives keyboard input.
-    /// Only activates if another app is currently in front, to avoid unnecessary
-    /// Space switches. Does NOT restore the previous frontmost app — this eliminates
+    /// Always runs AppleScript activation because NSWorkspace.frontmostApplication
+    /// can report stale values when another app gained keyboard focus between MCP
+    /// calls. The activation is idempotent (~10ms no-op when already front).
+    /// Only sleeps 300ms when a real Space switch was needed.
+    ///
+    /// Does NOT restore the previous frontmost app — this eliminates
     /// the "switch, back, switch, back" jitter that the old AppleScript keystroke approach caused.
     ///
     /// Uses AppleScript `set frontmost to true` via System Events because
@@ -298,13 +341,16 @@ final class InputSimulation: @unchecked Sendable {
     /// (deprecated in macOS 14 with no replacement for cross-Space activation).
     private func ensureMirroringFrontmost() {
         let frontApp = NSWorkspace.shared.frontmostApplication
-        if frontApp?.bundleIdentifier == mirroringBundleID {
-            DebugLog.log("focus", "already frontmost")
-            return // already frontmost, no Space switch needed
+        let alreadyFront = frontApp?.bundleIdentifier == mirroringBundleID
+
+        if alreadyFront {
+            DebugLog.log("focus", "likely frontmost, re-confirming")
+        } else {
+            DebugLog.log("focus", "switching from \(frontApp?.bundleIdentifier ?? "nil")")
         }
 
-        DebugLog.log("focus", "switching from \(frontApp?.bundleIdentifier ?? "nil")")
-
+        // Always activate — NSWorkspace.frontmostApplication can report stale
+        // values when another app gained keyboard focus between MCP calls.
         let script = NSAppleScript(source: """
             tell application "System Events"
                 tell process "iPhone Mirroring"
@@ -319,10 +365,14 @@ final class InputSimulation: @unchecked Sendable {
             DebugLog.log("focus", "AppleScript error: \(err)")
         }
 
-        usleep(300_000) // 300ms for Space switch to settle
+        // Only wait for Space switch when we weren't already frontmost.
+        // When already front, the AppleScript is a no-op and needs no settling time.
+        if !alreadyFront {
+            usleep(300_000) // 300ms for Space switch to settle
+        }
 
         let afterApp = NSWorkspace.shared.frontmostApplication
-        DebugLog.log("focus", "after switch frontApp=\(afterApp?.bundleIdentifier ?? "nil")")
+        DebugLog.log("focus", "after activation frontApp=\(afterApp?.bundleIdentifier ?? "nil")")
     }
 
     /// Type text via a hybrid approach: Karabiner HID for characters with valid

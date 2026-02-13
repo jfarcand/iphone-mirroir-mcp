@@ -20,6 +20,9 @@ struct IPhoneMirroirMCP {
         let skipPermissions = PermissionPolicy.parseSkipPermissions(from: args)
         DebugLog.enabled = args.contains("--debug")
         DebugLog.reset()
+        if DebugLog.enabled {
+            DebugLog.persist("startup", "Debug logging enabled (--debug)")
+        }
         let config = PermissionPolicy.loadConfig()
         let policy = PermissionPolicy(skipPermissions: skipPermissions, config: config)
 

@@ -18,21 +18,9 @@ final class ScreenDescriber: @unchecked Sendable {
         self.bridge = bridge
     }
 
-    /// A text element detected via OCR with its tap-point coordinates.
-    struct DetectedElement: Sendable {
-        /// The recognized text string.
-        let text: String
-        /// X coordinate in points, relative to the mirroring window top-left.
-        let tapX: Double
-        /// Y coordinate in points, relative to the mirroring window top-left.
-        let tapY: Double
-        /// Vision confidence score (0.0–1.0).
-        let confidence: Float
-    }
-
     /// Result of a describe operation: detected elements plus the screenshot for visual context.
     struct DescribeResult: Sendable {
-        let elements: [DetectedElement]
+        let elements: [TapPoint]
         let screenshotBase64: String
     }
 
@@ -95,18 +83,25 @@ final class ScreenDescriber: @unchecked Sendable {
 
         // Convert Vision normalized coordinates (origin: bottom-left) to
         // tap-point coordinates (origin: top-left of mirroring window).
-        let elements: [DetectedElement] = observations.compactMap { observation in
+        // Vision bbox.maxY is the top in normalized space → smallest Y in window space.
+        let rawElements: [RawTextElement] = observations.compactMap { observation in
             guard let candidate = observation.topCandidates(1).first else { return nil }
             let bbox = observation.boundingBox
-            let tapX = bbox.midX * windowWidth
-            let tapY = (1.0 - bbox.midY) * windowHeight
-            return DetectedElement(
+            return RawTextElement(
                 text: candidate.string,
-                tapX: tapX,
-                tapY: tapY,
+                tapX: bbox.midX * windowWidth,
+                textTopY: (1.0 - bbox.maxY) * windowHeight,
+                textBottomY: (1.0 - bbox.minY) * windowHeight,
+                bboxWidth: bbox.width * windowWidth,
                 confidence: candidate.confidence
             )
         }
+
+        // Apply smart tap-point offsets: short labels are shifted upward
+        // toward the icon/button above them.
+        let elements = TapPointCalculator.computeTapPoints(
+            elements: rawElements, windowWidth: windowWidth
+        )
 
         let griddedData = GridOverlay.addOverlay(to: data, windowSize: info.size) ?? data
         let base64 = griddedData.base64EncodedString()
