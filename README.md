@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="website/public/logo-robot.svg" alt="iphone-mirroir-mcp" width="120" />
+</p>
+
 # iphone-mirroir-mcp
 
 [![npm version](https://img.shields.io/npm/v/iphone-mirroir-mcp)](https://www.npmjs.com/package/iphone-mirroir-mcp)
