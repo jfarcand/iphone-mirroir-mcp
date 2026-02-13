@@ -69,7 +69,7 @@ final class MCPServer: @unchecked Sendable {
             ]),
             "serverInfo": .object([
                 "name": .string("iphone-mirroir-mcp"),
-                "version": .string("0.1.0"),
+                "version": .string("0.8.0"),
             ]),
         ])
         return JSONRPCResponse(id: request.id, result: result, error: nil)
