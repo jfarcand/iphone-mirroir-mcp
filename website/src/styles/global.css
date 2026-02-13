@@ -48,10 +48,10 @@ h1 {
 }
 
 h2 {
-  font-size: 1.25rem;
+  font-size: 1.5rem;
   font-weight: 600;
-  margin-top: 3rem;
   margin-bottom: 0.75rem;
+  text-align: center;
 }
 
 p {
@@ -165,9 +165,12 @@ pre code {
 /* Section styling */
 section {
   margin-top: 3rem;
+  padding-top: 3rem;
+  border-top: 1px solid var(--color-border);
 }
 
 section > p {
+  text-align: center;
   color: var(--color-muted);
 }
 
@@ -230,6 +233,7 @@ section > p {
 .client-list {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 0.5rem;
   margin-top: 0.75rem;
 }
@@ -365,7 +369,7 @@ section > p {
 
 /* Footer */
 footer {
-  margin-top: 4rem;
+  margin-top: 2rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--color-border);
   font-size: 0.85rem;
@@ -379,6 +383,12 @@ footer a {
 
 footer p {
   color: var(--color-muted);
+  text-align: center;
+}
+
+footer .trademark {
+  font-size: 0.75rem;
+  margin-top: 1rem;
 }
 
 /* Responsive */
@@ -399,4 +409,5 @@ footer p {
     flex-direction: column;
     align-items: flex-start;
   }
+
 }
