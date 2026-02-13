@@ -212,21 +212,6 @@ Once installed, scenarios are available through the `list_scenarios` and `get_sc
 
 See [Tools Reference](docs/tools.md#scenarios) for the full step type reference and directory layout.
 
-## Security Warning
-
-**This gives an AI agent full control of your iPhone screen.** It can tap anything, type anything, open any app — autonomously. That includes banking apps, messages, and payments.
-
-The MCP server only works while iPhone Mirroring is active. Closing the window or locking the phone kills all input. The helper daemon listens on a local Unix socket only (no network) and runs as root (Karabiner's HID sockets require it). On shared Macs, any local user in the `staff` group can send commands — see [Permissions](docs/permissions.md) to control which tools are exposed.
-
-## Known Limitations
-
-- **Focus stealing** — Every input tool activates iPhone Mirroring, stealing keyboard focus from your terminal. Put iPhone Mirroring in its own macOS Space to preserve your cursor position. See [limitations](docs/limitations.md#focus-stealing).
-- **No clipboard paste** — iPhone Mirroring does not bridge the Mac clipboard when paste is triggered programmatically. All text must be typed character-by-character.
-- **ISO keyboard section key** — On ISO keyboards (e.g., Canadian-CSA), characters tied to the section key (`§`, `±`) cannot be typed because macOS and iOS swap keycodes differently. These characters are silently skipped.
-- **iOS autocorrect** — iOS applies autocorrect to typed text. Disable it in iPhone Settings > General > Keyboard, or type words followed by spaces to confirm them.
-- **Single-user only** — The helper socket has no authentication. On shared Macs, any local user in the `staff` group can send commands.
-- **No background interaction** — The iPhone Mirroring window must be visible. Closing it or locking the phone kills all input.
-
 ## Updating
 
 ```bash
@@ -259,6 +244,7 @@ brew uninstall iphone-mirroir-mcp
 | | |
 |---|---|
 | [Tools Reference](docs/tools.md) | All 21 tools, parameters, and input workflows |
+| [Security](docs/security.md) | Threat model, kill switch, and recommendations |
 | [Permissions](docs/permissions.md) | Fail-closed permission model and config file |
 | [Architecture](docs/architecture.md) | System diagram and how input reaches the iPhone |
 | [Known Limitations](docs/limitations.md) | Focus stealing, keyboard layout gaps, autocorrect |

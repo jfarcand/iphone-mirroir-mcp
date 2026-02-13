@@ -12,16 +12,16 @@
       <stop offset="0%" stop-color="#6ee7a0"/>
       <stop offset="100%" stop-color="#34d670"/>
     </linearGradient>
-    <!-- Outer frame gradient -->
+    <!-- Outer frame gradient (matches page background) -->
     <linearGradient id="frame" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#eef5ee"/>
-      <stop offset="100%" stop-color="#d8e8d8"/>
+      <stop offset="0%" stop-color="#3d2a16"/>
+      <stop offset="100%" stop-color="#2e1f0f"/>
     </linearGradient>
   </defs>
 
   <!-- Outer rounded squircle frame -->
   <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#frame)"/>
-  <rect x="10" y="10" width="108" height="108" rx="24" fill="#fff"/>
+  <rect x="10" y="10" width="108" height="108" rx="24" fill="#2e1f0f"/>
 
   <!-- Antenna crossbar -->
   <line x1="44" y1="28" x2="84" y2="28" stroke="url(#body)" stroke-width="4.5" stroke-linecap="round"/>
