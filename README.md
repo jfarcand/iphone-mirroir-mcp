@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)](https://support.apple.com/en-us/105071)
 
-MCP server that controls a real iPhone through macOS iPhone Mirroring. Screenshot, tap, swipe, type — from any MCP client. No Xcode, no simulator, no provisioning profile. Works with any app visible on the iPhone screen: App Store apps, TestFlight builds, Expo Go, React Native dev builds.
+MCP server that controls a real iPhone through macOS iPhone Mirroring. [Screenshot, tap, swipe, type](docs/tools.md) — from any MCP client. No Xcode, no simulator, no provisioning profile. Works with any app visible on the iPhone screen: App Store apps, TestFlight builds, Expo Go, React Native dev builds.
 
 Input flows through [Karabiner](https://karabiner-elements.pqrs.org/) DriverKit virtual HID devices because iPhone Mirroring blocks standard CGEvent injection.
 
