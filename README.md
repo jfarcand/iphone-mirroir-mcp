@@ -24,12 +24,28 @@ The installer prompts you to select your MCP client (Claude Code, Cursor, GitHub
 After install, approve the DriverKit extension if prompted: **System Settings > General > Login Items & Extensions** — enable all toggles under Karabiner-Elements. The first time you take a screenshot, macOS will prompt for **Screen Recording** and **Accessibility** permissions. Grant both.
 
 <details>
-<summary>Manual per-client setup</summary>
+<summary>Per-client setup</summary>
 
 #### Claude Code
 
 ```bash
 claude mcp add --transport stdio iphone-mirroring -- npx -y iphone-mirroir-mcp
+```
+
+#### GitHub Copilot (VS Code)
+
+Install from the MCP server gallery: search `@mcp iphone-mirroring` in the Extensions view, or add to `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "iphone-mirroring": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "iphone-mirroir-mcp"]
+    }
+  }
+}
 ```
 
 #### Cursor
@@ -40,22 +56,6 @@ Add to `.cursor/mcp.json` in your project root:
 {
   "mcpServers": {
     "iphone-mirroring": {
-      "command": "npx",
-      "args": ["-y", "iphone-mirroir-mcp"]
-    }
-  }
-}
-```
-
-#### GitHub Copilot (VS Code)
-
-Add to `.vscode/mcp.json` in your workspace:
-
-```json
-{
-  "servers": {
-    "iphone-mirroring": {
-      "type": "stdio",
       "command": "npx",
       "args": ["-y", "iphone-mirroir-mcp"]
     }
@@ -149,28 +149,63 @@ recording. I need a video of the scroll lag I'm seeing.
 
 ## Scenarios
 
-Scenarios are YAML files that describe multi-step test flows as intents, not scripts. Steps like `tap: "Email"` don't specify coordinates — the AI finds the element by fuzzy OCR matching and adapts to unexpected dialogs, screen layout changes, and timing. Place them in `~/.iphone-mirroir-mcp/scenarios/` (global) or `<cwd>/.iphone-mirroir-mcp/scenarios/` (project-local). Both directories are scanned recursively.
+Scenarios are YAML files that describe multi-step test flows as intents, not scripts. Steps like `tap: "Email"` don't specify coordinates — the AI finds the element by fuzzy OCR matching and adapts to unexpected dialogs, screen layout changes, and timing.
+
+**Cross-app workflow** — get your commute ETA from Waze, then text it to someone via iMessage:
 
 ```yaml
-name: Expo Go Login Flow
-app: Expo Go
-description: Test the login screen of an Expo Go app with valid credentials
+name: Commute ETA Notification
+app: Waze, Messages
+description: Get commute ETA from Waze, then send it via iMessage.
 
 steps:
-  - launch: "Expo Go"
-  - wait_for: "${APP_SCREEN:-LoginDemo}"
-  - tap: "${APP_SCREEN:-LoginDemo}"
-  - wait_for: "Email"
-  - tap: "Email"
-  - type: "${TEST_EMAIL}"
-  - tap: "Password"
-  - type: "${TEST_PASSWORD}"
-  - tap: "Sign In"
-  - assert_visible: "Welcome"
-  - screenshot: "login_success"
+  - launch: "Waze"
+  - wait_for: "Où va-t-on ?"
+  - tap: "Où va-t-on ?"
+  - wait_for: "${DESTINATION:-Travail}"
+  - tap: "${DESTINATION:-Travail}"
+  - wait_for: "Y aller"
+  - tap: "Y aller"
+  - wait_for: "min"
+  - remember: "Read the commute time and ETA from the navigation screen."
+  - press_home: true
+  - launch: "Messages"
+  - wait_for: "Messages"
+  - tap: "New Message"
+  - wait_for: "À :"
+  - tap: "À :"
+  - type: "${RECIPIENT}"
+  - wait_for: "${RECIPIENT}"
+  - tap: "${RECIPIENT}"
+  - wait_for: "iMessage"
+  - tap: "iMessage"
+  - type: "${MESSAGE_PREFIX:-On my way!} {commute_time} to the office (ETA {eta})"
+  - press_key: "return"
+  - wait_for: "Distribué"
+  - screenshot: "message_sent"
 ```
 
-`${VAR}` placeholders are resolved from environment variables. Use `${VAR:-default}` for fallback values. See [Tools Reference](docs/tools.md#scenarios) for the full step type reference and directory layout. Community scenarios are organized by category in the [`scenarios/`](scenarios/) directory.
+`${VAR}` placeholders are resolved from environment variables. Use `${VAR:-default}` for fallback values. Place scenarios in `~/.iphone-mirroir-mcp/scenarios/` (global) or `<cwd>/.iphone-mirroir-mcp/scenarios/` (project-local). Both directories are scanned recursively.
+
+### Scenario Marketplace
+
+Ready-to-use scenarios for Calendar, Clock, Settings, Slack, Weather, Expo Go, and cross-app workflows. Install from [jfarcand/iphone-mirroir-scenarios](https://github.com/jfarcand/iphone-mirroir-scenarios):
+
+#### Claude Code / GitHub Copilot
+
+```bash
+/plugin marketplace add jfarcand/iphone-mirroir-scenarios
+```
+
+#### Manual (all clients)
+
+```bash
+git clone https://github.com/jfarcand/iphone-mirroir-scenarios ~/.iphone-mirroir-mcp/scenarios
+```
+
+Once installed, scenarios are available through the `list_scenarios` and `get_scenario` tools. Claude Code and Copilot load the [SKILL.md](https://github.com/jfarcand/iphone-mirroir-scenarios/blob/main/SKILL.md) automatically, which teaches the AI how to interpret and execute each step type. For other clients, ask the AI to call `list_scenarios` and then execute the steps.
+
+See [Tools Reference](docs/tools.md#scenarios) for the full step type reference and directory layout.
 
 ## Security Warning
 
@@ -180,6 +215,7 @@ The MCP server only works while iPhone Mirroring is active. Closing the window o
 
 ## Known Limitations
 
+- **Focus stealing** — Every input tool activates iPhone Mirroring, stealing keyboard focus from your terminal. Put iPhone Mirroring in its own macOS Space to preserve your cursor position. See [limitations](docs/limitations.md#focus-stealing).
 - **No clipboard paste** — iPhone Mirroring does not bridge the Mac clipboard when paste is triggered programmatically. All text must be typed character-by-character.
 - **ISO keyboard section key** — On ISO keyboards (e.g., Canadian-CSA), characters tied to the section key (`§`, `±`) cannot be typed because macOS and iOS swap keycodes differently. These characters are silently skipped.
 - **iOS autocorrect** — iOS applies autocorrect to typed text. Disable it in iPhone Settings > General > Keyboard, or type words followed by spaces to confirm them.
@@ -220,6 +256,7 @@ brew uninstall iphone-mirroir-mcp
 | [Tools Reference](docs/tools.md) | All 21 tools, parameters, and input workflows |
 | [Permissions](docs/permissions.md) | Fail-closed permission model and config file |
 | [Architecture](docs/architecture.md) | System diagram and how input reaches the iPhone |
+| [Known Limitations](docs/limitations.md) | Focus stealing, keyboard layout gaps, autocorrect |
 | [Troubleshooting](docs/troubleshooting.md) | Debug mode and common issues |
 
 ---
