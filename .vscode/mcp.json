@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "iphone-mirroring": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "iphone-mirroir-mcp"
+      ]
+    }
+  }
+}
