@@ -1,0 +1,9 @@
+name: Check Today's Schedule
+app: Calendar
+description: Open Calendar and view today's events
+
+steps:
+  - launch: "Calendar"
+  - wait_for: "Calendar"
+  - tap: "Today"
+  - screenshot: "todays_schedule"

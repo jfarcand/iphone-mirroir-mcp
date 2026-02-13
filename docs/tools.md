@@ -60,7 +60,7 @@ Steps like `tap: "Email"` don't specify coordinates — the AI calls `describe_s
 <cwd>/.iphone-mirroir-mcp/scenarios/      # project-local (overrides global)
 ```
 
-Project-local scenarios with the same filename override global ones.
+Both directories are scanned recursively, so you can organize scenarios into subdirectories (e.g. `apps/slack/send-message.yaml`). Project-local scenarios with the same relative path override global ones.
 
 ### YAML Format
 
@@ -81,7 +81,12 @@ steps:
 
 ### Variable Substitution
 
-`${VAR}` placeholders are resolved from environment variables when `get_scenario` reads the file. Unresolved variables are left as-is so the AI can flag them.
+`${VAR}` placeholders are resolved from environment variables when `get_scenario` reads the file. Use `${VAR:-default}` to provide a fallback value when the variable is unset. Unresolved variables without defaults are left as-is so the AI can flag them.
+
+```yaml
+- type: "${RECIPIENT:-Phil Tremblay}"   # uses env var, falls back to "Phil Tremblay"
+- type: "${API_KEY}"                     # left as-is if unset (AI will flag it)
+```
 
 ### Step Types
 

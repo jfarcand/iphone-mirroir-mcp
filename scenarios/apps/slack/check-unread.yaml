@@ -1,0 +1,10 @@
+name: Check Unread Slack Messages
+app: Slack
+description: Open Slack and check unread messages across channels
+
+steps:
+  - launch: "Slack"
+  - wait_for: "Home"
+  - tap: "Activity"
+  - wait_for: "Activity"
+  - screenshot: "unread_activity"

@@ -720,7 +720,7 @@ extension IPhoneMirroirMCP {
                     "name": .object([
                         "type": .string("string"),
                         "description": .string(
-                            "Scenario name (filename without .yaml extension)"),
+                            "Scenario name or path (e.g. 'login-flow' or 'slack/send-message')"),
                     ])
                 ]),
                 "required": .array([.string("name")]),
@@ -769,30 +769,40 @@ extension IPhoneMirroirMCP {
         let source: String
     }
 
-    /// Scan scenario directories and return metadata for each .yaml file found.
-    /// Project-local files override global files with the same filename.
+    /// Recursively scan scenario directories and return metadata for each .yaml file found.
+    /// Project-local files override global files with the same relative path.
     private static func discoverScenarios() -> [ScenarioInfo] {
         let dirs = PermissionPolicy.scenarioDirs
-        var seenFiles = Set<String>()
+        var seenRelPaths = Set<String>()
         var results: [ScenarioInfo] = []
 
         for dir in dirs {
             let source = dir.hasPrefix(PermissionPolicy.globalConfigDir) ? "global" : "local"
-            guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir) else {
-                continue
-            }
+            for relPath in findYAMLFiles(in: dir) {
+                if seenRelPaths.contains(relPath) { continue }
+                seenRelPaths.insert(relPath)
 
-            for entry in entries.sorted() where entry.hasSuffix(".yaml") {
-                if seenFiles.contains(entry) { continue }
-                seenFiles.insert(entry)
-
-                let filePath = dir + "/" + entry
+                let filePath = dir + "/" + relPath
                 let info = extractScenarioHeader(from: filePath, source: source)
                 results.append(info)
             }
         }
 
         return results
+    }
+
+    /// Recursively find all .yaml files under a directory, returning relative paths sorted.
+    private static func findYAMLFiles(in baseDir: String) -> [String] {
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(atPath: baseDir) else { return [] }
+
+        var relPaths: [String] = []
+        while let entry = enumerator.nextObject() as? String {
+            if entry.hasSuffix(".yaml") {
+                relPaths.append(entry)
+            }
+        }
+        return relPaths.sorted()
     }
 
     /// Extract name and description from the first lines of a YAML scenario file.
@@ -832,14 +842,15 @@ extension IPhoneMirroirMCP {
         return value
     }
 
-    /// Replace ${VAR} placeholders with environment variable values.
-    /// Unresolved variables are left as-is so the AI can flag them.
+    /// Replace ${VAR} and ${VAR:-default} placeholders with environment variable values.
+    /// When a default is specified via `:-`, it is used if the env var is unset.
+    /// Unresolved variables without defaults are left as-is so the AI can flag them.
     private static func substituteEnvVars(in text: String) -> String {
         var result = text
         let env = ProcessInfo.processInfo.environment
 
-        // Match ${VAR_NAME} patterns
-        let pattern = "\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}"
+        // Match ${VAR_NAME} and ${VAR_NAME:-default_value} patterns
+        let pattern = "\\$\\{([A-Za-z_][A-Za-z0-9_]*)(?::-((?:[^}]|\\}(?!\\}))*?))?\\}"
         guard let regex = try? NSRegularExpression(pattern: pattern) else {
             return result
         }
@@ -854,9 +865,15 @@ extension IPhoneMirroirMCP {
                 continue
             }
             let varName = String(result[varRange])
+
             if let value = env[varName] {
                 result.replaceSubrange(fullRange, with: value)
+            } else if match.range(at: 2).location != NSNotFound,
+                      let defaultRange = Range(match.range(at: 2), in: result) {
+                let defaultValue = String(result[defaultRange])
+                result.replaceSubrange(fullRange, with: defaultValue)
             }
+            // No env var and no default — leave as-is for the AI to flag
         }
 
         return result

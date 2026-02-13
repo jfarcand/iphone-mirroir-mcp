@@ -1,6 +1,6 @@
-name: Settings Navigation
+name: Check About Screen
 app: Settings
-description: Navigate through Settings to General > About
+description: Navigate through Settings to General > About and verify device info
 
 steps:
   - launch: "Settings"
@@ -10,6 +10,3 @@ steps:
   - tap: "About"
   - assert_visible: "Model Name"
   - screenshot: "about_screen"
-  - press_key: "escape"
-  - press_key: "escape"
-  - assert_visible: "Settings"

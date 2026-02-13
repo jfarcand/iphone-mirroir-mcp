@@ -1,0 +1,11 @@
+name: Check Weather Forecast
+app: Weather
+description: Open Weather and check the forecast for the current location
+
+steps:
+  - launch: "Weather"
+  - wait_for: "Weather"
+  - screenshot: "current_weather"
+  - swipe: "up"
+  - wait_for: "10-Day Forecast"
+  - screenshot: "ten_day_forecast"

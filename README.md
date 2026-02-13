@@ -149,24 +149,25 @@ recording. I need a video of the scroll lag I'm seeing.
 
 ## Scenarios
 
-Scenarios are YAML files that describe multi-step test flows as intents, not scripts. Steps like `tap: "Email"` don't specify coordinates — the AI finds the element by fuzzy OCR matching and adapts to unexpected dialogs, screen layout changes, and timing. Place them in `~/.iphone-mirroir-mcp/scenarios/` (global) or `<cwd>/.iphone-mirroir-mcp/scenarios/` (project-local).
+Scenarios are YAML files that describe multi-step test flows as intents, not scripts. Steps like `tap: "Email"` don't specify coordinates — the AI finds the element by fuzzy OCR matching and adapts to unexpected dialogs, screen layout changes, and timing. Place them in `~/.iphone-mirroir-mcp/scenarios/` (global) or `<cwd>/.iphone-mirroir-mcp/scenarios/` (project-local). Both directories are scanned recursively.
 
 ```yaml
-name: Login Flow
-app: Expo Go
-description: Test the login screen with valid credentials
+name: Send Slack Message
+app: Slack
+description: Send a direct message to a contact in Slack
 
 steps:
-  - launch: "Expo Go"
-  - wait_for: "Email"
-  - tap: "Email"
-  - type: "${TEST_EMAIL}"
-  - tap: "Sign In"
-  - assert_visible: "Welcome"
-  - screenshot: "final_state"
+  - launch: "Slack"
+  - wait_for: "Home"
+  - tap: "Direct Messages"
+  - tap: "${RECIPIENT:-Phil Tremblay}"
+  - tap: "Message"
+  - type: "${MESSAGE:-Hey, just checking in!}"
+  - press_key: "return"
+  - screenshot: "message_sent"
 ```
 
-`${VAR}` placeholders are resolved from environment variables. See [Tools Reference](docs/tools.md#scenarios) for the full step type reference and directory layout. Example scenario files are in the [`scenarios/`](scenarios/) directory.
+`${VAR}` placeholders are resolved from environment variables. Use `${VAR:-default}` for fallback values. See [Tools Reference](docs/tools.md#scenarios) for the full step type reference and directory layout. Community scenarios are organized by category in the [`scenarios/`](scenarios/) directory.
 
 ## Security Warning
 

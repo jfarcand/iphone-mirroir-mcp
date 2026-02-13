@@ -1,0 +1,12 @@
+name: Set Timer
+app: Clock
+description: Start a countdown timer in the Clock app
+
+steps:
+  - launch: "Clock"
+  - wait_for: "Timer"
+  - tap: "Timer"
+  - wait_for: "Start"
+  - tap: "Start"
+  - assert_visible: "Pause"
+  - screenshot: "timer_running"

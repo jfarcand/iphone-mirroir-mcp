@@ -1,0 +1,12 @@
+name: Expo Go Debug Menu
+app: Expo Go
+description: Open the React Native debug menu via shake gesture in Expo Go
+
+steps:
+  - launch: "Expo Go"
+  - wait_for: "${APP_SCREEN:-Home}"
+  - tap: "${APP_SCREEN:-Home}"
+  - shake: true
+  - wait_for: "Reload"
+  - assert_visible: "Toggle Inspector"
+  - screenshot: "debug_menu"

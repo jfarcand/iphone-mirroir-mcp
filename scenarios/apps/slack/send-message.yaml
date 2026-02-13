@@ -1,0 +1,15 @@
+name: Send Slack Message
+app: Slack
+description: Send a direct message to a contact in Slack
+
+steps:
+  - launch: "Slack"
+  - wait_for: "Home"
+  - tap: "Direct Messages"
+  - wait_for: "${RECIPIENT:-Phil Tremblay}"
+  - tap: "${RECIPIENT:-Phil Tremblay}"
+  - wait_for: "Message"
+  - tap: "Message"
+  - type: "${MESSAGE:-Hey, just checking in!}"
+  - press_key: "return"
+  - screenshot: "message_sent"

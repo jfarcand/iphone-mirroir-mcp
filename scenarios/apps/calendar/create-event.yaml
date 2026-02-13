@@ -1,0 +1,16 @@
+name: Create Calendar Event
+app: Calendar
+description: Create a new event in the iOS Calendar app
+
+steps:
+  - launch: "Calendar"
+  - wait_for: "Calendar"
+  - tap: "+"
+  - wait_for: "Title"
+  - tap: "Title"
+  - type: "${EVENT_TITLE:-Team Standup}"
+  - tap: "Location or Video Call"
+  - type: "${EVENT_LOCATION:-Conference Room}"
+  - tap: "Add"
+  - assert_visible: "${EVENT_TITLE:-Team Standup}"
+  - screenshot: "event_created"

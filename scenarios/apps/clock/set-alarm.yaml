@@ -1,0 +1,14 @@
+name: Set Alarm
+app: Clock
+description: Create a new alarm in the Clock app
+
+steps:
+  - launch: "Clock"
+  - wait_for: "Alarm"
+  - tap: "Alarm"
+  - tap: "+"
+  - wait_for: "Save"
+  - tap: "Label"
+  - type: "${ALARM_LABEL:-Wake Up}"
+  - tap: "Save"
+  - screenshot: "alarm_created"

@@ -1,0 +1,16 @@
+name: Add City to Weather
+app: Weather
+description: Search for and add a city to the Weather app
+
+steps:
+  - launch: "Weather"
+  - wait_for: "Weather"
+  - tap: "list"
+  - wait_for: "Search"
+  - tap: "Search"
+  - type: "${CITY:-Montreal}"
+  - wait_for: "${CITY:-Montreal}"
+  - tap: "${CITY:-Montreal}"
+  - wait_for: "Add"
+  - tap: "Add"
+  - screenshot: "city_added"
