@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Environment variable overrides for timing and numeric constants.
 // ABOUTME: Reads IPHONE_MIRROIR_<NAME> env vars at access time, falling back to TimingConstants defaults.
 

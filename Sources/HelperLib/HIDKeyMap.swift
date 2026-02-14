@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Maps Unicode characters to USB HID keyboard usage codes (US QWERTY layout).
 // ABOUTME: Reference: USB HID Usage Tables, section 10 (Keyboard/Keypad Page 0x07).
 

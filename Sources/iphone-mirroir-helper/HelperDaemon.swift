@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Entry point for the privileged Karabiner helper daemon.
 // ABOUTME: Initializes the Karabiner virtual HID client and starts the Unix socket command server.
 

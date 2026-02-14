@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for the shared Process.waitWithTimeout extension.
 // ABOUTME: Validates timeout behavior with both fast-exiting and slow processes.
 

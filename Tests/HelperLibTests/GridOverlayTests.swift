@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for GridOverlay coordinate grid rendering on screenshot PNG data.
 // ABOUTME: Validates output dimensions, grid line pixel presence, and invalid input handling.
 

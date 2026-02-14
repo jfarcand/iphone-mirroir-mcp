@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Registers input-related MCP tools: tap, swipe, drag, type_text, press_key, long_press, double_tap, shake.
 // ABOUTME: Each tool maps MCP JSON-RPC calls to the InputSimulation subsystem via Karabiner HID.
 

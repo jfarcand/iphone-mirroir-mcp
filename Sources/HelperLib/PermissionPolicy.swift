@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Fail-closed permission engine for MCP tool access control.
 // ABOUTME: Gates mutating tools behind explicit opt-in via CLI flags or JSON config file.
 

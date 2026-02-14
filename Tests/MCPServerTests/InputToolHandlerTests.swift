@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for input tool MCP handlers: tap, swipe, drag, type_text, press_key, long_press, double_tap, shake.
 // ABOUTME: Verifies parameter validation, error propagation, and success message formatting.
 

@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Packed C struct definitions for the Karabiner DriverKit virtual HID wire protocol.
 // ABOUTME: Shared between the helper daemon (sends reports) and test targets (validates layout).
 

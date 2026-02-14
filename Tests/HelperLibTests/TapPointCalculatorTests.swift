@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for TapPointCalculator smart tap-point offset algorithm.
 // ABOUTME: Validates short label upward offset, gap detection, clamping, and edge cases.
 

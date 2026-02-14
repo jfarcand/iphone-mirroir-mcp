@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Stub implementations of protocol abstractions for MCP server unit tests.
 // ABOUTME: Each stub returns configurable values, enabling tests without real macOS system APIs.
 

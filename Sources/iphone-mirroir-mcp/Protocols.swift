@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Protocol abstractions for system boundaries (mirroring bridge, input, capture, recording, OCR).
 // ABOUTME: Enables dependency injection for testing without requiring real macOS system APIs.
 

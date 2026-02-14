@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for press_key command: special key lookup, single character mapping, unknown keys.
 // ABOUTME: Verifies HIDSpecialKeyMap and HIDKeyMap integration in the handlePressKey handler.
 

@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Named constants for all timing delays and non-timing magic numbers used across the project.
 // ABOUTME: Provides default values that can be overridden via environment variables through EnvConfig.
 

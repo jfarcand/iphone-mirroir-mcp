@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for packed HID report structs that are sent over the Karabiner wire protocol.
 // ABOUTME: Validates byte sizes, field positions, and endianness match the Karabiner C++ definitions.
 

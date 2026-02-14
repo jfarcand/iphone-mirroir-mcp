@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for AppleScript key mapping, script generation, and text escaping.
 // ABOUTME: Validates key codes, modifier handling, and safe string escaping for AppleScript.
 

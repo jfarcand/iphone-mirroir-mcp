@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for MCPServer JSON-RPC routing: initialize, tools/list, tools/call, ping, errors.
 // ABOUTME: Verifies protocol version, capability negotiation, and error code compliance.
 

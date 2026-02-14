@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Maps special key names to USB HID keycodes for the Karabiner virtual keyboard.
 // ABOUTME: Used by the helper daemon to send special keys (Return, Escape, arrows) via HID reports.
 

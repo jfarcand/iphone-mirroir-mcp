@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for the HID key mapping table covering all US QWERTY characters.
 // ABOUTME: Validates keycodes and modifier flags against USB HID Usage Tables section 10.
 

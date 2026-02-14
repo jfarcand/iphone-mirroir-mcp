@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for info tool MCP handlers: get_orientation, status.
 // ABOUTME: Verifies orientation reporting and comprehensive status string formatting.
 

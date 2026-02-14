@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Registers scenario-related MCP tools: list_scenarios, get_scenario.
 // ABOUTME: Handles YAML scenario discovery, header parsing, and environment variable substitution.
 

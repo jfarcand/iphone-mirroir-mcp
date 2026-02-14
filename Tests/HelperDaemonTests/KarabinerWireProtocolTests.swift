@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for Karabiner wire protocol message construction: framing bytes, headers, payloads.
 // ABOUTME: Verifies buildRequestMessage and buildHeartbeatMessage produce correct byte sequences.
 

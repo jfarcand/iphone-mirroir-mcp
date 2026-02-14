@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Computes smart tap coordinates from raw OCR bounding box data.
 // ABOUTME: Offsets short labels upward toward their associated icon/button.
 

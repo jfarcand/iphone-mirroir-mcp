@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for command parameter validation in the helper daemon handlers.
 // ABOUTME: Verifies missing-param errors, device-not-ready checks, and default/minimum value clamping.
 

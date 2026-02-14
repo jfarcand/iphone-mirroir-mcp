@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Cursor synchronization helpers for Karabiner HID operations.
 // ABOUTME: Eliminates repeated save/warp/nudge/restore boilerplate across command handlers.
 

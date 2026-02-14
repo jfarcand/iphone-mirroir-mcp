@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Stub Karabiner client for helper daemon unit tests.
 // ABOUTME: Records calls and returns configurable values without real Karabiner hardware.
 

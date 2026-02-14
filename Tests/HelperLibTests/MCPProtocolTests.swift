@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for MCP protocol types including JSON-RPC parsing, JSONValue accessors, and tool result encoding.
 // ABOUTME: Validates roundtrip encoding/decoding and correct behavior of convenience methods.
 

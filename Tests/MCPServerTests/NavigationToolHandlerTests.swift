@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for navigation tool MCP handlers: launch_app, open_url, press_home, press_app_switcher, spotlight.
 // ABOUTME: Verifies parameter validation, permission policy enforcement, and success/failure paths.
 

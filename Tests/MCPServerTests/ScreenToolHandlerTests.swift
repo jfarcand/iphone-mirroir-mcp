@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for screen tool MCP handlers: screenshot, describe_screen, start/stop recording.
 // ABOUTME: Verifies app-not-running checks, capture failure paths, and success responses.
 

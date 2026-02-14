@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for the PermissionPolicy permission engine.
 // ABOUTME: Covers tool classification, fail-closed defaults, allow/deny lists, CLI parsing, and config decoding.
 

@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for the type command handler: empty text, keyboard readiness, character mapping.
 // ABOUTME: Verifies typed keystrokes, skipped characters, and warning messages.
 

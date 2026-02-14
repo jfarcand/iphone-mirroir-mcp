@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Karabiner DriverKit virtual HID device client implementing the wire protocol.
 // ABOUTME: Communicates with vhidd_server via Unix datagram sockets to send keyboard/pointing reports.
 

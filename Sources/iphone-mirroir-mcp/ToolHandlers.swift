@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Orchestrates MCP tool registration by delegating to category-specific files.
 // ABOUTME: Each tool category (screen, input, navigation, scenario, info) lives in its own file.
 

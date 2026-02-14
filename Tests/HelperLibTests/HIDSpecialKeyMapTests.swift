@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for HID special key mapping used by the Karabiner virtual keyboard.
 // ABOUTME: Validates USB HID keycodes, modifier conversion, and parity with AppleScriptKeyMap.
 

@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Shared Process utility extensions used across the MCP server.
 // ABOUTME: Provides a timeout-aware wait that prevents indefinite hangs from screencapture.
 

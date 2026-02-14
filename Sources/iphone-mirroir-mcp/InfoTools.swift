@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Registers info-related MCP tools: get_orientation, status.
 // ABOUTME: Each tool maps MCP JSON-RPC calls to the bridge for querying mirroring state.
 

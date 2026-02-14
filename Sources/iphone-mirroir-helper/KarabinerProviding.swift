@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Protocol abstraction for the Karabiner virtual HID client.
 // ABOUTME: Enables dependency injection for testing command handlers without real Karabiner hardware.
 

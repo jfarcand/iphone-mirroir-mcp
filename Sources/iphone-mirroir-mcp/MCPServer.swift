@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: MCP (Model Context Protocol) server implementing JSON-RPC 2.0 over stdio.
 // ABOUTME: Handles initialize, tools/list, and tools/call methods per the MCP specification.
 

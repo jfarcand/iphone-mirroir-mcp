@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Registers navigation-related MCP tools: launch_app, open_url, press_home, press_app_switcher, spotlight.
 // ABOUTME: Each tool maps MCP JSON-RPC calls to the bridge and input subsystems for app navigation.
 

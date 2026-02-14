@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Draws a coordinate grid overlay on screenshot PNG data for AI coordinate reference.
 // ABOUTME: Grid lines appear every 50 points with labeled axes; operates in CG pixel space.
 

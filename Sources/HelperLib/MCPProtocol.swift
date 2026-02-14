@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: MCP (Model Context Protocol) JSON-RPC 2.0 types for request/response parsing and encoding.
 // ABOUTME: Provides JSONValue, tool definitions, and result types shared across MCP server components.
 

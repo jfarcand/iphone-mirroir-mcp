@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Maps key names to macOS virtual key codes and generates AppleScript for key presses.
 // ABOUTME: Used by the MCP server to send special keys (Return, Escape, arrows) to iPhone Mirroring.
 

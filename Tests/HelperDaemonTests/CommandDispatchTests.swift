@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for CommandServer.processCommand dispatch: JSON parsing, action routing, error paths.
 // ABOUTME: Verifies that invalid input returns correct error responses and valid actions dispatch properly.
 

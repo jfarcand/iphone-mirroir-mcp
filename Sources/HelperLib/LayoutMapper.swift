@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Translates characters between keyboard layouts using macOS UCKeyTranslate.
 // ABOUTME: Builds substitution tables so US QWERTY HID keycodes produce correct characters on non-US layouts.
 

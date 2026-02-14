@@ -1,3 +1,6 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Tests for InputSimulation pure-logic methods: validateBounds and buildTypeSegments.
 // ABOUTME: These methods are testable without system APIs since they only process coordinates and strings.
 
