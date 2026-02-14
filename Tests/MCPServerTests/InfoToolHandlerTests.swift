@@ -29,7 +29,7 @@ final class InfoToolHandlerTests: XCTestCase {
                 "arguments": .object(args),
             ])
         )
-        return server.handleRequest(request)
+        return server.handleRequest(request)!
     }
 
     private func extractText(_ response: JSONRPCResponse) -> String? {

@@ -42,18 +42,25 @@ final class MCPServer: Sendable {
                 continue
             }
 
-            let response = handleRequest(request)
+            guard let response = handleRequest(request) else {
+                continue  // Notifications produce no response per JSON-RPC 2.0
+            }
             writeResponse(response)
         }
     }
 
-    func handleRequest(_ request: JSONRPCRequest) -> JSONRPCResponse {
+    /// Supported MCP protocol versions, most recent first.
+    static let supportedProtocolVersions = ["2025-11-25", "2024-11-05"]
+
+    func handleRequest(_ request: JSONRPCRequest) -> JSONRPCResponse? {
+        // Notifications have no id — the spec says receivers MUST NOT respond
+        if request.id == nil {
+            return nil
+        }
+
         switch request.method {
         case "initialize":
             return handleInitialize(request)
-        case "notifications/initialized":
-            // Client acknowledgment — no response needed for notifications
-            return JSONRPCResponse(id: request.id, result: .null, error: nil)
         case "tools/list":
             return handleToolsList(request)
         case "tools/call":
@@ -70,8 +77,18 @@ final class MCPServer: Sendable {
     }
 
     private func handleInitialize(_ request: JSONRPCRequest) -> JSONRPCResponse {
+        // Negotiate protocol version: use the client's version if we support it,
+        // otherwise fall back to our most recent supported version.
+        let clientVersion = request.params?.getString("protocolVersion")
+        let negotiatedVersion: String
+        if let clientVersion, Self.supportedProtocolVersions.contains(clientVersion) {
+            negotiatedVersion = clientVersion
+        } else {
+            negotiatedVersion = Self.supportedProtocolVersions[0]
+        }
+
         let result: JSONValue = .object([
-            "protocolVersion": .string("2024-11-05"),
+            "protocolVersion": .string(negotiatedVersion),
             "capabilities": .object([
                 "tools": .object([:]),
             ]),

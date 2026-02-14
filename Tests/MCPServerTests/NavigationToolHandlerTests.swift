@@ -31,7 +31,7 @@ final class NavigationToolHandlerTests: XCTestCase {
                 "arguments": .object(args),
             ])
         )
-        return server.handleRequest(request)
+        return server.handleRequest(request)!
     }
 
     private func extractText(_ response: JSONRPCResponse) -> String? {
@@ -73,7 +73,7 @@ final class NavigationToolHandlerTests: XCTestCase {
                 "arguments": .object(["name": .string("Settings")]),
             ])
         )
-        let response = policyServer.handleRequest(request)
+        let response = policyServer.handleRequest(request)!
         XCTAssertTrue(isError(response))
         let text = extractText(response)
         XCTAssertTrue(text?.contains("blocked") ?? false)

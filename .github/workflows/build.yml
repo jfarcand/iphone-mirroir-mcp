@@ -36,7 +36,8 @@ jobs:
           import sys, json
           obj = json.loads(sys.stdin.readline())
           assert obj['result']['serverInfo']['name'] == 'iphone-mirroir-mcp'
-          print('MCP initialize: OK')
+          assert obj['result']['protocolVersion'] == '2025-11-25', f'Expected protocol version 2025-11-25, got: {obj[\"result\"][\"protocolVersion\"]}'
+          print('MCP initialize: OK (protocol version 2025-11-25)')
           "
 
       - name: Test tools/list

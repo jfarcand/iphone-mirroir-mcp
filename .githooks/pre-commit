@@ -1,6 +1,6 @@
 #!/bin/bash
 # ABOUTME: Pre-commit hook for Swift code quality enforcement
-# ABOUTME: Checks ABOUTME headers, suspicious files, and swift build
+# ABOUTME: Checks ABOUTME headers, suspicious files, swift build, and MCP compliance
 
 set -e
 
@@ -64,6 +64,72 @@ check_swift_build() {
     return 0
 }
 
+# Run MCP compliance validation when MCP-related files are changed
+check_mcp_compliance() {
+    local mcp_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '(MCPServer|Tool|protocol|MCP)' || true)
+
+    if [ -n "$mcp_files" ]; then
+        echo "MCP-related files changed - running MCP compliance validation..."
+
+        # Build release binary for MCP validation
+        if ! swift build -c release 2>&1; then
+            echo ""
+            echo "ERROR: Commit blocked - release build failed (needed for MCP validation)"
+            return 1
+        fi
+
+        local BINARY=".build/release/iphone-mirroir-mcp"
+        if [ ! -x "$BINARY" ]; then
+            echo "WARNING: Release binary not found, skipping MCP compliance check"
+            return 0
+        fi
+
+        # Quick MCP protocol version check
+        local INIT_RESULT
+        INIT_RESULT=$(echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+            | $BINARY 2>/dev/null | head -1)
+
+        if ! echo "$INIT_RESULT" | python3 -c "
+import sys, json
+obj = json.loads(sys.stdin.readline())
+assert obj['result']['protocolVersion'] == '2025-11-25', \
+    f'Protocol version must be 2025-11-25, got: {obj[\"result\"][\"protocolVersion\"]}'
+assert obj['result']['serverInfo']['name'] == 'iphone-mirroir-mcp'
+assert obj.get('jsonrpc') == '2.0'
+print('OK')
+" 2>&1 | grep -q "OK"; then
+            echo ""
+            echo "ERROR: Commit blocked - MCP protocol compliance failed!"
+            echo "The server must report protocolVersion 2025-11-25 (latest MCP spec)."
+            return 1
+        fi
+
+        # Quick tools/list validation
+        local TOOLS_RESULT
+        TOOLS_RESULT=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' \
+            | $BINARY --dangerously-skip-permissions 2>/dev/null | tail -1)
+
+        if ! echo "$TOOLS_RESULT" | python3 -c "
+import sys, json
+obj = json.loads(sys.stdin.readline())
+tools = obj['result']['tools']
+for t in tools:
+    assert 'name' in t, 'Tool missing name'
+    assert 'description' in t, f'{t[\"name\"]}: missing description'
+    assert 'inputSchema' in t, f'{t[\"name\"]}: missing inputSchema'
+print('OK')
+" 2>&1 | grep -q "OK"; then
+            echo ""
+            echo "ERROR: Commit blocked - Tool schema validation failed!"
+            echo "All tools must have name, description, and inputSchema fields."
+            return 1
+        fi
+
+        echo "MCP compliance check passed"
+    fi
+    return 0
+}
+
 # Main execution
 main() {
     local checks_passed=true
@@ -77,6 +143,10 @@ main() {
     fi
 
     if ! check_swift_build; then
+        checks_passed=false
+    fi
+
+    if ! check_mcp_compliance; then
         checks_passed=false
     fi
 

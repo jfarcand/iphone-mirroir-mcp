@@ -1,0 +1,69 @@
+name: MCP Compliance
+
+on:
+  push:
+    branches: [ "main", "feature/*", "claude/*" ]
+    paths:
+      - 'Sources/iphone-mirroir-mcp/**'
+      - 'Sources/HelperLib/**'
+      - 'Tests/MCPServerTests/**'
+      - 'Tests/HelperLibTests/MCPProtocolTests.swift'
+      - 'scripts/ci/ensure-mcp-compliance.sh'
+      - '.github/workflows/mcp-compliance.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'Sources/iphone-mirroir-mcp/**'
+      - 'Sources/HelperLib/**'
+      - 'Tests/MCPServerTests/**'
+      - 'Tests/HelperLibTests/MCPProtocolTests.swift'
+      - 'scripts/ci/ensure-mcp-compliance.sh'
+      - '.github/workflows/mcp-compliance.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-compliance:
+    name: MCP Protocol Compliance
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Verify binary exists
+        run: |
+          test -x .build/release/iphone-mirroir-mcp || { echo "Binary not found"; exit 1; }
+          file .build/release/iphone-mirroir-mcp
+
+      - name: Validate MCP protocol version is latest
+        run: |
+          echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+            | .build/release/iphone-mirroir-mcp 2>/dev/null \
+            | python3 -c "
+          import sys, json
+          obj = json.loads(sys.stdin.readline())
+          version = obj['result']['protocolVersion']
+          assert version == '2025-11-25', f'Protocol version must be 2025-11-25 (latest), got: {version}'
+          print(f'MCP protocol version: {version} (latest)')
+          "
+
+      - name: Run MCP compliance validation
+        run: ./scripts/ci/ensure-mcp-compliance.sh
+
+      - name: Run unit tests
+        run: swift test

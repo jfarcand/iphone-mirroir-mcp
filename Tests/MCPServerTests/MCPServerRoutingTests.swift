@@ -20,14 +20,18 @@ final class MCPServerRoutingTests: XCTestCase {
 
     func testInitializeReturnsProtocolVersionAndServerInfo() {
         let server = makeServer()
-        let response = server.handleRequest(makeRequest(method: "initialize"))
+        let response = server.handleRequest(makeRequest(
+            method: "initialize",
+            params: .object(["protocolVersion": .string("2025-11-25")])
+        ))
 
+        guard let response else { return XCTFail("Expected response") }
         XCTAssertNil(response.error)
         guard case .object(let result) = response.result else {
             return XCTFail("Expected object result")
         }
 
-        XCTAssertEqual(result["protocolVersion"], .string("2024-11-05"))
+        XCTAssertEqual(result["protocolVersion"], .string("2025-11-25"))
 
         guard case .object(let serverInfo) = result["serverInfo"] else {
             return XCTFail("Expected serverInfo object")
@@ -44,12 +48,55 @@ final class MCPServerRoutingTests: XCTestCase {
         XCTAssertTrue(tools.isEmpty)
     }
 
+    func testInitializeNegotiatesClientVersion() {
+        let server = makeServer()
+        // Client requests 2024-11-05 — server supports it, should echo it back
+        let response = server.handleRequest(makeRequest(
+            method: "initialize",
+            params: .object(["protocolVersion": .string("2024-11-05")])
+        ))
+
+        guard let response else { return XCTFail("Expected response") }
+        guard case .object(let result) = response.result else {
+            return XCTFail("Expected object result")
+        }
+        XCTAssertEqual(result["protocolVersion"], .string("2024-11-05"))
+    }
+
+    func testInitializeFallsBackToLatestForUnknownVersion() {
+        let server = makeServer()
+        // Client requests an unsupported version — server returns its latest
+        let response = server.handleRequest(makeRequest(
+            method: "initialize",
+            params: .object(["protocolVersion": .string("9999-01-01")])
+        ))
+
+        guard let response else { return XCTFail("Expected response") }
+        guard case .object(let result) = response.result else {
+            return XCTFail("Expected object result")
+        }
+        XCTAssertEqual(result["protocolVersion"], .string("2025-11-25"))
+    }
+
+    func testInitializeWithNoParamsReturnsLatestVersion() {
+        let server = makeServer()
+        // No params at all — server returns its latest
+        let response = server.handleRequest(makeRequest(method: "initialize"))
+
+        guard let response else { return XCTFail("Expected response") }
+        guard case .object(let result) = response.result else {
+            return XCTFail("Expected object result")
+        }
+        XCTAssertEqual(result["protocolVersion"], .string("2025-11-25"))
+    }
+
     // MARK: - tools/list
 
     func testToolsListWithNoToolsRegistered() {
         let server = makeServer()
         let response = server.handleRequest(makeRequest(method: "tools/list"))
 
+        guard let response else { return XCTFail("Expected response") }
         XCTAssertNil(response.error)
         guard case .object(let result) = response.result,
               case .array(let tools) = result["tools"] else {
@@ -68,6 +115,7 @@ final class MCPServerRoutingTests: XCTestCase {
         ))
 
         let response = server.handleRequest(makeRequest(method: "tools/list"))
+        guard let response else { return XCTFail("Expected response") }
         guard case .object(let result) = response.result,
               case .array(let tools) = result["tools"] else {
             return XCTFail("Expected tools array")
@@ -100,6 +148,7 @@ final class MCPServerRoutingTests: XCTestCase {
         ))
 
         let response = server.handleRequest(makeRequest(method: "tools/list"))
+        guard let response else { return XCTFail("Expected response") }
         guard case .object(let result) = response.result,
               case .array(let tools) = result["tools"] else {
             return XCTFail("Expected tools array")
@@ -123,6 +172,7 @@ final class MCPServerRoutingTests: XCTestCase {
             params: .object([:])
         ))
 
+        guard let response else { return XCTFail("Expected response") }
         XCTAssertNotNil(response.error)
         XCTAssertEqual(response.error?.code, -32602)
         XCTAssertEqual(response.error?.message, "Missing tool name")
@@ -135,6 +185,7 @@ final class MCPServerRoutingTests: XCTestCase {
             params: .object(["name": .string("nonexistent")])
         ))
 
+        guard let response else { return XCTFail("Expected response") }
         XCTAssertNotNil(response.error)
         XCTAssertEqual(response.error?.code, -32602)
         XCTAssertTrue(response.error?.message.contains("Unknown tool") ?? false)
@@ -156,6 +207,7 @@ final class MCPServerRoutingTests: XCTestCase {
             params: .object(["name": .string("tap")])
         ))
 
+        guard let response else { return XCTFail("Expected response") }
         // Denied tools return a result with isError=true, not a JSON-RPC error
         XCTAssertNil(response.error)
         guard case .object(let result) = response.result else {
@@ -184,6 +236,7 @@ final class MCPServerRoutingTests: XCTestCase {
             ])
         ))
 
+        guard let response else { return XCTFail("Expected response") }
         XCTAssertNil(response.error)
         guard case .object(let result) = response.result,
               case .array(let content) = result["content"],
@@ -200,6 +253,7 @@ final class MCPServerRoutingTests: XCTestCase {
         let server = makeServer()
         let response = server.handleRequest(makeRequest(method: "ping"))
 
+        guard let response else { return XCTFail("Expected response") }
         XCTAssertNil(response.error)
         guard case .object(let result) = response.result else {
             return XCTFail("Expected empty object")
@@ -213,20 +267,31 @@ final class MCPServerRoutingTests: XCTestCase {
         let server = makeServer()
         let response = server.handleRequest(makeRequest(method: "bogus/method"))
 
+        guard let response else { return XCTFail("Expected response") }
         XCTAssertNotNil(response.error)
         XCTAssertEqual(response.error?.code, -32601)
         XCTAssertTrue(response.error?.message.contains("Method not found") ?? false)
     }
 
-    // MARK: - notifications/initialized
+    // MARK: - Notifications (no id → no response)
 
-    func testNotificationsInitializedReturnsNull() {
+    func testNotificationWithNoIdReturnsNil() {
         let server = makeServer()
-        let response = server.handleRequest(makeRequest(method: "notifications/initialized"))
+        // Notifications have no id — spec says MUST NOT respond
+        let response = server.handleRequest(makeRequest(
+            method: "notifications/initialized",
+            id: nil
+        ))
+        XCTAssertNil(response, "Notifications must not produce a response")
+    }
 
-        XCTAssertNil(response.error)
-        guard case .null = response.result else {
-            return XCTFail("Expected null result for notification acknowledgment")
-        }
+    func testAnyNotificationWithNoIdReturnsNil() {
+        let server = makeServer()
+        // Any method sent without an id is a notification
+        let response = server.handleRequest(makeRequest(
+            method: "notifications/cancelled",
+            id: nil
+        ))
+        XCTAssertNil(response, "All notifications (no id) must not produce a response")
     }
 }
