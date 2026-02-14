@@ -5,6 +5,9 @@
 # iphone-mirroir-mcp
 
 [![npm version](https://img.shields.io/npm/v/iphone-mirroir-mcp)](https://www.npmjs.com/package/iphone-mirroir-mcp)
+[![Build](https://github.com/jfarcand/iphone-mirroir-mcp/actions/workflows/build.yml/badge.svg)](https://github.com/jfarcand/iphone-mirroir-mcp/actions/workflows/build.yml)
+[![Install](https://github.com/jfarcand/iphone-mirroir-mcp/actions/workflows/install.yml/badge.svg)](https://github.com/jfarcand/iphone-mirroir-mcp/actions/workflows/install.yml)
+[![MCP Compliance](https://github.com/jfarcand/iphone-mirroir-mcp/actions/workflows/mcp-compliance.yml/badge.svg)](https://github.com/jfarcand/iphone-mirroir-mcp/actions/workflows/mcp-compliance.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)](https://support.apple.com/en-us/105071)
 
