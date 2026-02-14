@@ -8,6 +8,21 @@ import CoreGraphics
 import Foundation
 import HelperLib
 
+/// Extract a Double parameter from a JSON dictionary.
+private func doubleParam(_ json: [String: Any], _ key: String) -> Double? {
+    (json[key] as? NSNumber)?.doubleValue
+}
+
+/// Extract an Int parameter from a JSON dictionary.
+private func intParam(_ json: [String: Any], _ key: String) -> Int? {
+    (json[key] as? NSNumber)?.intValue
+}
+
+/// Extract an Int8 parameter from a JSON dictionary.
+private func int8Param(_ json: [String: Any], _ key: String) -> Int8? {
+    (json[key] as? NSNumber)?.int8Value
+}
+
 extension CommandServer {
 
     // MARK: - Command Dispatch
@@ -60,8 +75,8 @@ extension CommandServer {
     /// CGAssociateMouseAndMouseCursorPosition(false) prevents the user's physical mouse
     /// from interfering with the programmatic cursor placement during the operation.
     func handleClick(_ json: [String: Any]) -> Data {
-        guard let x = (json["x"] as? NSNumber)?.doubleValue,
-              let y = (json["y"] as? NSNumber)?.doubleValue
+        guard let x = doubleParam(json, "x"),
+              let y = doubleParam(json, "y")
         else {
             return makeErrorResponse("click requires x and y (numbers)")
         }
@@ -82,13 +97,13 @@ extension CommandServer {
     /// Default hold is 500ms (iOS standard long-press threshold).
     /// Minimum hold is 100ms to avoid confusion with a regular tap.
     func handleLongPress(_ json: [String: Any]) -> Data {
-        guard let x = (json["x"] as? NSNumber)?.doubleValue,
-              let y = (json["y"] as? NSNumber)?.doubleValue
+        guard let x = doubleParam(json, "x"),
+              let y = doubleParam(json, "y")
         else {
             return makeErrorResponse("long_press requires x and y (numbers)")
         }
 
-        let durationMs = max((json["duration_ms"] as? NSNumber)?.intValue ?? 500, 100)
+        let durationMs = max(intParam(json, "duration_ms") ?? 500, 100)
 
         guard karabiner.isPointingReady else {
             return makeErrorResponse("Karabiner pointing device not ready")
@@ -106,8 +121,8 @@ extension CommandServer {
     /// Timing: 40ms hold + 50ms gap + 40ms hold = 130ms total,
     /// well within iOS's ~300ms double-tap recognition window.
     func handleDoubleTap(_ json: [String: Any]) -> Data {
-        guard let x = (json["x"] as? NSNumber)?.doubleValue,
-              let y = (json["y"] as? NSNumber)?.doubleValue
+        guard let x = doubleParam(json, "x"),
+              let y = doubleParam(json, "y")
         else {
             return makeErrorResponse("double_tap requires x and y (numbers)")
         }
@@ -132,15 +147,15 @@ extension CommandServer {
     /// drag recognition (~150ms), then moves slowly with fine interpolation.
     /// Default duration is 1000ms. Minimum is 200ms to distinguish from swipe.
     func handleDrag(_ json: [String: Any]) -> Data {
-        guard let fromX = (json["from_x"] as? NSNumber)?.doubleValue,
-              let fromY = (json["from_y"] as? NSNumber)?.doubleValue,
-              let toX = (json["to_x"] as? NSNumber)?.doubleValue,
-              let toY = (json["to_y"] as? NSNumber)?.doubleValue
+        guard let fromX = doubleParam(json, "from_x"),
+              let fromY = doubleParam(json, "from_y"),
+              let toX = doubleParam(json, "to_x"),
+              let toY = doubleParam(json, "to_y")
         else {
             return makeErrorResponse("drag requires from_x, from_y, to_x, to_y (numbers)")
         }
 
-        let durationMs = max((json["duration_ms"] as? NSNumber)?.intValue ?? 1000, 200)
+        let durationMs = max(intParam(json, "duration_ms") ?? 1000, 200)
 
         guard karabiner.isPointingReady else {
             return makeErrorResponse("Karabiner pointing device not ready")
@@ -208,8 +223,8 @@ extension CommandServer {
         // the entire typing operation. Only restore cursor after all typing is done.
         var savedPosition: CGPoint = .zero
         let hasFocusClick: Bool
-        if let focusX = (json["focus_x"] as? NSNumber)?.doubleValue,
-           let focusY = (json["focus_y"] as? NSNumber)?.doubleValue,
+        if let focusX = doubleParam(json, "focus_x"),
+           let focusY = doubleParam(json, "focus_y"),
            karabiner.isPointingReady {
             hasFocusClick = true
             let target = CGPoint(x: focusX, y: focusY)
@@ -265,15 +280,15 @@ extension CommandServer {
     /// click-drag maps to touch-and-drag (icon rearranging). Scroll wheel is
     /// the correct input for page changes, list scrolling, and content swiping.
     func handleSwipe(_ json: [String: Any]) -> Data {
-        guard let fromX = (json["from_x"] as? NSNumber)?.doubleValue,
-              let fromY = (json["from_y"] as? NSNumber)?.doubleValue,
-              let toX = (json["to_x"] as? NSNumber)?.doubleValue,
-              let toY = (json["to_y"] as? NSNumber)?.doubleValue
+        guard let fromX = doubleParam(json, "from_x"),
+              let fromY = doubleParam(json, "from_y"),
+              let toX = doubleParam(json, "to_x"),
+              let toY = doubleParam(json, "to_y")
         else {
             return makeErrorResponse("swipe requires from_x, from_y, to_x, to_y (numbers)")
         }
 
-        let durationMs = (json["duration_ms"] as? NSNumber)?.intValue ?? 300
+        let durationMs = intParam(json, "duration_ms") ?? 300
 
         guard karabiner.isPointingReady else {
             return makeErrorResponse("Karabiner pointing device not ready")
@@ -326,8 +341,8 @@ extension CommandServer {
 
     /// Send relative mouse movement.
     func handleMove(_ json: [String: Any]) -> Data {
-        guard let dx = (json["dx"] as? NSNumber)?.int8Value,
-              let dy = (json["dy"] as? NSNumber)?.int8Value
+        guard let dx = int8Param(json, "dx"),
+              let dy = int8Param(json, "dy")
         else {
             return makeErrorResponse("move requires dx and dy (integers)")
         }

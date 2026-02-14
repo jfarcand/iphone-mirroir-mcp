@@ -47,7 +47,7 @@ final class MCPServer: Sendable {
         }
     }
 
-    private func handleRequest(_ request: JSONRPCRequest) -> JSONRPCResponse {
+    func handleRequest(_ request: JSONRPCRequest) -> JSONRPCResponse {
         switch request.method {
         case "initialize":
             return handleInitialize(request)

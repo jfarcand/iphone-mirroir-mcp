@@ -27,11 +27,14 @@ let helperSocketPath = "/var/run/iphone-mirroir-helper.sock"
 /// - move: Send relative mouse movement via Karabiner pointing
 /// - status: Report device readiness
 final class CommandServer {
-    let karabiner: KarabinerClient
+    let karabiner: any KarabinerProviding
+    // SAFETY: listenFd and running are accessed from the accept loop thread and stop().
+    // stop() is only called from the signal handler which immediately calls exit(0),
+    // so there is no concurrent access with the accept loop.
     private var listenFd: Int32 = -1
     private var running = false
 
-    init(karabiner: KarabinerClient) {
+    init(karabiner: any KarabinerProviding) {
         self.karabiner = karabiner
     }
 

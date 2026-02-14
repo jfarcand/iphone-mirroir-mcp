@@ -23,7 +23,7 @@ private let heartbeatDeadlineMs: UInt32 = 5000
 private let heartbeatIntervalSec: TimeInterval = 3.0
 
 /// Request types sent to the vhidd server (matches request.hpp).
-private enum KarabinerRequest: UInt8 {
+enum KarabinerRequest: UInt8 {
     case none = 0
     case virtualHidKeyboardInitialize = 1
     case virtualHidKeyboardTerminate = 2
@@ -40,7 +40,7 @@ private enum KarabinerRequest: UInt8 {
 }
 
 /// Response types received from the vhidd server (matches response.hpp).
-private enum KarabinerResponse: UInt8 {
+enum KarabinerResponse: UInt8 {
     case none = 0
     case driverActivated = 1
     case driverConnected = 2
@@ -62,6 +62,11 @@ private enum KarabinerResponse: UInt8 {
 /// local_datagram::client behavior). Responses arrive on the same client socket from
 /// a server-created response socket in the vhidd_response directory.
 final class KarabinerClient {
+    // SAFETY: isKeyboardReady, isPointingReady, isConnected are mutated from
+    // DispatchSource callbacks (heartbeat, monitor timers) and parseResponse.
+    // All timer callbacks fire on a serial queue, and waitForDevicesReady runs
+    // on the main thread before timers start. The daemon processes one command
+    // at a time (synchronous handleClient loop), so no concurrent mutation.
     private(set) var isKeyboardReady = false
     private(set) var isPointingReady = false
     private(set) var isConnected = false
@@ -288,19 +293,24 @@ final class KarabinerClient {
 
     // MARK: - Private: Heartbeat
 
-    /// Send a heartbeat datagram: [0x00 (type::heartbeat)] [deadline_ms (uint32 LE)].
+    /// Build a heartbeat datagram: [0x00 (type::heartbeat)] [deadline_ms (uint32 LE)].
     /// The deadline tells the server how long to wait before considering this client dead.
     /// Format matches local_datagram::send_entry with type::heartbeat.
-    private func sendHeartbeat() {
-        guard socketFd >= 0 else { return }
-
+    static func buildHeartbeatMessage(deadlineMs: UInt32) -> [UInt8] {
         var message = [UInt8](repeating: 0, count: 5)
         message[0] = heartbeatTypeByte
-        var deadline = heartbeatDeadlineMs.littleEndian
+        var deadline = deadlineMs.littleEndian
         withUnsafeBytes(of: &deadline) { src in
             for i in 0..<4 { message[1 + i] = src[i] }
         }
+        return message
+    }
 
+    /// Send a heartbeat datagram via the connected socket.
+    private func sendHeartbeat() {
+        guard socketFd >= 0 else { return }
+
+        let message = Self.buildHeartbeatMessage(deadlineMs: heartbeatDeadlineMs)
         let sent = message.withUnsafeBufferPointer { buf in
             Darwin.send(socketFd, buf.baseAddress, buf.count, 0)
         }
@@ -376,7 +386,7 @@ final class KarabinerClient {
     /// Parse a response from the Karabiner vhidd server.
     /// Wire format: [type(u8)] [response_type(u8)] [...payload]
     /// The type byte is the local_datagram framing prefix (0x00=heartbeat, 0x01=user_data).
-    private func parseResponse(buf: [UInt8], bytesRead: Int) throws {
+    func parseResponse(buf: [UInt8], bytesRead: Int) throws {
         guard bytesRead >= 1 else { return }
 
         let framingType = buf[0]
@@ -419,13 +429,9 @@ final class KarabinerClient {
 
     // MARK: - Private: Message Framing
 
-    /// Build and send a Karabiner protocol message via the connected socket.
+    /// Build a Karabiner protocol message (without sending).
     /// Wire format: [0x01] ['c'(0x63)] ['p'(0x70)] [version(LE u16)] [request(u8)] [...payload]
-    /// Uses send() on the connected socket (not sendto()), matching C++ local_datagram::client.
-    @discardableResult
-    private func sendRequest(_ request: KarabinerRequest, payload: [UInt8] = []) -> Bool {
-        guard socketFd >= 0 else { return false }
-
+    static func buildRequestMessage(_ request: KarabinerRequest, payload: [UInt8] = []) -> [UInt8] {
         var message = [UInt8]()
         message.reserveCapacity(6 + payload.count)
 
@@ -440,6 +446,17 @@ final class KarabinerClient {
 
         // Payload
         message.append(contentsOf: payload)
+
+        return message
+    }
+
+    /// Build and send a Karabiner protocol message via the connected socket.
+    /// Uses send() on the connected socket (not sendto()), matching C++ local_datagram::client.
+    @discardableResult
+    private func sendRequest(_ request: KarabinerRequest, payload: [UInt8] = []) -> Bool {
+        guard socketFd >= 0 else { return false }
+
+        let message = Self.buildRequestMessage(request, payload: payload)
 
         let sent = message.withUnsafeBufferPointer { buf in
             Darwin.send(socketFd, buf.baseAddress, buf.count, 0)

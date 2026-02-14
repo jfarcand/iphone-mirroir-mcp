@@ -7,6 +7,10 @@ import HelperLib
 
 /// Encapsulates the cursor save → disconnect → warp → nudge → action → restore → reconnect
 /// sequence shared by all pointing-based command handlers.
+///
+/// SAFETY: Static methods mutate global cursor state (CGWarp, CGAssociate).
+/// The daemon processes one command at a time (synchronous handleClient loop),
+/// so no concurrent cursor operations occur.
 enum CursorSync {
 
     /// Execute `body` with the system cursor warped to `target` and Karabiner's
@@ -23,7 +27,7 @@ enum CursorSync {
     /// 7. Reconnect physical mouse
     static func withCursorSynced(
         at target: CGPoint,
-        karabiner: KarabinerClient,
+        karabiner: any KarabinerProviding,
         body: () -> Void
     ) {
         let savedPosition: CGPoint
@@ -48,7 +52,7 @@ enum CursorSync {
 
     /// Send a small Karabiner nudge (right then back) to synchronize the virtual
     /// pointing device with the warped system cursor position.
-    static func nudgeSync(karabiner: KarabinerClient) {
+    static func nudgeSync(karabiner: any KarabinerProviding) {
         var nudgeRight = PointingInput()
         nudgeRight.x = 1
         karabiner.postPointingReport(nudgeRight)
@@ -62,7 +66,7 @@ enum CursorSync {
 
     /// Perform a button down + hold + up sequence via Karabiner pointing reports.
     static func clickButton(
-        karabiner: KarabinerClient,
+        karabiner: any KarabinerProviding,
         holdDuration: UInt32
     ) {
         var down = PointingInput()

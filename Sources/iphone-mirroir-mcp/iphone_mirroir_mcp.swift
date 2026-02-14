@@ -70,26 +70,3 @@ struct IPhoneMirroirMCP {
     }
 }
 
-// MARK: - JSONValue convenience extensions
-
-extension JSONValue {
-    func asString() -> String? {
-        if case .string(let s) = self { return s }
-        return nil
-    }
-
-    func asNumber() -> Double? {
-        if case .number(let n) = self { return n }
-        return nil
-    }
-
-    func asInt() -> Int? {
-        if case .number(let n) = self { return Int(n) }
-        return nil
-    }
-
-    func asStringArray() -> [String]? {
-        guard case .array(let items) = self else { return nil }
-        return items.compactMap { $0.asString() }
-    }
-}

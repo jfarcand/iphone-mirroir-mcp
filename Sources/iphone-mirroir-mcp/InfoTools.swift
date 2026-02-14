@@ -7,8 +7,8 @@ import HelperLib
 extension IPhoneMirroirMCP {
     static func registerInfoTools(
         server: MCPServer,
-        bridge: MirroringBridge,
-        input: InputSimulation
+        bridge: any MirroringBridging,
+        input: any InputProviding
     ) {
         // get_orientation — report device orientation
         server.registerTool(MCPToolDefinition(
@@ -72,16 +72,16 @@ extension IPhoneMirroirMCP {
                 }
 
                 // Check Karabiner helper status
-                let helperStatus: String
-                if let status = input.helperClient.status() {
+                let helperStatusMsg: String
+                if let status = input.helperStatus() {
                     let kb = status["keyboard_ready"] as? Bool ?? false
                     let pt = status["pointing_ready"] as? Bool ?? false
-                    helperStatus = "Helper: connected (keyboard=\(kb), pointing=\(pt))"
+                    helperStatusMsg = "Helper: connected (keyboard=\(kb), pointing=\(pt))"
                 } else {
-                    helperStatus = "Helper: not running (tap/type/swipe unavailable)"
+                    helperStatusMsg = "Helper: not running (tap/type/swipe unavailable)"
                 }
 
-                return .text("\(mirroringStatus)\n\(helperStatus)")
+                return .text("\(mirroringStatus)\n\(helperStatusMsg)")
             }
         ))
     }

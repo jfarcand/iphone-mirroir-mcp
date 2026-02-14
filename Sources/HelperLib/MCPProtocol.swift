@@ -10,6 +10,13 @@ public struct JSONRPCRequest: Decodable, Sendable {
     public let id: RequestID?
     public let method: String
     public let params: JSONValue?
+
+    public init(jsonrpc: String = "2.0", id: RequestID?, method: String, params: JSONValue?) {
+        self.jsonrpc = jsonrpc
+        self.id = id
+        self.method = method
+        self.params = params
+    }
 }
 
 public enum RequestID: Codable, Sendable {
@@ -43,7 +50,7 @@ public enum RequestID: Codable, Sendable {
 }
 
 /// Flexible JSON value type for parsing arbitrary MCP params/results.
-public enum JSONValue: Codable, Sendable {
+public enum JSONValue: Codable, Sendable, Equatable {
     case string(String)
     case number(Double)
     case bool(Bool)
@@ -112,6 +119,30 @@ public enum JSONValue: Codable, Sendable {
     /// Extract the tool name from a tools/call params object.
     public func getToolName() -> String? {
         getString("name")
+    }
+}
+
+// MARK: - JSONValue Convenience Extensions
+
+extension JSONValue {
+    public func asString() -> String? {
+        if case .string(let s) = self { return s }
+        return nil
+    }
+
+    public func asNumber() -> Double? {
+        if case .number(let n) = self { return n }
+        return nil
+    }
+
+    public func asInt() -> Int? {
+        if case .number(let n) = self { return Int(n) }
+        return nil
+    }
+
+    public func asStringArray() -> [String]? {
+        guard case .array(let items) = self else { return nil }
+        return items.compactMap { $0.asString() }
     }
 }
 

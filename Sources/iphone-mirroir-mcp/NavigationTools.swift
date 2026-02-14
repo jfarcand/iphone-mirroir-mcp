@@ -7,8 +7,8 @@ import HelperLib
 extension IPhoneMirroirMCP {
     static func registerNavigationTools(
         server: MCPServer,
-        bridge: MirroringBridge,
-        input: InputSimulation,
+        bridge: any MirroringBridging,
+        input: any InputProviding,
         policy: PermissionPolicy
     ) {
         // launch_app — open an app by name via Spotlight search

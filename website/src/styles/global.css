@@ -165,6 +165,15 @@ pre code {
   margin-top: 0.5rem;
 }
 
+.subtitle {
+  font-size: 0.95rem;
+  color: var(--color-muted);
+  text-align: center;
+  max-width: 640px;
+  margin: 0.5rem auto 0;
+  line-height: 1.5;
+}
+
 /* Section styling */
 section {
   margin-top: 3rem;

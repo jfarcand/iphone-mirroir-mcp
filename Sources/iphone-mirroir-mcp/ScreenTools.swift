@@ -7,10 +7,10 @@ import HelperLib
 extension IPhoneMirroirMCP {
     static func registerScreenTools(
         server: MCPServer,
-        bridge: MirroringBridge,
-        capture: ScreenCapture,
-        recorder: ScreenRecorder,
-        describer: ScreenDescriber
+        bridge: any MirroringBridging,
+        capture: any ScreenCapturing,
+        recorder: any ScreenRecording,
+        describer: any ScreenDescribing
     ) {
         // screenshot — capture the mirroring window
         server.registerTool(MCPToolDefinition(

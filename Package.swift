@@ -40,5 +40,13 @@ let package = Package(
             name: "HelperLibTests",
             dependencies: ["HelperLib"]
         ),
+        .testTarget(
+            name: "MCPServerTests",
+            dependencies: ["iphone-mirroir-mcp", "HelperLib"]
+        ),
+        .testTarget(
+            name: "HelperDaemonTests",
+            dependencies: ["iphone-mirroir-helper", "HelperLib"]
+        ),
     ]
 )

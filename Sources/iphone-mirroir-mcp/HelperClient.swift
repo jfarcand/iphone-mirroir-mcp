@@ -43,53 +43,33 @@ final class HelperClient: Sendable {
 
     /// Click at screen-absolute coordinates.
     func click(x: Double, y: Double) -> Bool {
-        let response = sendCommandWithReconnect([
-            "action": "click",
-            "x": x,
-            "y": y,
-        ])
-        return response?["ok"] as? Bool ?? false
+        boolResult(["action": "click", "x": x, "y": y], tag: "click")
     }
 
     /// Long press at screen-absolute coordinates for the specified duration.
     func longPress(x: Double, y: Double, durationMs: Int = 500) -> Bool {
-        let response = sendCommandWithReconnect([
-            "action": "long_press",
-            "x": x,
-            "y": y,
-            "duration_ms": durationMs,
-        ])
-        return response?["ok"] as? Bool ?? false
+        boolResult(["action": "long_press", "x": x, "y": y, "duration_ms": durationMs], tag: "longPress")
     }
 
     /// Double-tap at screen-absolute coordinates.
     func doubleTap(x: Double, y: Double) -> Bool {
-        let response = sendCommandWithReconnect([
-            "action": "double_tap",
-            "x": x,
-            "y": y,
-        ])
-        return response?["ok"] as? Bool ?? false
+        boolResult(["action": "double_tap", "x": x, "y": y], tag: "doubleTap")
     }
 
     /// Drag from one point to another with sustained contact.
     func drag(fromX: Double, fromY: Double, toX: Double, toY: Double,
               durationMs: Int = 1000) -> Bool {
-        let response = sendCommandWithReconnect([
+        boolResult([
             "action": "drag",
-            "from_x": fromX,
-            "from_y": fromY,
-            "to_x": toX,
-            "to_y": toY,
+            "from_x": fromX, "from_y": fromY,
+            "to_x": toX, "to_y": toY,
             "duration_ms": durationMs,
-        ])
-        return response?["ok"] as? Bool ?? false
+        ], tag: "drag")
     }
 
     /// Trigger a shake gesture on the mirrored iPhone.
     func shake() -> Bool {
-        let response = sendCommandWithReconnect(["action": "shake"])
-        return response?["ok"] as? Bool ?? false
+        boolResult(["action": "shake"], tag: "shake")
     }
 
     /// Result of a type command from the helper, including skipped character info.
@@ -134,22 +114,17 @@ final class HelperClient: Sendable {
         if !modifiers.isEmpty {
             command["modifiers"] = modifiers
         }
-
-        let response = sendCommandWithReconnect(command)
-        return response?["ok"] as? Bool ?? false
+        return boolResult(command, tag: "pressKey")
     }
 
     /// Swipe between two screen-absolute points.
     func swipe(fromX: Double, fromY: Double, toX: Double, toY: Double, durationMs: Int = 300) -> Bool {
-        let response = sendCommandWithReconnect([
+        boolResult([
             "action": "swipe",
-            "from_x": fromX,
-            "from_y": fromY,
-            "to_x": toX,
-            "to_y": toY,
+            "from_x": fromX, "from_y": fromY,
+            "to_x": toX, "to_y": toY,
             "duration_ms": durationMs,
-        ])
-        return response?["ok"] as? Bool ?? false
+        ], tag: "swipe")
     }
 
     /// Get the helper's status including device readiness.
@@ -165,6 +140,22 @@ final class HelperClient: Sendable {
               npx iphone-mirroir-mcp setup\n\
             Screenshots and menu actions (Home, Spotlight, App Switcher) still work without it.
             """
+    }
+
+    // MARK: - Private Helpers
+
+    /// Extract a boolean ok result from a command response, logging errors.
+    private func boolResult(_ command: [String: Any], tag: String) -> Bool {
+        guard let response = sendCommandWithReconnect(command) else {
+            DebugLog.log("HelperClient", "\(tag): no response from helper")
+            return false
+        }
+        let ok = response["ok"] as? Bool ?? false
+        if !ok {
+            let error = response["error"] as? String ?? "unknown error"
+            DebugLog.log("HelperClient", "\(tag): helper returned error: \(error)")
+        }
+        return ok
     }
 
     // MARK: - Connection Management

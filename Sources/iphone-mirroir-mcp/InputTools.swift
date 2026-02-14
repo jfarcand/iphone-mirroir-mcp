@@ -7,8 +7,8 @@ import HelperLib
 extension IPhoneMirroirMCP {
     static func registerInputTools(
         server: MCPServer,
-        bridge: MirroringBridge,
-        input: InputSimulation
+        bridge: any MirroringBridging,
+        input: any InputProviding
     ) {
         // tap — click at coordinates on the mirrored iPhone
         server.registerTool(MCPToolDefinition(

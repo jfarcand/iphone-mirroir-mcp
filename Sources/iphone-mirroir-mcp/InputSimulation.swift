@@ -79,7 +79,7 @@ final class InputSimulation: Sendable {
 
     /// Validate that coordinates fall within the iPhone Mirroring window bounds.
     /// Returns nil if valid, or a descriptive error message if out of bounds.
-    private func validateBounds(x: Double, y: Double, info: WindowInfo, tag: String) -> String? {
+    func validateBounds(x: Double, y: Double, info: WindowInfo, tag: String) -> String? {
         let w = Double(info.size.width)
         let h = Double(info.size.height)
         if x < 0 || x > w || y < 0 || y > h {
@@ -373,15 +373,15 @@ final class InputSimulation: Sendable {
     }
 
     /// A segment of text to be typed, with the method to use.
-    private enum TypeMethod { case hid, paste }
-    private struct TypeSegment {
+    enum TypeMethod { case hid, paste }
+    struct TypeSegment {
         let text: String
         let method: TypeMethod
     }
 
     /// Split text into segments based on whether each character can be typed via HID
     /// (after layout substitution) or needs clipboard paste.
-    private func buildTypeSegments(_ text: String) -> [TypeSegment] {
+    func buildTypeSegments(_ text: String) -> [TypeSegment] {
         var segments: [TypeSegment] = []
         var currentText = ""
         var currentMethod: TypeMethod = .hid
