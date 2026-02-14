@@ -205,13 +205,20 @@ claude plugin marketplace add jfarcand/iphone-mirroir-scenarios
 claude plugin install scenarios@iphone-mirroir-scenarios
 ```
 
-#### Manual (all clients)
+#### GitHub Copilot CLI
+
+```bash
+copilot plugin marketplace add jfarcand/iphone-mirroir-scenarios
+copilot plugin install scenarios@iphone-mirroir-scenarios
+```
+
+#### Manual (all other clients)
 
 ```bash
 git clone https://github.com/jfarcand/iphone-mirroir-scenarios ~/.iphone-mirroir-mcp/scenarios
 ```
 
-Once installed, scenarios are available through the `list_scenarios` and `get_scenario` tools. Claude Code loads the [SKILL.md](https://github.com/jfarcand/iphone-mirroir-scenarios/blob/main/plugins/scenarios/skills/scenarios/SKILL.md) automatically, which teaches the AI how to interpret and execute each step type. For other clients, ask the AI to call `list_scenarios` and then execute the steps.
+Once installed, scenarios are available through the `list_scenarios` and `get_scenario` tools. Claude Code and Copilot CLI load the [SKILL.md](https://github.com/jfarcand/iphone-mirroir-scenarios/blob/main/plugins/scenarios/skills/scenarios/SKILL.md) automatically, which teaches the AI how to interpret and execute each step type. For other clients, ask the AI to call `list_scenarios` and then execute the steps.
 
 See [Tools Reference](docs/tools.md#scenarios) for the full step type reference and directory layout.
 
