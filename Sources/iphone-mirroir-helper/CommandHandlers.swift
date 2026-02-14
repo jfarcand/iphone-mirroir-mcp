@@ -63,44 +63,9 @@ extension CommandServer {
             return makeErrorResponse("Karabiner pointing device not ready")
         }
 
-        let target = CGPoint(x: x, y: y)
-
-        // Save current cursor position
-        let savedPosition = CGEvent(source: nil)?.location ?? .zero
-
-        // Disconnect physical mouse so user movement doesn't interfere
-        CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
-
-        // Warp system cursor to target
-        CGWarpMouseCursorPosition(target)
-        usleep(EnvConfig.cursorSettleUs)
-
-        // Small Karabiner nudge to sync virtual device with warped cursor
-        var nudgeRight = PointingInput()
-        nudgeRight.x = 1
-        karabiner.postPointingReport(nudgeRight)
-        usleep(EnvConfig.nudgeSettleUs)
-
-        var nudgeBack = PointingInput()
-        nudgeBack.x = -1
-        karabiner.postPointingReport(nudgeBack)
-        usleep(EnvConfig.cursorSettleUs)
-
-        // Button down
-        var down = PointingInput()
-        down.buttons = 0x01
-        karabiner.postPointingReport(down)
-        usleep(EnvConfig.clickHoldUs)
-
-        // Button up
-        var up = PointingInput()
-        up.buttons = 0x00
-        karabiner.postPointingReport(up)
-        usleep(EnvConfig.cursorSettleUs)
-
-        // Restore cursor position and reconnect physical mouse
-        CGWarpMouseCursorPosition(savedPosition)
-        CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
+        CursorSync.withCursorSynced(at: CGPoint(x: x, y: y), karabiner: karabiner) {
+            CursorSync.clickButton(karabiner: karabiner, holdDuration: EnvConfig.clickHoldUs)
+        }
 
         return makeOkResponse()
     }
@@ -122,38 +87,9 @@ extension CommandServer {
             return makeErrorResponse("Karabiner pointing device not ready")
         }
 
-        let target = CGPoint(x: x, y: y)
-        let savedPosition = CGEvent(source: nil)?.location ?? .zero
-
-        CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
-        CGWarpMouseCursorPosition(target)
-        usleep(EnvConfig.cursorSettleUs)
-
-        // Karabiner nudge to sync virtual device with warped cursor
-        var nudgeRight = PointingInput()
-        nudgeRight.x = 1
-        karabiner.postPointingReport(nudgeRight)
-        usleep(EnvConfig.nudgeSettleUs)
-
-        var nudgeBack = PointingInput()
-        nudgeBack.x = -1
-        karabiner.postPointingReport(nudgeBack)
-        usleep(EnvConfig.cursorSettleUs)
-
-        // Button down — hold for the requested duration
-        var down = PointingInput()
-        down.buttons = 0x01
-        karabiner.postPointingReport(down)
-        usleep(UInt32(durationMs) * 1000)
-
-        // Button up
-        var up = PointingInput()
-        up.buttons = 0x00
-        karabiner.postPointingReport(up)
-        usleep(EnvConfig.cursorSettleUs)
-
-        CGWarpMouseCursorPosition(savedPosition)
-        CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
+        CursorSync.withCursorSynced(at: CGPoint(x: x, y: y), karabiner: karabiner) {
+            CursorSync.clickButton(karabiner: karabiner, holdDuration: UInt32(durationMs) * 1000)
+        }
 
         return makeOkResponse()
     }
@@ -173,48 +109,13 @@ extension CommandServer {
             return makeErrorResponse("Karabiner pointing device not ready")
         }
 
-        let target = CGPoint(x: x, y: y)
-        let savedPosition = CGEvent(source: nil)?.location ?? .zero
-
-        CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
-        CGWarpMouseCursorPosition(target)
-        usleep(EnvConfig.cursorSettleUs)
-
-        // Karabiner nudge to sync virtual device with warped cursor
-        var nudgeRight = PointingInput()
-        nudgeRight.x = 1
-        karabiner.postPointingReport(nudgeRight)
-        usleep(EnvConfig.nudgeSettleUs)
-
-        var nudgeBack = PointingInput()
-        nudgeBack.x = -1
-        karabiner.postPointingReport(nudgeBack)
-        usleep(EnvConfig.cursorSettleUs)
-
-        // First tap
-        var down1 = PointingInput()
-        down1.buttons = 0x01
-        karabiner.postPointingReport(down1)
-        usleep(EnvConfig.doubleTapHoldUs)
-
-        var up1 = PointingInput()
-        up1.buttons = 0x00
-        karabiner.postPointingReport(up1)
-        usleep(EnvConfig.doubleTapGapUs)
-
-        // Second tap
-        var down2 = PointingInput()
-        down2.buttons = 0x01
-        karabiner.postPointingReport(down2)
-        usleep(EnvConfig.doubleTapHoldUs)
-
-        var up2 = PointingInput()
-        up2.buttons = 0x00
-        karabiner.postPointingReport(up2)
-        usleep(EnvConfig.cursorSettleUs)
-
-        CGWarpMouseCursorPosition(savedPosition)
-        CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
+        CursorSync.withCursorSynced(at: CGPoint(x: x, y: y), karabiner: karabiner) {
+            // First tap
+            CursorSync.clickButton(karabiner: karabiner, holdDuration: EnvConfig.doubleTapHoldUs)
+            usleep(EnvConfig.doubleTapGapUs)
+            // Second tap
+            CursorSync.clickButton(karabiner: karabiner, holdDuration: EnvConfig.doubleTapHoldUs)
+        }
 
         return makeOkResponse()
     }
@@ -238,64 +139,44 @@ extension CommandServer {
             return makeErrorResponse("Karabiner pointing device not ready")
         }
 
-        let savedPosition = CGEvent(source: nil)?.location ?? .zero
+        CursorSync.withCursorSynced(at: CGPoint(x: fromX, y: fromY), karabiner: karabiner) {
+            // Button down with initial hold for iOS drag recognition
+            var down = PointingInput()
+            down.buttons = 0x01
+            karabiner.postPointingReport(down)
+            usleep(EnvConfig.dragModeHoldUs)
 
-        CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
+            // Slow interpolated movement with fine steps
+            let steps = EnvConfig.dragInterpolationSteps
+            let totalDx = toX - fromX
+            let totalDy = toY - fromY
+            let dragModeHoldMs = Int(EnvConfig.dragModeHoldUs / 1000)
+            let moveDurationMs = durationMs - dragModeHoldMs
+            let stepDelayUs = UInt32(max(moveDurationMs, 1) * 1000 / steps)
 
-        // Warp to start position
-        CGWarpMouseCursorPosition(CGPoint(x: fromX, y: fromY))
-        usleep(EnvConfig.cursorSettleUs)
+            for i in 1...steps {
+                let progress = Double(i) / Double(steps)
+                let targetX = fromX + totalDx * progress
+                let targetY = fromY + totalDy * progress
 
-        // Sync Karabiner with nudge
-        var nudgeRight = PointingInput()
-        nudgeRight.x = 1
-        karabiner.postPointingReport(nudgeRight)
-        usleep(EnvConfig.nudgeSettleUs)
+                CGWarpMouseCursorPosition(CGPoint(x: targetX, y: targetY))
 
-        var nudgeBack = PointingInput()
-        nudgeBack.x = -1
-        karabiner.postPointingReport(nudgeBack)
-        usleep(EnvConfig.cursorSettleUs)
+                let dx = Int8(clamping: Int(totalDx / Double(steps)))
+                let dy = Int8(clamping: Int(totalDy / Double(steps)))
+                var move = PointingInput()
+                move.buttons = 0x01
+                move.x = dx
+                move.y = dy
+                karabiner.postPointingReport(move)
+                usleep(stepDelayUs)
+            }
 
-        // Button down with initial hold for iOS drag recognition
-        var down = PointingInput()
-        down.buttons = 0x01
-        karabiner.postPointingReport(down)
-        usleep(EnvConfig.dragModeHoldUs)
-
-        // Slow interpolated movement with fine steps
-        let steps = EnvConfig.dragInterpolationSteps
-        let totalDx = toX - fromX
-        let totalDy = toY - fromY
-        let dragModeHoldMs = Int(EnvConfig.dragModeHoldUs / 1000)
-        let moveDurationMs = durationMs - dragModeHoldMs // subtract initial hold time
-        let stepDelayUs = UInt32(max(moveDurationMs, 1) * 1000 / steps)
-
-        for i in 1...steps {
-            let progress = Double(i) / Double(steps)
-            let targetX = fromX + totalDx * progress
-            let targetY = fromY + totalDy * progress
-
-            CGWarpMouseCursorPosition(CGPoint(x: targetX, y: targetY))
-
-            let dx = Int8(clamping: Int(totalDx / Double(steps)))
-            let dy = Int8(clamping: Int(totalDy / Double(steps)))
-            var move = PointingInput()
-            move.buttons = 0x01
-            move.x = dx
-            move.y = dy
-            karabiner.postPointingReport(move)
-            usleep(stepDelayUs)
+            // Button up
+            var up = PointingInput()
+            up.buttons = 0x00
+            karabiner.postPointingReport(up)
+            usleep(EnvConfig.cursorSettleUs)
         }
-
-        // Button up
-        var up = PointingInput()
-        up.buttons = 0x00
-        karabiner.postPointingReport(up)
-        usleep(EnvConfig.cursorSettleUs)
-
-        CGWarpMouseCursorPosition(savedPosition)
-        CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
 
         return makeOkResponse()
     }
@@ -332,24 +213,8 @@ extension CommandServer {
             CGWarpMouseCursorPosition(target)
             usleep(EnvConfig.cursorSettleUs)
 
-            // Karabiner nudge to sync virtual device with warped cursor
-            var nudgeRight = PointingInput()
-            nudgeRight.x = 1
-            karabiner.postPointingReport(nudgeRight)
-            usleep(EnvConfig.nudgeSettleUs)
-            var nudgeBack = PointingInput()
-            nudgeBack.x = -1
-            karabiner.postPointingReport(nudgeBack)
-            usleep(EnvConfig.cursorSettleUs)
-
-            // Click down + up to give the window focus
-            var down = PointingInput()
-            down.buttons = 0x01
-            karabiner.postPointingReport(down)
-            usleep(EnvConfig.clickHoldUs)
-            var up = PointingInput()
-            up.buttons = 0x00
-            karabiner.postPointingReport(up)
+            CursorSync.nudgeSync(karabiner: karabiner)
+            CursorSync.clickButton(karabiner: karabiner, holdDuration: EnvConfig.clickHoldUs)
 
             usleep(EnvConfig.focusSettleUs)
             // Cursor stays on target, physical mouse stays disconnected
@@ -407,65 +272,47 @@ extension CommandServer {
             return makeErrorResponse("Karabiner pointing device not ready")
         }
 
-        let savedPosition = CGEvent(source: nil)?.location ?? .zero
-
-        // Disconnect physical mouse so user movement doesn't interfere
-        CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
-
         // Warp cursor to the midpoint of the swipe so scroll events target
         // the correct area of the iPhone Mirroring window
         let midX = (fromX + toX) / 2.0
         let midY = (fromY + toY) / 2.0
-        CGWarpMouseCursorPosition(CGPoint(x: midX, y: midY))
-        usleep(EnvConfig.cursorSettleUs)
 
-        // Sync Karabiner with nudge so the virtual device knows the cursor position
-        var nudge = PointingInput()
-        nudge.x = 1
-        karabiner.postPointingReport(nudge)
-        usleep(EnvConfig.nudgeSettleUs)
-        nudge.x = -1
-        karabiner.postPointingReport(nudge)
-        usleep(EnvConfig.cursorSettleUs)
+        CursorSync.withCursorSynced(at: CGPoint(x: midX, y: midY), karabiner: karabiner) {
+            // Send scroll wheel events to simulate the swipe gesture.
+            // No button press — scroll wheel maps to iOS swipe/scroll, while
+            // click-drag maps to touch-and-drag (which triggers icon jiggle mode).
+            let totalDx = toX - fromX
+            let totalDy = toY - fromY
+            let steps = EnvConfig.swipeInterpolationSteps
+            let stepDelayUs = UInt32(max(durationMs, 1) * 1000 / steps)
 
-        // Send scroll wheel events to simulate the swipe gesture.
-        // No button press — scroll wheel maps to iOS swipe/scroll, while
-        // click-drag maps to touch-and-drag (which triggers icon jiggle mode).
-        let totalDx = toX - fromX
-        let totalDy = toY - fromY
-        let steps = EnvConfig.swipeInterpolationSteps
-        let stepDelayUs = UInt32(max(durationMs, 1) * 1000 / steps)
+            // Scale pixel distance to scroll wheel units. Scroll wheel values are
+            // much coarser than pixels — each unit scrolls several pixels.
+            // Using a divisor to convert pixel distance to reasonable scroll ticks.
+            let scrollScale = EnvConfig.scrollPixelScale
+            var hAccum = 0.0
+            var vAccum = 0.0
+            let hPerStep = totalDx / scrollScale / Double(steps)
+            let vPerStep = totalDy / scrollScale / Double(steps)
 
-        // Scale pixel distance to scroll wheel units. Scroll wheel values are
-        // much coarser than pixels — each unit scrolls several pixels.
-        // Using a divisor to convert pixel distance to reasonable scroll ticks.
-        let scrollScale = EnvConfig.scrollPixelScale
-        var hAccum = 0.0
-        var vAccum = 0.0
-        let hPerStep = totalDx / scrollScale / Double(steps)
-        let vPerStep = totalDy / scrollScale / Double(steps)
+            for _ in 1...steps {
+                hAccum += hPerStep
+                vAccum += vPerStep
 
-        for _ in 1...steps {
-            hAccum += hPerStep
-            vAccum += vPerStep
+                let hTick = Int8(clamping: Int(hAccum.rounded()))
+                let vTick = Int8(clamping: Int(vAccum.rounded()))
 
-            let hTick = Int8(clamping: Int(hAccum.rounded()))
-            let vTick = Int8(clamping: Int(vAccum.rounded()))
+                hAccum -= Double(hTick)
+                vAccum -= Double(vTick)
 
-            hAccum -= Double(hTick)
-            vAccum -= Double(vTick)
-
-            var scroll = PointingInput()
-            // Negate: scroll wheel convention is opposite to swipe direction
-            scroll.horizontalWheel = -hTick
-            scroll.verticalWheel = -vTick
-            karabiner.postPointingReport(scroll)
-            usleep(stepDelayUs)
+                var scroll = PointingInput()
+                // Negate: scroll wheel convention is opposite to swipe direction
+                scroll.horizontalWheel = -hTick
+                scroll.verticalWheel = -vTick
+                karabiner.postPointingReport(scroll)
+                usleep(stepDelayUs)
+            }
         }
-
-        // Restore cursor and reconnect physical mouse
-        CGWarpMouseCursorPosition(savedPosition)
-        CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
 
         return makeOkResponse()
     }

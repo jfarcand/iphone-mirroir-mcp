@@ -53,6 +53,30 @@ final class InputSimulation: @unchecked Sendable {
         }
     }
 
+    /// Common preamble for coordinate-based input operations.
+    /// Validates that the helper is available, the window exists, coordinates are in bounds,
+    /// then logs window state and ensures mirroring is frontmost.
+    /// Returns `(info, nil)` on success, or `(nil, errorMessage)` on failure.
+    private func prepareInput(tag: String, x: Double, y: Double) -> (info: WindowInfo?, error: String?) {
+        guard let info = bridge.getWindowInfo() else {
+            DebugLog.log(tag, "ERROR: window not found")
+            return (nil, "iPhone Mirroring window not found")
+        }
+
+        guard helperClient.isAvailable else {
+            DebugLog.log(tag, "ERROR: helper unavailable")
+            return (nil, helperClient.unavailableMessage)
+        }
+
+        if let boundsError = validateBounds(x: x, y: y, info: info, tag: tag) {
+            return (nil, boundsError)
+        }
+
+        logWindowState(tag, info)
+        ensureMirroringFrontmost()
+        return (info, nil)
+    }
+
     /// Validate that coordinates fall within the iPhone Mirroring window bounds.
     /// Returns nil if valid, or a descriptive error message if out of bounds.
     private func validateBounds(x: Double, y: Double, info: WindowInfo, tag: String) -> String? {
@@ -75,22 +99,8 @@ final class InputSimulation: @unchecked Sendable {
     /// Tap at a position relative to the mirroring window.
     /// Returns nil on success, or an error message if the helper is unavailable.
     func tap(x: Double, y: Double) -> String? {
-        guard let info = bridge.getWindowInfo() else {
-            DebugLog.log("tap", "ERROR: window not found")
-            return "iPhone Mirroring window not found"
-        }
-
-        guard helperClient.isAvailable else {
-            DebugLog.log("tap", "ERROR: helper unavailable")
-            return helperClient.unavailableMessage
-        }
-
-        if let boundsError = validateBounds(x: x, y: y, info: info, tag: "tap") {
-            return boundsError
-        }
-
-        logWindowState("tap", info)
-        ensureMirroringFrontmost()
+        let prep = prepareInput(tag: "tap", x: x, y: y)
+        guard let info = prep.info else { return prep.error }
 
         let screenX = info.position.x + CGFloat(x)
         let screenY = info.position.y + CGFloat(y)
@@ -106,25 +116,12 @@ final class InputSimulation: @unchecked Sendable {
     func swipe(fromX: Double, fromY: Double, toX: Double, toY: Double, durationMs: Int = 300)
         -> String?
     {
-        guard let info = bridge.getWindowInfo() else {
-            DebugLog.log("swipe", "ERROR: window not found")
-            return "iPhone Mirroring window not found"
-        }
+        let prep = prepareInput(tag: "swipe", x: fromX, y: fromY)
+        guard let info = prep.info else { return prep.error }
 
-        guard helperClient.isAvailable else {
-            DebugLog.log("swipe", "ERROR: helper unavailable")
-            return helperClient.unavailableMessage
-        }
-
-        if let boundsError = validateBounds(x: fromX, y: fromY, info: info, tag: "swipe") {
-            return boundsError
-        }
         if let boundsError = validateBounds(x: toX, y: toY, info: info, tag: "swipe") {
             return boundsError
         }
-
-        logWindowState("swipe", info)
-        ensureMirroringFrontmost()
 
         let startX = Double(info.position.x) + fromX
         let startY = Double(info.position.y) + fromY
@@ -143,22 +140,8 @@ final class InputSimulation: @unchecked Sendable {
     /// Long press at a position relative to the mirroring window.
     /// Returns nil on success, or an error message on failure.
     func longPress(x: Double, y: Double, durationMs: Int = 500) -> String? {
-        guard let info = bridge.getWindowInfo() else {
-            DebugLog.log("longPress", "ERROR: window not found")
-            return "iPhone Mirroring window not found"
-        }
-
-        guard helperClient.isAvailable else {
-            DebugLog.log("longPress", "ERROR: helper unavailable")
-            return helperClient.unavailableMessage
-        }
-
-        if let boundsError = validateBounds(x: x, y: y, info: info, tag: "longPress") {
-            return boundsError
-        }
-
-        logWindowState("longPress", info)
-        ensureMirroringFrontmost()
+        let prep = prepareInput(tag: "longPress", x: x, y: y)
+        guard let info = prep.info else { return prep.error }
 
         let screenX = Double(info.position.x) + x
         let screenY = Double(info.position.y) + y
@@ -172,22 +155,8 @@ final class InputSimulation: @unchecked Sendable {
     /// Double-tap at a position relative to the mirroring window.
     /// Returns nil on success, or an error message on failure.
     func doubleTap(x: Double, y: Double) -> String? {
-        guard let info = bridge.getWindowInfo() else {
-            DebugLog.log("doubleTap", "ERROR: window not found")
-            return "iPhone Mirroring window not found"
-        }
-
-        guard helperClient.isAvailable else {
-            DebugLog.log("doubleTap", "ERROR: helper unavailable")
-            return helperClient.unavailableMessage
-        }
-
-        if let boundsError = validateBounds(x: x, y: y, info: info, tag: "doubleTap") {
-            return boundsError
-        }
-
-        logWindowState("doubleTap", info)
-        ensureMirroringFrontmost()
+        let prep = prepareInput(tag: "doubleTap", x: x, y: y)
+        guard let info = prep.info else { return prep.error }
 
         let screenX = Double(info.position.x) + x
         let screenY = Double(info.position.y) + y
@@ -204,25 +173,12 @@ final class InputSimulation: @unchecked Sendable {
     /// Returns nil on success, or an error message on failure.
     func drag(fromX: Double, fromY: Double, toX: Double, toY: Double,
               durationMs: Int = 1000) -> String? {
-        guard let info = bridge.getWindowInfo() else {
-            DebugLog.log("drag", "ERROR: window not found")
-            return "iPhone Mirroring window not found"
-        }
+        let prep = prepareInput(tag: "drag", x: fromX, y: fromY)
+        guard let info = prep.info else { return prep.error }
 
-        guard helperClient.isAvailable else {
-            DebugLog.log("drag", "ERROR: helper unavailable")
-            return helperClient.unavailableMessage
-        }
-
-        if let boundsError = validateBounds(x: fromX, y: fromY, info: info, tag: "drag") {
-            return boundsError
-        }
         if let boundsError = validateBounds(x: toX, y: toY, info: info, tag: "drag") {
             return boundsError
         }
-
-        logWindowState("drag", info)
-        ensureMirroringFrontmost()
 
         let startX = Double(info.position.x) + fromX
         let startY = Double(info.position.y) + fromY
