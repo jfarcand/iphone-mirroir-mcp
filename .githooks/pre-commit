@@ -71,16 +71,10 @@ check_mcp_compliance() {
     if [ -n "$mcp_files" ]; then
         echo "MCP-related files changed - running MCP compliance validation..."
 
-        # Build release binary for MCP validation
-        if ! swift build -c release 2>&1; then
-            echo ""
-            echo "ERROR: Commit blocked - release build failed (needed for MCP validation)"
-            return 1
-        fi
-
-        local BINARY=".build/release/iphone-mirroir-mcp"
+        # Reuse the debug binary already built by check_swift_build
+        local BINARY=".build/debug/iphone-mirroir-mcp"
         if [ ! -x "$BINARY" ]; then
-            echo "WARNING: Release binary not found, skipping MCP compliance check"
+            echo "WARNING: Debug binary not found, skipping MCP compliance check"
             return 0
         fi
 

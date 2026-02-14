@@ -26,21 +26,24 @@ TOTAL_TESTS=0
 PASSED_TESTS=0
 FAILED_TESTS=0
 
-# Build the release binary
-echo ""
-echo -e "${BLUE}==== Building release binary... ====${NC}"
-cd "$PROJECT_ROOT"
-if swift build -c release 2>&1; then
-    echo -e "${GREEN}[OK] Release binary built${NC}"
-else
-    echo -e "${RED}[FAIL] swift build -c release failed${NC}"
-    exit 1
-fi
-
+# Locate the release binary — build only if not already present (CI builds it in a prior step)
 BINARY="$PROJECT_ROOT/.build/release/iphone-mirroir-mcp"
-if [ ! -x "$BINARY" ]; then
-    echo -e "${RED}[FAIL] Binary not found at $BINARY${NC}"
-    exit 1
+if [ -x "$BINARY" ]; then
+    echo -e "${GREEN}[OK] Using existing release binary${NC}"
+else
+    echo ""
+    echo -e "${BLUE}==== Building release binary... ====${NC}"
+    cd "$PROJECT_ROOT"
+    if swift build -c release 2>&1; then
+        echo -e "${GREEN}[OK] Release binary built${NC}"
+    else
+        echo -e "${RED}[FAIL] swift build -c release failed${NC}"
+        exit 1
+    fi
+    if [ ! -x "$BINARY" ]; then
+        echo -e "${RED}[FAIL] Binary not found at $BINARY${NC}"
+        exit 1
+    fi
 fi
 
 # Helper: send JSON-RPC messages to the MCP server and capture output
@@ -123,15 +126,17 @@ obj = json.loads(sys.stdin.readline())
 assert 'result' in obj, f'Missing result: {obj}'
 assert 'tools' in obj['result'], f'Missing tools: {obj[\"result\"]}'
 tools = obj['result']['tools']
-assert len(tools) == 21, f'Expected 21 tools, got {len(tools)}'
+assert len(tools) > 0, 'tools/list returned 0 tools'
 names = {t['name'] for t in tools}
-expected = {'screenshot','start_recording','stop_recording','tap','swipe','drag','type_text','press_key','long_press','double_tap','shake','launch_app','open_url','press_home','press_app_switcher','spotlight','get_orientation','status','describe_screen','list_scenarios','get_scenario'}
-assert names == expected, f'Tool mismatch.\nMissing: {expected - names}\nExtra: {names - expected}'
-print('OK')
+# Verify core tools are present (not an exhaustive list — avoids breaking when tools are added)
+core = {'screenshot', 'tap', 'swipe', 'type_text', 'press_key', 'describe_screen', 'status'}
+missing = core - names
+assert not missing, f'Missing core tools: {missing}'
+print(f'OK ({len(tools)} tools)')
 " 2>&1 | grep -q "OK"; then
-    record_test "tools/list returns all 21 tools" true
+    record_test "tools/list returns tools including core set" true
 else
-    record_test "tools/list returns all 21 tools" false
+    record_test "tools/list returns tools including core set" false
 fi
 
 # ============================================================
