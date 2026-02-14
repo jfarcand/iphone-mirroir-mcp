@@ -206,6 +206,9 @@ extension IPhoneMirroirMCP {
                     return .error(result.error ?? "Failed to type text")
                 }
 
+                if let warning = result.warning {
+                    return .text("Typed \(text.count) characters. Warning: \(warning)")
+                }
                 return .text("Typed \(text.count) characters")
             }
         ))

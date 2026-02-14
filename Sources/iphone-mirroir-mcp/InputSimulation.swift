@@ -331,15 +331,13 @@ final class InputSimulation: Sendable {
         DebugLog.log("focus", "after activation frontApp=\(afterApp?.bundleIdentifier ?? "nil")")
     }
 
-    /// Type text via a hybrid approach: Karabiner HID for characters with valid
-    /// keycodes, and clipboard paste (via iPhone Mirroring's Edit > Paste menu)
-    /// for characters that lack HID mappings.
+    /// Type text via Karabiner HID keycodes.
     ///
     /// When the iPhone's hardware keyboard layout differs from US QWERTY,
     /// characters are translated through the layout substitution table before
     /// sending to the HID helper. Characters whose substituted form has no
-    /// HID mapping (e.g., `/` on Canadian-CSA) are pasted via the Mac's
-    /// clipboard bridge using the Accessibility API — no focus changes needed.
+    /// HID mapping (e.g., `/` on Canadian-CSA) are skipped and reported in
+    /// the warning field of the result.
     ///
     /// HID segments longer than 15 characters are sent in chunks to stay within
     /// the Karabiner HID report buffer capacity.
@@ -355,6 +353,7 @@ final class InputSimulation: Sendable {
 
         // Split text into segments: HID-typeable (substituted) vs paste-needed (original).
         let segments = buildTypeSegments(text)
+        var skippedChars = ""
 
         for segment in segments {
             switch segment.method {
@@ -363,12 +362,19 @@ final class InputSimulation: Sendable {
                     return error
                 }
             case .paste:
-                if let error = typeViaPaste(segment.text) {
-                    return error
-                }
+                // No working paste mechanism — collect skipped characters for the warning
+                skippedChars += segment.text
+                fputs("InputSimulation: skipping \(segment.text.count) char(s) with no HID mapping: \(segment.text)\n", stderr)
             }
         }
 
+        if !skippedChars.isEmpty {
+            return TypeResult(
+                success: true,
+                warning: "Skipped \(skippedChars.count) character(s) with no HID mapping: \(skippedChars)",
+                error: nil
+            )
+        }
         return TypeResult(success: true, warning: nil, error: nil)
     }
 
@@ -431,16 +437,6 @@ final class InputSimulation: Sendable {
             index = end
         }
         return nil // success
-    }
-
-    /// Placeholder for characters that lack HID keycodes after layout
-    /// substitution. On non-US layouts like Canadian-CSA, the ISO section key
-    /// (HID 0x64) maps differently between Mac and iPhone, leaving characters
-    /// like "/" without a working HID keycode. These characters are skipped
-    /// with a warning until a clipboard bridging solution is found.
-    private func typeViaPaste(_ text: String) -> TypeResult? {
-        fputs("InputSimulation: skipping \(text.count) char(s) with no HID mapping: \(text)\n", stderr)
-        return nil // skip silently — no working paste mechanism available
     }
 
     /// Send a special key press (Return, Escape, arrows, etc.) with optional modifiers

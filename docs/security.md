@@ -10,7 +10,7 @@ The MCP server only works while iPhone Mirroring is active. Closing the iPhone M
 
 ## Network Exposure
 
-The helper daemon listens on a **local Unix socket only** (`/tmp/iphone-mirroir-helper.sock`). It does not open any network ports. Remote access is not possible unless the socket is explicitly forwarded.
+The helper daemon listens on a **local Unix socket only** (`/var/run/iphone-mirroir-helper.sock`). It does not open any network ports. Remote access is not possible unless the socket is explicitly forwarded.
 
 ## Root Daemon
 
