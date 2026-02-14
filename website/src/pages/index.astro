@@ -83,6 +83,38 @@ try {
     (f: { path: string }) => f.path.endsWith(".yaml") || f.path.endsWith(".yml")
   );
 
+  // Extract a top-level YAML scalar value, handling both inline strings
+  // and block scalars (> folded, | literal). For block scalars, collects
+  // indented continuation lines and joins them into a single string.
+  function yamlValue(content: string, key: string): string {
+    const lineMatch = content.match(new RegExp(`^${key}:\\s*(.*)$`, "m"));
+    if (!lineMatch) return "";
+    const rest = lineMatch[1].trim();
+    // Inline value (most common): "description: some text here"
+    if (rest && rest !== ">" && rest !== "|") return rest;
+    // Block scalar: collect indented continuation lines
+    const lines = content.split("\n");
+    const startIdx = lines.findIndex((l) => l.match(new RegExp(`^${key}:`)));
+    if (startIdx < 0) return rest;
+    const blockLines: string[] = [];
+    for (let i = startIdx + 1; i < lines.length; i++) {
+      if (/^\s+\S/.test(lines[i])) {
+        blockLines.push(lines[i].trim());
+      } else if (lines[i].trim() === "") {
+        blockLines.push("");
+      } else {
+        break;
+      }
+    }
+    // Take just the first paragraph for the description card
+    const firstPara: string[] = [];
+    for (const line of blockLines) {
+      if (line === "") break;
+      firstPara.push(line);
+    }
+    return firstPara.join(" ");
+  }
+
   const fetches = yamlFiles.map(async (f: { path: string }) => {
     const res = await fetch(
       `https://api.github.com/repos/${scenariosRepo}/contents/${f.path}`,
@@ -90,15 +122,12 @@ try {
     );
     const data = await res.json();
     const content = atob(data.content.replace(/\n/g, ""));
-    const nameMatch = content.match(/^name:\s*(.+)$/m);
-    const descMatch = content.match(/^description:\s*(.+)$/m);
-    const appMatch = content.match(/^app:\s*(.+)$/m);
     const parts = f.path.split("/");
     const category = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
     return {
-      name: nameMatch ? nameMatch[1].trim() : f.path,
-      description: descMatch ? descMatch[1].trim() : "",
-      app: appMatch ? appMatch[1].trim() : "",
+      name: yamlValue(content, "name") || f.path,
+      description: yamlValue(content, "description"),
+      app: yamlValue(content, "app"),
       path: f.path,
       category,
       url: `${scenariosBase}/blob/main/${f.path}`,
