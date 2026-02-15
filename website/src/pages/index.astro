@@ -364,17 +364,66 @@ const scenarioIndex = JSON.stringify(scenarios);
   <!-- Works with -->
   <section>
     <h2>Works with</h2>
-    <p>Any MCP client that supports stdio transport — coding assistants, chat apps, or your own agent.</p>
-    <div class="client-list">
-      <a href="https://docs.anthropic.com/en/docs/claude-code"><span>Claude Code</span></a>
-      <a href="https://claude.ai"><span>Claude Desktop</span></a>
-      <a href="https://chatgpt.com"><span>ChatGPT</span></a>
-      <a href="https://cursor.com"><span>Cursor</span></a>
-      <a href="https://github.com/openai/codex"><span>Codex</span></a>
-      <a href="https://github.com/features/copilot"><span>GitHub Copilot</span></a>
-      <a href="https://github.com/nickvdyck/opencode"><span>OpenCode</span></a>
-      <a href="https://github.com/google-gemini/gemini-cli"><span>Gemini CLI</span></a>
+    <p>Any MCP client that supports stdio transport — plug into your editor or build your own agent.</p>
+
+    <div class="client-group">
+      <h3>Coding Assistants</h3>
+      <div class="client-list">
+        <a href="https://docs.anthropic.com/en/docs/claude-code"><span>Claude Code</span></a>
+        <a href="https://claude.ai"><span>Claude Desktop</span></a>
+        <a href="https://chatgpt.com"><span>ChatGPT</span></a>
+        <a href="https://cursor.com"><span>Cursor</span></a>
+        <a href="https://github.com/features/copilot"><span>GitHub Copilot</span></a>
+        <a href="https://github.com/openai/codex"><span>Codex</span></a>
+        <a href="https://github.com/google-gemini/gemini-cli"><span>Gemini CLI</span></a>
+        <a href="https://github.com/nickvdyck/opencode"><span>OpenCode</span></a>
+        <a href="https://codeium.com/windsurf"><span>Windsurf</span></a>
+        <a href="https://github.com/continuedev/continue"><span>Continue</span></a>
+      </div>
     </div>
+
+    <div class="client-group">
+      <h3>Agent Frameworks</h3>
+      <div class="client-list">
+        <a href="https://github.com/openclaw/openclaw"><span>OpenClaw</span></a>
+        <a href="https://github.com/rowboatlabs/rowboat"><span>Rowboat</span></a>
+        <a href="https://strandsagents.com"><span>Strands Agents</span></a>
+        <a href="https://github.com/langchain-ai/langgraph"><span>LangGraph</span></a>
+        <a href="https://github.com/lastmile-ai/mcp-agent"><span>mcp-agent</span></a>
+        <a href="https://github.com/Chainlit/chainlit"><span>Chainlit</span></a>
+        <a href="https://github.com/danny-avila/LibreChat"><span>LibreChat</span></a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section>
+    <h2>FAQ</h2>
+    <div class="faq-list">
+      <details>
+        <summary>Is this safe? Can the AI access my banking apps?</summary>
+        <p>Without a config file, only read-only tools are exposed. Mutating tools require explicit opt-in. Use <code>blockedApps</code> in <code>permissions.json</code> to deny access to sensitive apps. Closing iPhone Mirroring kills all input immediately.</p>
+      </details>
+      <details>
+        <summary>Why does my cursor jump when the AI is working?</summary>
+        <p>macOS routes HID input to the frontmost app. The server must activate iPhone Mirroring before each input. Put it in a separate macOS Space to keep your workspace undisturbed.</p>
+      </details>
+      <details>
+        <summary>Does it work with any iPhone app?</summary>
+        <p>Yes. It operates at the screen level through iPhone Mirroring — no source code, SDK, or jailbreak required. If you can see it on screen, the AI can interact with it.</p>
+      </details>
+      <details>
+        <summary>Why Karabiner? Can I use it without Karabiner?</summary>
+        <p>iPhone Mirroring ignores programmatic <code>CGEvent</code> injection. Karabiner provides a DriverKit virtual HID device that appears as real hardware — the only path that works.</p>
+      </details>
+      <details>
+        <summary>Can I restrict which tools the AI can use?</summary>
+        <p>Yes. Drop a <code>permissions.json</code> with <code>allow</code> and <code>deny</code> lists. Tools not in the allow list are hidden from the MCP client entirely.</p>
+      </details>
+    </div>
+    <p>
+      <a href="https://github.com/jfarcand/iphone-mirroir-mcp/blob/main/docs/faq.md">Read the full FAQ</a>
+    </p>
   </section>
 
   <!-- Further Documentation -->

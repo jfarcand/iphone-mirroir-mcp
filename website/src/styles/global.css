@@ -241,13 +241,26 @@ section > p {
   color: var(--color-muted);
 }
 
-/* Client logos */
+/* Client groups */
+.client-group {
+  margin-top: 1.25rem;
+}
+
+.client-group h3 {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-muted);
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
 .client-list {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 0.5rem;
-  margin-top: 0.75rem;
 }
 
 .client-list a {
@@ -264,10 +277,56 @@ section > p {
   padding: 0.35rem 0.75rem;
   border-radius: 6px;
   border: 1px solid var(--color-border);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 500;
   color: var(--color-text);
   transition: border-color 0.15s, color 0.15s;
+}
+
+/* FAQ */
+.faq-list {
+  max-width: 640px;
+  margin: 1rem auto;
+}
+
+.faq-list details {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-code-bg);
+  margin-bottom: 0.5rem;
+}
+
+.faq-list summary {
+  padding: 0.6rem 0.85rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--color-text);
+  list-style: none;
+}
+
+.faq-list summary::before {
+  content: "+";
+  display: inline-block;
+  width: 1.2rem;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.faq-list details[open] summary::before {
+  content: "\2212";
+}
+
+.faq-list summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-list details p {
+  padding: 0 0.85rem 0.75rem 2.05rem;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  text-align: left;
+  margin-bottom: 0;
 }
 
 /* Scenario examples (two-column) */

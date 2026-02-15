@@ -268,6 +268,7 @@ brew uninstall iphone-mirroir-mcp
 | | |
 |---|---|
 | [Tools Reference](docs/tools.md) | All 22 tools, parameters, and input workflows |
+| [FAQ](docs/faq.md) | Security, focus stealing, Karabiner, keyboard layouts |
 | [Security](docs/security.md) | Threat model, kill switch, and recommendations |
 | [Permissions](docs/permissions.md) | Fail-closed permission model and config file |
 | [Architecture](docs/architecture.md) | System diagram and how input reaches the iPhone |
