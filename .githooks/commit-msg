@@ -69,18 +69,20 @@ if [ "$first_line_length" -gt 100 ]; then
     exit 1
 fi
 
-# Validate first line starts with conventional commit type (optional but recommended)
+# Validate first line starts with conventional commit type (required)
 if ! echo "$first_line" | grep -qE '^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?: '; then
-    echo "Warning: First line doesn't follow conventional commit format"
+    echo "ERROR: Commit message must use conventional commit format"
     echo ""
-    echo "Recommended format: type(scope): description"
+    echo "Required format: type(scope): description"
     echo "Examples:"
     echo "  feat: add user authentication"
     echo "  fix: resolve database connection issue"
     echo "  docs: update API documentation"
     echo ""
-    echo "Continuing anyway..."
+    echo "Your first line:"
+    echo "   $first_line"
     echo ""
+    exit 1
 fi
 
 echo "Commit message format valid ($line_count line(s))"

@@ -53,6 +53,11 @@ This project uses **Swift Package Manager** (SPM) exclusively. The `Package.swif
 - Do not leave implementation with "In future versions" or "Implement the code" or "Fall back". Always implement the real thing.
 - Commit without AI assistant-related commit messages. Do not reference AI assistance in git commits.
 - Do not add AI-generated commit text in commit messages
+- **Commit messages MUST use conventional commit format:** `type(scope): description`
+  - Types: `feat`, `fix`, `chore`, `docs`, `test`, `refactor`, `ci`, `style`, `perf`, `build`, `revert`
+  - Scope is optional. Multi-scope with `|` is permitted: `fix(module|context): description`
+  - Examples: `feat: add check_health tool`, `fix(scenarios): handle YAML block scalars`, `docs: update architecture guide`
+  - The pre-commit hook enforces this — non-conventional commits are rejected.
 - Always create a branch when adding new features. Bug fixes go directly to main branch.
 - Always run validation after making changes: `swift build` then `swift test`
 
