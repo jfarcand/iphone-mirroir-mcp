@@ -143,18 +143,18 @@ const scenarioIndex = JSON.stringify(scenarios);
 ---
 
 <Layout
-  title="iphone-mirroir-mcp — MCP server for iPhone Mirroring"
-  description="MCP server for macOS iPhone Mirroring. Screenshot, tap, swipe, type — control a real iPhone from any MCP client."
+  title="iphone-mirroir-mcp — Give your AI an iPhone"
+  description="MCP server that gives AI agents full control of a real iPhone through macOS iPhone Mirroring. Test apps, automate tasks, chain workflows across apps."
 >
   <!-- Hero -->
   <header>
     <img src={`${import.meta.env.BASE_URL}logo-robot.svg`} alt="iphone-mirroir-mcp" class="logo" width="80" height="80" />
     <h1>iphone-mirroir-mcp</h1>
     <p class="tagline">
-      The MCP server for iPhone Mirroring.
+      Give your AI an iPhone.
     </p>
     <p class="subtitle">
-      MCP server that controls a real iPhone through macOS iPhone Mirroring. Screenshot, tap, swipe, type — from any MCP client. No Xcode, no simulator, no provisioning profile. Works with any app visible on the iPhone screen: App Store apps, TestFlight builds, Expo Go, React Native dev builds...or any app you want to control!
+      MCP server that gives AI agents full control of a real iPhone through macOS iPhone Mirroring. Screenshot, tap, swipe, type — from any MCP client. Test your Expo app, automate your morning routine, or let your AI read one app and act in another. Works with any app on screen — no source code required.
     </p>
   </header>
 
@@ -188,10 +188,10 @@ const scenarioIndex = JSON.stringify(scenarios);
   <section>
     <h2>Scenarios: intents, not scripts</h2>
     <p>
-      Scenarios are reusable YAML files that describe test flows as intents, not scripts.
+      Scenarios are reusable YAML files that describe automation flows as intents, not scripts.
       Steps like <code>tap: "Email"</code> don't specify coordinates — the AI finds
       the element by OCR matching and adapts to unexpected dialogs and layout changes.
-      Share them from the <a href="https://github.com/jfarcand/iphone-mirroir-scenarios">marketplace</a>.
+      Test an app or automate your morning routine. Share them from the <a href="https://github.com/jfarcand/iphone-mirroir-scenarios">marketplace</a>.
     </p>
 
     <div class="scenario-grid">
@@ -289,9 +289,9 @@ const scenarioIndex = JSON.stringify(scenarios);
   <section>
     <h2>What Does iphone-mirroir-mcp Do?</h2>
     <p>
-      It exposes 21 tools — screenshot, tap, swipe, type, record video — as an MCP server.
-      Works with any app visible on screen: App Store apps, TestFlight builds, Expo Go, React Native dev builds.
-      No Xcode, no simulator, no provisioning profile.
+      It exposes 22 tools — screenshot, tap, swipe, type, record video, health diagnostics — as an MCP server.
+      Works with any app on screen: App Store apps, TestFlight builds, Expo Go, React Native dev builds.
+      No source code required.
     </p>
 
     <div class="tool-grid">
@@ -322,6 +322,7 @@ const scenarioIndex = JSON.stringify(scenarios);
           <li><code>stop_recording</code> <span>End recording, get file path</span></li>
           <li><code>get_orientation</code> <span>Portrait or landscape</span></li>
           <li><code>status</code> <span>Connection and device readiness</span></li>
+          <li><code>check_health</code> <span>Full setup diagnostic</span></li>
         </ul>
       </div>
       <div class="tool-category cat-navigate">
@@ -342,9 +343,11 @@ const scenarioIndex = JSON.stringify(scenarios);
   <!-- Works with -->
   <section>
     <h2>Works with</h2>
-    <p>Any MCP client that supports stdio transport.</p>
+    <p>Any MCP client that supports stdio transport — coding assistants, chat apps, or your own agent.</p>
     <div class="client-list">
       <a href="https://docs.anthropic.com/en/docs/claude-code"><span>Claude Code</span></a>
+      <a href="https://claude.ai"><span>Claude Desktop</span></a>
+      <a href="https://chatgpt.com"><span>ChatGPT</span></a>
       <a href="https://cursor.com"><span>Cursor</span></a>
       <a href="https://github.com/openai/codex"><span>Codex</span></a>
       <a href="https://github.com/features/copilot"><span>GitHub Copilot</span></a>

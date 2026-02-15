@@ -11,7 +11,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)](https://support.apple.com/en-us/105071)
 
-MCP server that controls a real iPhone through macOS iPhone Mirroring. [Screenshot, tap, swipe, type](docs/tools.md) — from any MCP client. No Xcode, no simulator, no provisioning profile. Works with any app visible on the iPhone screen: App Store apps, TestFlight builds, Expo Go, React Native dev builds.
+MCP server that gives AI agents full control of a real iPhone through macOS iPhone Mirroring. [Screenshot, tap, swipe, type](docs/tools.md) — from any MCP client. Test your Expo app, automate your morning routine, or let your AI read one app and act in another. Works with any app on screen — no source code required.
 
 Input flows through [Karabiner](https://karabiner-elements.pqrs.org/) DriverKit virtual HID devices because iPhone Mirroring blocks standard CGEvent injection.
 
@@ -26,7 +26,7 @@ Input flows through [Karabiner](https://karabiner-elements.pqrs.org/) DriverKit 
 npx -y iphone-mirroir-mcp install
 ```
 
-The installer prompts you to select your MCP client (Claude Code, Cursor, GitHub Copilot, or OpenAI Codex) and writes the config automatically.
+The installer prompts you to select your MCP client (Claude Code, Claude Desktop, ChatGPT, Cursor, GitHub Copilot, or OpenAI Codex) and writes the config automatically.
 
 After install, approve the DriverKit extension if prompted: **System Settings > General > Login Items & Extensions** — enable all toggles under Karabiner-Elements. The first time you take a screenshot, macOS will prompt for **Screen Recording** and **Accessibility** permissions. Grant both.
 
@@ -123,7 +123,7 @@ The installer handles everything: installs Karabiner if missing (with confirmati
 
 ## Examples
 
-Paste any of these into Claude Code, Cursor, or any MCP client:
+Paste any of these into Claude Code, Claude Desktop, ChatGPT, Cursor, or any MCP client:
 
 **Send an iMessage:**
 
@@ -156,7 +156,7 @@ recording. I need a video of the scroll lag I'm seeing.
 
 ## Scenarios
 
-Scenarios are YAML files that describe multi-step test flows as intents, not scripts. Steps like `tap: "Email"` don't specify coordinates — the AI finds the element by fuzzy OCR matching and adapts to unexpected dialogs, screen layout changes, and timing.
+Scenarios are YAML files that describe multi-step automation flows as intents, not scripts. Steps like `tap: "Email"` don't specify coordinates — the AI finds the element by fuzzy OCR matching and adapts to unexpected dialogs, screen layout changes, and timing.
 
 **Cross-app workflow** — get your commute ETA from Waze, then text it to someone via iMessage:
 
