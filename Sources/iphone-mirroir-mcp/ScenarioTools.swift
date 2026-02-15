@@ -101,7 +101,7 @@ extension IPhoneMirroirMCP {
     // MARK: Scenario Helpers
 
     /// Metadata extracted from a scenario YAML file header.
-    private struct ScenarioInfo {
+    struct ScenarioInfo {
         let name: String
         let description: String
         let source: String
@@ -109,7 +109,7 @@ extension IPhoneMirroirMCP {
 
     /// Recursively scan scenario directories and return metadata for each .yaml file found.
     /// Project-local files override global files with the same relative path.
-    private static func discoverScenarios() -> [ScenarioInfo] {
+    static func discoverScenarios() -> [ScenarioInfo] {
         let dirs = PermissionPolicy.scenarioDirs
         var seenRelPaths = Set<String>()
         var results: [ScenarioInfo] = []
@@ -130,7 +130,7 @@ extension IPhoneMirroirMCP {
     }
 
     /// Recursively find all .yaml files under a directory, returning relative paths sorted.
-    private static func findYAMLFiles(in baseDir: String) -> [String] {
+    static func findYAMLFiles(in baseDir: String) -> [String] {
         let fm = FileManager.default
         guard let enumerator = fm.enumerator(atPath: baseDir) else { return [] }
 
@@ -145,7 +145,8 @@ extension IPhoneMirroirMCP {
 
     /// Extract name and description from the first lines of a YAML scenario file.
     /// Looks for `name:` and `description:` keys in the file header.
-    private static func extractScenarioHeader(from path: String, source: String) -> ScenarioInfo {
+    /// Handles YAML block scalars (`>` and `|`) by collecting indented continuation lines.
+    static func extractScenarioHeader(from path: String, source: String) -> ScenarioInfo {
         let fallbackName = (path as NSString).lastPathComponent
             .replacingOccurrences(of: ".yaml", with: "")
 
@@ -157,15 +158,56 @@ extension IPhoneMirroirMCP {
             return ScenarioInfo(name: fallbackName, description: "", source: source)
         }
 
+        return extractScenarioHeader(from: content, fallbackName: fallbackName, source: source)
+    }
+
+    /// Parse scenario header from YAML content string.
+    static func extractScenarioHeader(
+        from content: String,
+        fallbackName: String,
+        source: String
+    ) -> ScenarioInfo {
         var name = fallbackName
         var description = ""
 
-        for line in content.components(separatedBy: .newlines).prefix(10) {
+        let lines = content.components(separatedBy: .newlines)
+        let headerLines = Array(lines.prefix(20))
+        var collectingDescription = false
+
+        for line in headerLines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            // If we're collecting block scalar continuation lines
+            if collectingDescription {
+                // Continuation lines must be indented (start with whitespace)
+                // and not be a new top-level key
+                if line.hasPrefix(" ") || line.hasPrefix("\t") {
+                    let continuation = trimmed
+                    if !continuation.isEmpty {
+                        if description.isEmpty {
+                            description = continuation
+                        } else {
+                            description += " " + continuation
+                        }
+                    }
+                    continue
+                } else {
+                    // No longer indented — stop collecting
+                    collectingDescription = false
+                }
+            }
+
             if trimmed.hasPrefix("name:") {
                 name = extractYAMLValue(from: trimmed, key: "name")
             } else if trimmed.hasPrefix("description:") {
-                description = extractYAMLValue(from: trimmed, key: "description")
+                let value = extractYAMLValue(from: trimmed, key: "description")
+                if value == ">" || value == "|" || value == ">-" || value == "|-" {
+                    // Block scalar indicator — collect continuation lines
+                    collectingDescription = true
+                    description = ""
+                } else {
+                    description = value
+                }
             }
         }
 
@@ -173,7 +215,7 @@ extension IPhoneMirroirMCP {
     }
 
     /// Extract the value portion of a simple "key: value" YAML line, stripping quotes.
-    private static func extractYAMLValue(from line: String, key: String) -> String {
+    static func extractYAMLValue(from line: String, key: String) -> String {
         let afterKey = line.dropFirst(key.count + 1) // drop "key:"
         var value = afterKey.trimmingCharacters(in: .whitespaces)
         // Strip surrounding quotes if present
@@ -187,7 +229,7 @@ extension IPhoneMirroirMCP {
     /// Replace ${VAR} and ${VAR:-default} placeholders with environment variable values.
     /// When a default is specified via `:-`, it is used if the env var is unset.
     /// Unresolved variables without defaults are left as-is so the AI can flag them.
-    private static func substituteEnvVars(in text: String) -> String {
+    static func substituteEnvVars(in text: String) -> String {
         var result = text
         let env = ProcessInfo.processInfo.environment
 

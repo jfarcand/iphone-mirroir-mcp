@@ -185,38 +185,7 @@ Scenario YAML files should be validated for:
 
 ## Available Scenarios
 
-Built-in scenarios included in this repository:
-
-### Productivity
-
-| Scenario | App | Description |
-|----------|-----|-------------|
-| `apps/calendar/create-event` | Calendar | Create a new calendar event with title and location |
-| `apps/calendar/check-today` | Calendar | Check today's schedule |
-| `apps/clock/set-alarm` | Clock | Create a new alarm with configurable label |
-| `apps/clock/set-timer` | Clock | Start a countdown timer |
-
-### Communication
-
-| Scenario | App | Description |
-|----------|-----|-------------|
-| `apps/slack/send-message` | Slack | Send a direct message to a contact |
-| `apps/slack/check-unread` | Slack | Check unread messages across channels |
-
-### Information
-
-| Scenario | App | Description |
-|----------|-----|-------------|
-| `apps/weather/check-forecast` | Weather | Check current weather and 10-day forecast |
-| `apps/weather/add-city` | Weather | Search for and add a city to Weather |
-| `apps/settings/check-about` | Settings | Navigate to General > About and verify device info |
-
-### Testing
-
-| Scenario | App | Description |
-|----------|-----|-------------|
-| `testing/expo-go/login-flow` | Expo Go | Test a login screen with email and password |
-| `testing/expo-go/shake-debug-menu` | Expo Go | Open React Native debug menu via shake gesture |
+Scenarios are maintained in the [iphone-mirroir-scenarios](https://github.com/jfarcand/iphone-mirroir-scenarios) repository. Install them via the plugin system (see [Plugin Discovery](#plugin-discovery) above) or clone manually into `~/.iphone-mirroir-mcp/scenarios/`.
 
 ## Contributing a Scenario
 

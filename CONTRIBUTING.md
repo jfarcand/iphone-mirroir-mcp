@@ -58,7 +58,6 @@ iphone-mirroir-mcp/
 │   ├── HelperDaemonTests/      # XCTest — command dispatch + Karabiner wire
 │   └── HelperLibTests/         # Swift Testing — shared library utilities
 │
-├── scenarios/                  # Built-in YAML scenario files
 ├── scripts/                    # Install/uninstall helper scripts
 ├── Resources/                  # LaunchDaemon plist
 └── docs/                       # Documentation
