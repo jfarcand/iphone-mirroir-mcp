@@ -108,6 +108,7 @@ Steps are intents — the AI maps each to the appropriate MCP tool calls:
 | `shake` | calls `shake` |
 | `remember: "instruction"` | AI reads dynamic data from screen and holds it for later steps |
 | `condition:` | Branch based on screen state — see below |
+| `repeat:` | Loop over steps until a screen condition is met — see below |
 
 ### Conditions
 
@@ -124,3 +125,19 @@ Scenarios can branch using `condition` steps. The AI calls `describe_screen` to 
 ```
 
 If the condition is true, the `then` steps execute. If false and `else` is present, those steps execute instead. Steps inside branches are regular steps, including nested conditions.
+
+### Repeats
+
+Scenarios can loop using `repeat` steps. The AI checks a screen condition before each iteration and stops when the condition fails or `max` is reached:
+
+```yaml
+- repeat:
+    while_visible: "Unread"     # or until_visible, or times: N
+    max: 10                      # required safety bound
+    steps:
+      - tap: "Unread"
+      - tap: "Archive"
+      - tap: "< Back"
+```
+
+Loop modes: `while_visible: "Label"` (continue while present), `until_visible: "Label"` (continue until appears), `times: N` (fixed count). Steps inside are regular steps, including conditions and nested repeats.

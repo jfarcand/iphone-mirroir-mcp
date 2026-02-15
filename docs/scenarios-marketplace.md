@@ -108,6 +108,7 @@ Each step is a single key-value pair in the `steps` list. The AI interprets each
 | `long_press` | Element text (string) | `describe_screen` + `long_press` | Find element by OCR, long press on it |
 | `drag` | Object with `from`/`to` | `describe_screen` + `drag` | Find elements by OCR, drag between them |
 | `condition` | Object with `if_visible`/`if_not_visible` + `then`/`else` | `describe_screen` | Branch based on screen state — see below |
+| `repeat` | Object with loop mode + `max` + `steps` | `describe_screen` (poll) | Loop over steps until a screen condition is met — see below |
 
 ### Conditions
 
@@ -124,6 +125,22 @@ Scenarios can branch using `condition` steps. The AI calls `describe_screen` to 
 ```
 
 If the condition is true, the `then` steps execute. If false and `else` is present, those steps execute instead. Steps inside branches are regular steps, including nested conditions (up to 3 levels deep).
+
+### Repeats
+
+Scenarios can loop using `repeat` steps. The AI checks a screen condition before each iteration and stops when the condition fails or `max` is reached:
+
+```yaml
+- repeat:
+    while_visible: "Unread"     # or until_visible, or times: N
+    max: 10                      # required safety bound
+    steps:
+      - tap: "Unread"
+      - tap: "Archive"
+      - tap: "< Back"
+```
+
+Loop modes: `while_visible: "Label"` (continue while present), `until_visible: "Label"` (continue until appears), `times: N` (fixed count). The `max` field is always required to prevent infinite loops. Steps inside are regular steps, including conditions and nested repeats (up to 3 levels deep).
 
 ## Variable Substitution
 
