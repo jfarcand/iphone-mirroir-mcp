@@ -147,6 +147,22 @@ jobs:
           print(f'Helper status: ok={data[\"ok\"]} keyboard={data[\"keyboard_ready\"]} pointing={data[\"pointing_ready\"]}')
           "
 
+      # --- Reinstall test ---
+
+      - name: Test reinstall script
+        run: sudo ./scripts/reinstall-helper.sh
+
+      - name: Wait for socket after reinstall
+        run: |
+          for i in $(seq 1 15); do
+            if [ -S "$SOCKET_PATH" ]; then
+              echo "Socket reappeared after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          test -S "$SOCKET_PATH" || { echo "FAIL: socket not found after reinstall"; exit 1; }
+
       # --- MCP binary from install path ---
 
       - name: Verify MCP binary responds to JSON-RPC initialize
@@ -162,11 +178,6 @@ jobs:
 
       # --- Cleanup ---
 
-      - name: Cleanup daemon and installed files
+      - name: Cleanup
         if: always()
-        run: |
-          sudo launchctl bootout system/$PLIST_NAME 2>/dev/null || true
-          sudo rm -f /Library/LaunchDaemons/$PLIST_NAME.plist
-          sudo rm -f /usr/local/bin/$HELPER_BIN
-          sudo rm -f $SOCKET_PATH
-          echo "Cleanup complete."
+        run: sudo ./scripts/uninstall-helper.sh || true

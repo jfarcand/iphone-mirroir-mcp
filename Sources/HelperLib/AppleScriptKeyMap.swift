@@ -37,7 +37,7 @@ public enum AppleScriptKeyMap {
     ///   - keyCode: macOS virtual key code (from `keyCode(for:)`)
     ///   - modifiers: Optional modifier names ("command", "shift", "option", "control")
     /// - Returns: AppleScript source string ready for NSAppleScript execution
-    public static func buildKeyPressScript(keyCode: UInt16, modifiers: [String] = []) -> String {
+    public static func buildKeyPressScript(keyCode: UInt16, modifiers: [String] = [], processName: String = EnvConfig.mirroringProcessName) -> String {
         let modifierClause: String
         if modifiers.isEmpty {
             modifierClause = ""
@@ -49,7 +49,7 @@ public enum AppleScriptKeyMap {
         return """
             tell application "System Events"
                 set prevApp to name of first process whose frontmost is true
-                tell process "iPhone Mirroring"
+                tell process "\(processName)"
                     set frontmost to true
                 end tell
                 delay 0.1

@@ -36,3 +36,7 @@
 # export IPHONE_MIRROIR_SCROLL_PIXEL_SCALE=8.0         # Pixel-to-scroll-unit scale
 # export IPHONE_MIRROIR_HID_TYPING_CHUNK_SIZE=15       # Max chars per HID chunk
 # export IPHONE_MIRROIR_STAFF_GROUP_ID=20              # macOS staff group GID
+
+# --- App Identity (for testing with FakeMirroring) ---
+# export IPHONE_MIRROIR_BUNDLE_ID=com.apple.ScreenContinuity
+# export IPHONE_MIRROIR_PROCESS_NAME="iPhone Mirroring"

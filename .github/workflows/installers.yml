@@ -1,0 +1,332 @@
+name: Installers
+
+on:
+  push:
+    branches: [main, 'feature/**']
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  source-install:
+    name: Source install (mirroir.sh)
+    runs-on: macos-15
+    env:
+      IPHONE_MIRROIR_BUNDLE_ID: com.jfarcand.FakeMirroring
+      IPHONE_MIRROIR_PROCESS_NAME: FakeMirroring
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Karabiner-Elements
+        run: brew install --cask karabiner-elements
+
+      - name: Create fake Karabiner socket (bypass DriverKit wait)
+        run: |
+          SOCK_DIR="/Library/Application Support/org.pqrs/tmp/rootonly/vhidd_server"
+          sudo mkdir -p "$SOCK_DIR"
+          sudo touch "$SOCK_DIR/vhidd.sock"
+
+      - name: Run mirroir.sh
+        run: ./mirroir.sh
+
+      - name: Verify binaries built
+        run: |
+          test -x .build/release/iphone-mirroir-mcp
+          test -x .build/release/iphone-mirroir-helper
+
+      - name: Verify Karabiner config has ignore rule
+        run: |
+          python3 -c "
+          import json, os
+          with open(os.path.expanduser('~/.config/karabiner/karabiner.json')) as f:
+              config = json.load(f)
+          devices = config['profiles'][0]['devices']
+          match = [d for d in devices
+                   if d.get('identifiers',{}).get('product_id') == 592
+                   and d.get('ignore') is True]
+          assert len(match) >= 1, f'No ignore rule found: {devices}'
+          print('Karabiner ignore rule: OK')
+          "
+
+      - name: Verify daemon responds
+        run: |
+          SOCK="/var/run/iphone-mirroir-helper.sock"
+          for i in $(seq 1 15); do
+            [ -S "$SOCK" ] && break; sleep 1
+          done
+          test -S "$SOCK" || { echo "FAIL: socket not found"; exit 1; }
+          RESPONSE=$(echo '{"action":"status"}' | nc -U "$SOCK" 2>/dev/null)
+          echo "Helper: $RESPONSE"
+          echo "$RESPONSE" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert 'ok' in d, f'Missing ok field: {d}'
+          assert 'keyboard_ready' in d, f'Missing keyboard_ready field: {d}'
+          assert 'pointing_ready' in d, f'Missing pointing_ready field: {d}'
+          print(f'Daemon responding: ok={d[\"ok\"]} keyboard={d[\"keyboard_ready\"]} pointing={d[\"pointing_ready\"]}')
+          "
+
+      - name: Build and package FakeMirroring
+        run: |
+          swift build -c release --product FakeMirroring
+          ./scripts/package-fake-app.sh
+
+      - name: Launch FakeMirroring
+        run: |
+          open .build/release/FakeMirroring.app
+          sleep 3
+
+      - name: Integration tests (FakeMirroring)
+        run: swift test --filter IntegrationTests
+
+      - name: MCP initialize (installed binary)
+        run: |
+          echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+            | .build/release/iphone-mirroir-mcp 2>/dev/null \
+            | python3 -c "
+          import sys, json
+          obj = json.loads(sys.stdin.readline())
+          assert obj['result']['serverInfo']['name'] == 'iphone-mirroir-mcp'
+          print('MCP initialize: OK')
+          "
+
+      - name: MCP tools/call screenshot (installed binary + FakeMirroring)
+        run: |
+          printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"screenshot","arguments":{}}}\n' \
+            | .build/release/iphone-mirroir-mcp --dangerously-skip-permissions 2>/dev/null \
+            | python3 -c "
+          import sys, json
+          lines = sys.stdin.readlines()
+          resp = json.loads(lines[1])
+          content = resp['result']['content']
+          images = [c for c in content if c.get('type') == 'image']
+          assert len(images) > 0, f'Expected image in screenshot response, got: {content}'
+          print(f'screenshot tool: OK ({len(images)} image block(s))')
+          "
+
+      - name: Cleanup
+        if: always()
+        run: sudo ./scripts/uninstall-helper.sh || true
+
+  homebrew-install:
+    name: Homebrew install (local formula)
+    runs-on: macos-15
+    env:
+      IPHONE_MIRROIR_BUNDLE_ID: com.jfarcand.FakeMirroring
+      IPHONE_MIRROIR_PROCESS_NAME: FakeMirroring
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Karabiner-Elements
+        run: brew install --cask karabiner-elements
+
+      - name: Create source tarball
+        run: |
+          TAR_PATH="/tmp/iphone-mirroir-mcp-local.tar.gz"
+          git archive --format=tar.gz --prefix=iphone-mirroir-mcp-local/ HEAD > "$TAR_PATH"
+          SHA=$(shasum -a 256 "$TAR_PATH" | cut -d' ' -f1)
+          echo "TARBALL_PATH=$TAR_PATH" >> $GITHUB_ENV
+          echo "TARBALL_SHA=$SHA" >> $GITHUB_ENV
+
+      - name: Create local tap with formula
+        run: |
+          brew tap-new local/test
+          TAP_DIR="$(brew --repository)/Library/Taps/local/homebrew-test/Formula"
+          mkdir -p "$TAP_DIR"
+          cat > "$TAP_DIR/iphone-mirroir-mcp.rb" << RUBY
+          class IphoneMirroirMcp < Formula
+            desc "MCP server for controlling iPhone through macOS iPhone Mirroring"
+            homepage "https://github.com/jfarcand/iphone-mirroir-mcp"
+            url "file://${TARBALL_PATH}"
+            version "0.0.0-ci"
+            sha256 "${TARBALL_SHA}"
+            license "Apache-2.0"
+
+            depends_on :macos
+            depends_on xcode: ["15.0", :build]
+
+            def install
+              system "swift", "build", "-c", "release", "--disable-sandbox"
+              bin.install ".build/release/iphone-mirroir-mcp"
+              bin.install ".build/release/iphone-mirroir-helper"
+            end
+
+            service do
+              run [opt_bin/"iphone-mirroir-helper"]
+              keep_alive true
+              error_log_path var/"log/iphone-mirroir-helper.log"
+              require_root true
+            end
+
+            test do
+              assert_match "iphone-mirroir-mcp", shell_output("#{bin}/iphone-mirroir-mcp --help 2>&1", 1)
+            end
+          end
+          RUBY
+
+      - name: Install from local tap
+        run: brew install local/test/iphone-mirroir-mcp
+
+      - name: Verify Homebrew-installed binaries
+        run: |
+          which iphone-mirroir-mcp
+          which iphone-mirroir-helper
+
+      - name: Start daemon via brew services
+        run: sudo brew services start iphone-mirroir-mcp
+
+      - name: Wait for daemon socket
+        run: |
+          SOCK="/var/run/iphone-mirroir-helper.sock"
+          for i in $(seq 1 15); do
+            [ -S "$SOCK" ] && break; sleep 1
+          done
+          test -S "$SOCK" || { echo "FAIL: socket not found"; exit 1; }
+
+      - name: Verify daemon responds
+        run: |
+          RESPONSE=$(echo '{"action":"status"}' | nc -U /var/run/iphone-mirroir-helper.sock 2>/dev/null)
+          echo "Helper: $RESPONSE"
+          echo "$RESPONSE" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert 'ok' in d, f'Missing ok field: {d}'
+          assert 'keyboard_ready' in d, f'Missing keyboard_ready field: {d}'
+          assert 'pointing_ready' in d, f'Missing pointing_ready field: {d}'
+          print(f'Daemon responding: ok={d[\"ok\"]} keyboard={d[\"keyboard_ready\"]} pointing={d[\"pointing_ready\"]}')
+          "
+
+      - name: Build and package FakeMirroring
+        run: |
+          swift build -c release --product FakeMirroring
+          ./scripts/package-fake-app.sh
+
+      - name: Launch FakeMirroring
+        run: |
+          open .build/release/FakeMirroring.app
+          sleep 3
+
+      - name: Integration tests (FakeMirroring)
+        run: swift test --filter IntegrationTests
+
+      - name: MCP initialize (brew-installed binary)
+        run: |
+          echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+            | iphone-mirroir-mcp 2>/dev/null \
+            | python3 -c "
+          import sys, json
+          obj = json.loads(sys.stdin.readline())
+          assert obj['result']['serverInfo']['name'] == 'iphone-mirroir-mcp'
+          print('MCP initialize (brew path): OK')
+          "
+
+      - name: MCP tools/call screenshot (brew-installed binary + FakeMirroring)
+        run: |
+          printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"screenshot","arguments":{}}}\n' \
+            | iphone-mirroir-mcp --dangerously-skip-permissions 2>/dev/null \
+            | python3 -c "
+          import sys, json
+          lines = sys.stdin.readlines()
+          resp = json.loads(lines[1])
+          content = resp['result']['content']
+          images = [c for c in content if c.get('type') == 'image']
+          assert len(images) > 0, f'Expected image in screenshot response, got: {content}'
+          print(f'screenshot tool: OK ({len(images)} image block(s))')
+          "
+
+      - name: Cleanup
+        if: always()
+        run: |
+          sudo brew services stop iphone-mirroir-mcp || true
+          sudo brew uninstall iphone-mirroir-mcp || true
+
+  npx-install:
+    name: NPX install (npm package)
+    runs-on: macos-15
+    env:
+      IPHONE_MIRROIR_BUNDLE_ID: com.jfarcand.FakeMirroring
+      IPHONE_MIRROIR_PROCESS_NAME: FakeMirroring
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Karabiner-Elements
+        run: brew install --cask karabiner-elements
+
+      - name: Build release binaries
+        run: swift build -c release
+
+      - name: Stage binaries into npm/bin/ (simulates install.js postinstall)
+        run: |
+          mkdir -p npm/bin
+          cp .build/release/iphone-mirroir-mcp npm/bin/iphone-mirroir-mcp-native
+          cp .build/release/iphone-mirroir-helper npm/bin/iphone-mirroir-helper
+          cp Resources/com.jfarcand.iphone-mirroir-helper.plist npm/bin/
+          chmod +x npm/bin/iphone-mirroir-mcp-native npm/bin/iphone-mirroir-helper
+
+      - name: Run setup.js (daemon installation)
+        run: node setup.js
+        working-directory: npm
+
+      - name: Wait for daemon socket
+        run: |
+          SOCK="/var/run/iphone-mirroir-helper.sock"
+          for i in $(seq 1 15); do
+            [ -S "$SOCK" ] && break; sleep 1
+          done
+          test -S "$SOCK" || { echo "FAIL: socket not found"; exit 1; }
+
+      - name: Verify daemon responds
+        run: |
+          RESPONSE=$(echo '{"action":"status"}' | nc -U /var/run/iphone-mirroir-helper.sock 2>/dev/null)
+          echo "Helper: $RESPONSE"
+          echo "$RESPONSE" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert 'ok' in d, f'Missing ok field: {d}'
+          assert 'keyboard_ready' in d, f'Missing keyboard_ready field: {d}'
+          assert 'pointing_ready' in d, f'Missing pointing_ready field: {d}'
+          print(f'Daemon responding: ok={d[\"ok\"]} keyboard={d[\"keyboard_ready\"]} pointing={d[\"pointing_ready\"]}')
+          "
+
+      - name: Build and package FakeMirroring
+        run: |
+          swift build -c release --product FakeMirroring
+          ./scripts/package-fake-app.sh
+
+      - name: Launch FakeMirroring
+        run: |
+          open .build/release/FakeMirroring.app
+          sleep 3
+
+      - name: Integration tests (FakeMirroring)
+        run: swift test --filter IntegrationTests
+
+      - name: MCP initialize (npx wrapper)
+        run: |
+          echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+            | node npm/bin/iphone-mirroir-mcp 2>/dev/null \
+            | python3 -c "
+          import sys, json
+          obj = json.loads(sys.stdin.readline())
+          assert obj['result']['serverInfo']['name'] == 'iphone-mirroir-mcp'
+          print('MCP initialize (npx wrapper): OK')
+          "
+
+      - name: MCP tools/call screenshot (npx wrapper + FakeMirroring)
+        run: |
+          printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"screenshot","arguments":{}}}\n' \
+            | node npm/bin/iphone-mirroir-mcp --dangerously-skip-permissions 2>/dev/null \
+            | python3 -c "
+          import sys, json
+          lines = sys.stdin.readlines()
+          resp = json.loads(lines[1])
+          content = resp['result']['content']
+          images = [c for c in content if c.get('type') == 'image']
+          assert len(images) > 0, f'Expected image in screenshot response, got: {content}'
+          print(f'screenshot tool: OK ({len(images)} image block(s))')
+          "
+
+      - name: Cleanup
+        if: always()
+        run: sudo ./scripts/uninstall-helper.sh || true

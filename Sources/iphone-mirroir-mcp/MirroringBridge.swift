@@ -6,6 +6,7 @@
 
 import AppKit
 import ApplicationServices
+import HelperLib
 
 /// Device orientation based on mirroring window dimensions.
 enum DeviceOrientation: String, Sendable {
@@ -33,7 +34,7 @@ struct WindowInfo: Sendable {
 /// The iPhone Mirroring window is special — it does not appear in AXWindows
 /// but is accessible via AXMainWindow/AXFocusedWindow.
 final class MirroringBridge: Sendable {
-    private let bundleIdentifier = "com.apple.ScreenContinuity"
+    private let bundleIdentifier = EnvConfig.mirroringBundleID
 
     /// Find the iPhone Mirroring process.
     func findProcess() -> NSRunningApplication? {
@@ -57,7 +58,7 @@ final class MirroringBridge: Sendable {
               CFGetTypeID(window) == AXUIElementGetTypeID()
         else { return nil }
         // Safe cast: CFTypeID check above confirms the type
-        let axWindow = unsafeBitCast(window, to: AXUIElement.self)
+        let axWindow = unsafeDowncast(window, to: AXUIElement.self)
         return (axWindow, pid)
     }
 
@@ -70,7 +71,7 @@ final class MirroringBridge: Sendable {
         AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &posValue)
         var position = CGPoint.zero
         if let pv = posValue, CFGetTypeID(pv) == AXValueGetTypeID() {
-            AXValueGetValue(unsafeBitCast(pv, to: AXValue.self), .cgPoint, &position)
+            AXValueGetValue(unsafeDowncast(pv, to: AXValue.self), .cgPoint, &position)
         }
 
         // Get size
@@ -78,7 +79,7 @@ final class MirroringBridge: Sendable {
         AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &sizeValue)
         var size = CGSize.zero
         if let sv = sizeValue, CFGetTypeID(sv) == AXValueGetTypeID() {
-            AXValueGetValue(unsafeBitCast(sv, to: AXValue.self), .cgSize, &size)
+            AXValueGetValue(unsafeDowncast(sv, to: AXValue.self), .cgSize, &size)
         }
 
         // Find CGWindowID by matching against CGWindowListCopyWindowInfo
@@ -161,7 +162,7 @@ final class MirroringBridge: Sendable {
               let menuBarRef = menuBarValue,
               CFGetTypeID(menuBarRef) == AXUIElementGetTypeID()
         else { return false }
-        let menuBar = unsafeBitCast(menuBarRef, to: AXUIElement.self)
+        let menuBar = unsafeDowncast(menuBarRef, to: AXUIElement.self)
 
         // Find the target menu
         var menuBarChildren: CFTypeRef?

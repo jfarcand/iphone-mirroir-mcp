@@ -10,6 +10,7 @@ DerivedData/
 .mcp.json
 .mcpregistry_*
 claude_docs/*
+claude_code/*
 update-helper.sh
 npm/bin/iphone-mirroir-mcp-native
 npm/bin/iphone-mirroir-helper

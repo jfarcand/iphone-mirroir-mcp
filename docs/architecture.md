@@ -732,3 +732,47 @@ A critical distinction in iPhone Mirroring's input model:
 | **Pixel Scaling** | Divided by 8.0 (pixels → scroll ticks) | Direct coordinate interpolation |
 
 **Getting them confused causes:** Swipe where drag is intended → page scrolls instead of icon rearranging. Drag where swipe is intended → enters icon jiggle mode instead of scrolling.
+
+## 12. Pluggable Target Architecture
+
+The MCP server does not hardcode which app it controls. Two environment variables determine the target:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `IPHONE_MIRROIR_BUNDLE_ID` | `com.apple.ScreenContinuity` | Bundle identifier for process discovery via `NSWorkspace` |
+| `IPHONE_MIRROIR_PROCESS_NAME` | `iPhone Mirroring` | Display name (used in user-facing messages) |
+
+These are read via `EnvConfig` (the same mechanism used for all runtime configuration) and consumed by `MirroringBridge.findProcess()` at the point of use — no caching, no initialization ceremony.
+
+### Why This Matters
+
+Every subsystem that interacts with the target app flows through `MirroringBridge`:
+
+```
+MirroringBridge.findProcess()          ← uses EnvConfig.mirroringBundleID
+    │
+    ├── getWindowInfo()                ← AXUIElement + CGWindowList
+    ├── getState()                     ← AX child inspection
+    ├── getOrientation()               ← window dimensions
+    ├── triggerMenuAction()            ← AX menu bar traversal
+    │
+    └── used by:
+        ├── ScreenCapture              ← screencapture -l <windowID>
+        ├── ScreenDescriber            ← Vision OCR on captured image
+        └── InputSimulation            ← coordinate mapping from window origin
+```
+
+Changing the bundle ID switches the entire system to target a different app. No code paths diverge, no feature flags, no conditional compilation.
+
+### FakeMirroring: The CI Test Target
+
+`FakeMirroring` (`com.jfarcand.FakeMirroring`) is a 100-line macOS app that provides the same API surface as iPhone Mirroring:
+
+- **410×898pt window** matching iPhone Mirroring's portrait dimensions
+- **AX-accessible main window** discoverable via `kAXMainWindowAttribute`
+- **View menu** with Home Screen / Spotlight / App Switcher items for AX traversal tests
+- **Text labels** rendered at 18pt on dark background for Vision OCR validation
+
+It is built as an SPM executable target, packaged into a `.app` bundle by `scripts/package-fake-app.sh`, and used exclusively in CI. The production binary has no knowledge of FakeMirroring — it simply targets whatever `IPHONE_MIRROIR_BUNDLE_ID` resolves to.
+
+**Ref:** `Sources/FakeMirroring/main.swift`, `docs/testing.md`

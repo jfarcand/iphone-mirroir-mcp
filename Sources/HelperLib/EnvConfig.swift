@@ -124,7 +124,21 @@ public enum EnvConfig {
         readUInt32("IPHONE_MIRROIR_STAFF_GROUP_ID", default: TimingConstants.staffGroupID)
     }
 
+    // MARK: - App Identity
+
+    public static var mirroringBundleID: String {
+        readString("IPHONE_MIRROIR_BUNDLE_ID", default: "com.apple.ScreenContinuity")
+    }
+
+    public static var mirroringProcessName: String {
+        readString("IPHONE_MIRROIR_PROCESS_NAME", default: "iPhone Mirroring")
+    }
+
     // MARK: - Private Helpers
+
+    private static func readString(_ key: String, default fallback: String) -> String {
+        env[key] ?? fallback
+    }
 
     private static func readUInt32(_ key: String, default fallback: UInt32) -> UInt32 {
         guard let value = env[key], let parsed = UInt32(value) else { return fallback }

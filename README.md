@@ -273,6 +273,7 @@ brew uninstall iphone-mirroir-mcp
 | [Permissions](docs/permissions.md) | Fail-closed permission model and config file |
 | [Architecture](docs/architecture.md) | System diagram and how input reaches the iPhone |
 | [Known Limitations](docs/limitations.md) | Focus stealing, keyboard layout gaps, autocorrect |
+| [Testing](docs/testing.md) | FakeMirroring, integration tests, and CI strategy |
 | [Troubleshooting](docs/troubleshooting.md) | Debug mode and common issues |
 | [Contributing](CONTRIBUTING.md) | How to add tools, commands, and tests |
 | [Scenarios Marketplace](docs/scenarios-marketplace.md) | Scenario format, plugin discovery, and authoring |

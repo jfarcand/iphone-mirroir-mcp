@@ -36,6 +36,13 @@ let package = Package(
                 .linkedFramework("CoreFoundation"),
             ]
         ),
+        .executableTarget(
+            name: "FakeMirroring",
+            path: "Sources/FakeMirroring",
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+            ]
+        ),
         .testTarget(
             name: "HelperLibTests",
             dependencies: ["HelperLib"]
@@ -47,6 +54,13 @@ let package = Package(
         .testTarget(
             name: "HelperDaemonTests",
             dependencies: ["iphone-mirroir-helper", "HelperLib"]
+        ),
+        .testTarget(
+            name: "IntegrationTests",
+            dependencies: ["iphone-mirroir-mcp", "HelperLib"],
+            linkerSettings: [
+                .linkedFramework("Vision"),
+            ]
         ),
     ]
 )

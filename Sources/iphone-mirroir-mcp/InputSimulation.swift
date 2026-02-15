@@ -26,7 +26,7 @@ struct TypeResult {
 final class InputSimulation: Sendable {
     private let bridge: MirroringBridge
     let helperClient = HelperClient()
-    private let mirroringBundleID = "com.apple.ScreenContinuity"
+    private let mirroringBundleID = EnvConfig.mirroringBundleID
     /// Character substitution table for translating between the iPhone's hardware
     /// keyboard layout and US QWERTY (used by the HID helper). Built once at init
     /// from the first non-US keyboard layout found on the Mac.
@@ -307,9 +307,10 @@ final class InputSimulation: Sendable {
 
         // Always activate — NSWorkspace.frontmostApplication can report stale
         // values when another app gained keyboard focus between MCP calls.
+        let processName = EnvConfig.mirroringProcessName
         let script = NSAppleScript(source: """
             tell application "System Events"
-                tell process "iPhone Mirroring"
+                tell process "\(processName)"
                     set frontmost to true
                 end tell
             end tell
