@@ -114,6 +114,8 @@ pre code {
   background: none;
   color: var(--color-text);
   padding: 0;
+  white-space: nowrap;
+  overflow-x: auto;
 }
 
 .install-block .prompt {
@@ -353,6 +355,15 @@ section > p {
   .scenario-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.search-heading {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-align: center;
+  margin-top: 1.5rem;
+  margin-bottom: 0;
 }
 
 /* Scenario search */
