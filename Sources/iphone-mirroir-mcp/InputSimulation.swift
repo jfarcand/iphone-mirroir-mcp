@@ -334,11 +334,11 @@ final class InputSimulation: Sendable {
 
     /// Type text via Karabiner HID keycodes.
     ///
-    /// When the iPhone's hardware keyboard layout differs from US QWERTY,
-    /// characters are translated through the layout substitution table before
-    /// sending to the HID helper. Characters whose substituted form has no
-    /// HID mapping (e.g., `/` on Canadian-CSA) are skipped and reported in
-    /// the warning field of the result.
+    /// The Karabiner virtual HID presents as a US ANSI keyboard, so iOS
+    /// interprets keycodes as US QWERTY by default. When `IPHONE_KEYBOARD_LAYOUT`
+    /// is set to a non-US layout, characters are translated through a layout
+    /// substitution table before sending to the HID helper. Characters with no
+    /// HID mapping are skipped and reported in the warning field of the result.
     ///
     /// HID segments longer than 15 characters are sent in chunks to stay within
     /// the Karabiner HID report buffer capacity.

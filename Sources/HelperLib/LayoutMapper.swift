@@ -36,150 +36,29 @@ public enum LayoutMapper {
 
     /// Find the iPhone's keyboard layout for character translation.
     ///
-    /// Detection order:
-    /// 1. `IPHONE_KEYBOARD_LAYOUT` environment variable (e.g. "Canadian-CSA")
-    /// 2. First enabled non-US keyboard layout that differs from US QWERTY
-    /// 3. Locale-matched layout from all installed system layouts
-    /// 4. First installed layout that differs from US QWERTY
+    /// Returns a layout only when the `IPHONE_KEYBOARD_LAYOUT` environment variable
+    /// is set (e.g. "Canadian-CSA" or "com.apple.keylayout.Canadian-CSA").
     ///
-    /// Uses `includeAllInstalled=true` to access all 250+ macOS-bundled layouts,
-    /// even those the user hasn't enabled in System Settings. This is needed because
-    /// the iPhone's hardware keyboard layout often differs from the Mac's enabled layouts.
+    /// The Karabiner virtual HID device identifies as a US ANSI keyboard, so iOS
+    /// interprets all HID keycodes as US QWERTY regardless of the iPhone's software
+    /// keyboard language. Auto-detecting from the Mac's installed layouts would
+    /// apply the wrong substitution table (the Mac and iPhone layouts are independent).
+    /// Users who explicitly configure their iPhone's hardware keyboard layout to
+    /// non-US can opt in by setting the environment variable.
     public static func findNonUSLayout() -> (sourceID: String, layoutData: Data)? {
-        // 1. Check environment variable for explicit layout selection.
-        //    Accepts either full source ID ("com.apple.keylayout.Canadian-CSA")
-        //    or short name ("Canadian-CSA").
-        if let envLayout = ProcessInfo.processInfo.environment["IPHONE_KEYBOARD_LAYOUT"],
-           !envLayout.isEmpty
-        {
-            let fullID = envLayout.hasPrefix("com.apple.keylayout.")
-                ? envLayout
-                : "com.apple.keylayout.\(envLayout)"
-            if let data = layoutData(forSourceID: fullID) {
-                return (fullID, data)
-            }
-        }
-
-        // Load US QWERTY data to check which layouts actually differ.
-        // Some layouts (e.g., "Canadian") are identical to US QWERTY for all
-        // standard keys and would produce an empty substitution table.
-        guard let usData = layoutData(forSourceID: "com.apple.keylayout.US") else {
-            return nil
-        }
-
-        // 2. Search all installed keyboard layouts (not just enabled ones).
-        let properties: NSDictionary = [
-            kTISPropertyInputSourceCategory as String: kTISCategoryKeyboardInputSource as String,
-            kTISPropertyInputSourceType as String: kTISTypeKeyboardLayout as String,
-        ]
-        guard let sourceList = TISCreateInputSourceList(properties, true),
-              let sources = sourceList.takeRetainedValue() as? [TISInputSource]
+        // Only apply layout substitution when explicitly configured.
+        // Accepts either full source ID ("com.apple.keylayout.Canadian-CSA")
+        // or short name ("Canadian-CSA").
+        guard let envLayout = ProcessInfo.processInfo.environment["IPHONE_KEYBOARD_LAYOUT"],
+              !envLayout.isEmpty
         else {
             return nil
         }
 
-        // Build the system locale's region name for matching (e.g., "CA" → "canadian").
-        let regionCode = Locale.current.region?.identifier ?? ""
-        let regionSearch = regionDisplayName(for: regionCode).lowercased()
-
-        var enabledMatch: (String, Data)?
-        var localeMatch: (String, Data)?
-        var anyMatch: (String, Data)?
-
-        for source in sources {
-            guard let idRef = TISGetInputSourceProperty(source, kTISPropertyInputSourceID) else {
-                continue
-            }
-            let sourceID = Unmanaged<CFString>.fromOpaque(idRef).takeUnretainedValue() as String
-
-            if sourceID == "com.apple.keylayout.US" { continue }
-            if !sourceID.hasPrefix("com.apple.keylayout.") { continue }
-
-            guard let data = extractLayoutData(from: source) else { continue }
-
-            // Skip layouts identical to US QWERTY (empty substitution).
-            let sub = buildSubstitution(usLayoutData: usData, targetLayoutData: data)
-            if sub.isEmpty { continue }
-
-            // Check if this layout is currently enabled
-            let isEnabled: Bool
-            if let enabledRef = TISGetInputSourceProperty(source, kTISPropertyInputSourceIsEnabled) {
-                isEnabled = CFBooleanGetValue(
-                    Unmanaged<CFBoolean>.fromOpaque(enabledRef).takeUnretainedValue()
-                )
-            } else {
-                isEnabled = false
-            }
-
-            if isEnabled && enabledMatch == nil {
-                enabledMatch = (sourceID, data)
-            }
-
-            // Check if layout name matches the system locale region
-            if !regionSearch.isEmpty
-                && sourceID.lowercased().contains(regionSearch)
-                && localeMatch == nil
-            {
-                localeMatch = (sourceID, data)
-            }
-
-            if anyMatch == nil {
-                anyMatch = (sourceID, data)
-            }
-        }
-
-        // Prefer: enabled > locale-matched > any non-US
-        return enabledMatch ?? localeMatch ?? anyMatch
-    }
-
-    /// Map a region code to a search term for matching Apple keyboard layout source IDs.
-    /// Apple names layouts after countries/regions (e.g., "Canadian-CSA", "French-PC").
-    private static func regionDisplayName(for regionCode: String) -> String {
-        let regionMap: [String: String] = [
-            "CA": "canadian",
-            "FR": "french",
-            "DE": "german",
-            "CH": "swiss",
-            "BE": "belgian",
-            "GB": "british",
-            "IE": "irish",
-            "IT": "italian",
-            "ES": "spanish",
-            "PT": "portuguese",
-            "NL": "dutch",
-            "BR": "brazilian",
-            "JP": "japanese",
-            "KR": "korean",
-            "CN": "chinese",
-            "TW": "chinese",
-            "RU": "russian",
-            "UA": "ukrainian",
-            "PL": "polish",
-            "CZ": "czech",
-            "SK": "slovak",
-            "HU": "hungarian",
-            "RO": "romanian",
-            "BG": "bulgarian",
-            "HR": "croatian",
-            "SI": "slovenian",
-            "RS": "serbian",
-            "GR": "greek",
-            "TR": "turkish",
-            "IL": "hebrew",
-            "SA": "arabic",
-            "IN": "indian",
-            "TH": "thai",
-            "VN": "vietnamese",
-            "NO": "norwegian",
-            "SE": "swedish",
-            "DK": "danish",
-            "FI": "finnish",
-            "IS": "icelandic",
-            "EE": "estonian",
-            "LV": "latvian",
-            "LT": "lithuanian",
-        ]
-        return regionMap[regionCode] ?? regionCode.lowercased()
+        let fullID = envLayout.hasPrefix("com.apple.keylayout.")
+            ? envLayout
+            : "com.apple.keylayout.\(envLayout)"
+        return layoutData(forSourceID: fullID).map { (fullID, $0) }
     }
 
     /// Build a character substitution table between US QWERTY and a target layout.

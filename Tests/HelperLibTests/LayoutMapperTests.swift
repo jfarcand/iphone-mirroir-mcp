@@ -4,6 +4,8 @@
 // ABOUTME: Tests for keyboard layout translation using UCKeyTranslate.
 // ABOUTME: Validates substitution table construction, character translation, and US QWERTY keycode mapping.
 
+import Darwin
+import Foundation
 import Testing
 @testable import HelperLib
 
@@ -142,6 +144,78 @@ struct LayoutMapperTests {
         // because iOS swaps the ISO section key and grave accent key.
         #expect(substitution[Character("/")] == Character("`"),
                 "/ should map to ` after ISO key swap")
+    }
+
+    // MARK: - findNonUSLayout (env var gating)
+
+    @Test("findNonUSLayout returns nil when env var is not set")
+    func findNonUSLayoutDefaultReturnsNil() {
+        let saved = ProcessInfo.processInfo.environment["IPHONE_KEYBOARD_LAYOUT"]
+        unsetenv("IPHONE_KEYBOARD_LAYOUT")
+        defer {
+            if let saved { setenv("IPHONE_KEYBOARD_LAYOUT", saved, 1) }
+            else { unsetenv("IPHONE_KEYBOARD_LAYOUT") }
+        }
+
+        let result = LayoutMapper.findNonUSLayout()
+        #expect(result == nil, "Without env var, findNonUSLayout should return nil (US QWERTY default)")
+    }
+
+    @Test("findNonUSLayout returns layout when env var is set to Canadian-CSA")
+    func findNonUSLayoutWithCanadianCSA() {
+        let saved = ProcessInfo.processInfo.environment["IPHONE_KEYBOARD_LAYOUT"]
+        setenv("IPHONE_KEYBOARD_LAYOUT", "Canadian-CSA", 1)
+        defer {
+            if let saved { setenv("IPHONE_KEYBOARD_LAYOUT", saved, 1) }
+            else { unsetenv("IPHONE_KEYBOARD_LAYOUT") }
+        }
+
+        let result = LayoutMapper.findNonUSLayout()
+        #expect(result != nil, "With IPHONE_KEYBOARD_LAYOUT=Canadian-CSA, should return layout data")
+        #expect(result?.sourceID == "com.apple.keylayout.Canadian-CSA")
+    }
+
+    @Test("findNonUSLayout accepts full source ID in env var")
+    func findNonUSLayoutWithFullSourceID() {
+        let saved = ProcessInfo.processInfo.environment["IPHONE_KEYBOARD_LAYOUT"]
+        setenv("IPHONE_KEYBOARD_LAYOUT", "com.apple.keylayout.Canadian-CSA", 1)
+        defer {
+            if let saved { setenv("IPHONE_KEYBOARD_LAYOUT", saved, 1) }
+            else { unsetenv("IPHONE_KEYBOARD_LAYOUT") }
+        }
+
+        let result = LayoutMapper.findNonUSLayout()
+        #expect(result != nil, "Full source ID should be accepted")
+        #expect(result?.sourceID == "com.apple.keylayout.Canadian-CSA")
+    }
+
+    @Test("findNonUSLayout returns nil for unknown layout name")
+    func findNonUSLayoutWithUnknownLayout() {
+        let saved = ProcessInfo.processInfo.environment["IPHONE_KEYBOARD_LAYOUT"]
+        setenv("IPHONE_KEYBOARD_LAYOUT", "Nonexistent-Layout-XYZ", 1)
+        defer {
+            if let saved { setenv("IPHONE_KEYBOARD_LAYOUT", saved, 1) }
+            else { unsetenv("IPHONE_KEYBOARD_LAYOUT") }
+        }
+
+        let result = LayoutMapper.findNonUSLayout()
+        #expect(result == nil, "Unknown layout should return nil")
+    }
+
+    @Test("US QWERTY produces empty substitution (no-op when iPhone uses US)")
+    func usLayoutProducesEmptySubstitution() {
+        guard let usData = LayoutMapper.layoutData(forSourceID: "com.apple.keylayout.US") else {
+            Issue.record("US QWERTY layout data not found")
+            return
+        }
+
+        // When IPHONE_KEYBOARD_LAYOUT=US, buildSubstitution(us, us) should be empty.
+        // This confirms the no-op behavior for US keyboard users.
+        let substitution = LayoutMapper.buildSubstitution(
+            usLayoutData: usData, targetLayoutData: usData
+        )
+        #expect(substitution.isEmpty,
+                "US → US should produce no substitutions (slash types as slash)")
     }
 
     // MARK: - Round-Trip Consistency
