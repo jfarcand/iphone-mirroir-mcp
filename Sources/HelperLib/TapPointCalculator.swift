@@ -101,10 +101,11 @@ public enum TapPointCalculator {
                     && element.bboxWidth < windowWidth * maxLabelWidthFraction
 
                 let tapY: Double
+                let textCenterY = (element.textTopY + element.textBottomY) / 2.0
                 if isShortLabel && gap > minGapForOffset {
                     tapY = max(element.textTopY - iconOffset, 0.0)
                 } else {
-                    tapY = element.textTopY
+                    tapY = textCenterY
                 }
 
                 results.append(TapPoint(

@@ -87,9 +87,9 @@ struct TapPointCalculatorTests {
         #expect(results.count == 3)
         // "13": gap from 0 = 118 > 50 → offset 30 → tapY = 88
         #expect(results[0].tapY == 88.0)
-        // Both labels in same row: gap = 158 - 134 = 24 < 50 → no offset
-        #expect(results[1].tapY == 158.0, "Météo should use textTopY (gap too small for offset)")
-        #expect(results[2].tapY == 158.0, "Calendrier should use textTopY (gap too small for offset)")
+        // Both labels in same row: gap = 158 - 134 = 24 < 50 → no offset, use text center
+        #expect(results[1].tapY == 164.0, "Météo should use text center (gap too small for offset)")
+        #expect(results[2].tapY == 164.0, "Calendrier should use text center (gap too small for offset)")
     }
 
     // MARK: - Full-width text (no offset)
@@ -109,7 +109,7 @@ struct TapPointCalculatorTests {
         )
 
         #expect(results.count == 1)
-        #expect(results[0].tapY == 200.0, "Long text should use textTopY without offset")
+        #expect(results[0].tapY == 210.0, "Long text should use text center without offset")
     }
 
     @Test("short text wider than 40% of window does not get offset")
@@ -128,7 +128,7 @@ struct TapPointCalculatorTests {
         )
 
         #expect(results.count == 1)
-        #expect(results[0].tapY == 200.0, "Wide short text should not get offset")
+        #expect(results[0].tapY == 207.5, "Wide short text should use text center without offset")
     }
 
     // MARK: - Mixed content
@@ -152,8 +152,8 @@ struct TapPointCalculatorTests {
         #expect(results.count == 3)
         // "Settings": gap = 80 > 50, short label → fixed 30pt offset
         #expect(results[0].tapY == 50.0, "Short label should get 30pt offset")
-        // Long text: not a short label → uses textTopY
-        #expect(results[1].tapY == 130.0, "Long text should not get offset")
+        // Long text: not a short label → uses text center
+        #expect(results[1].tapY == 140.0, "Long text should use text center")
         // "Safari": gap = 250 - 150 = 100 > 50, short label → fixed 30pt offset
         #expect(results[2].tapY == 220.0, "Short label after long text should get 30pt offset")
     }
@@ -174,8 +174,8 @@ struct TapPointCalculatorTests {
         #expect(results.count == 2)
         // "Label A": gap = 100 > 50 → fixed 30pt offset
         #expect(results[0].tapY == 70.0)
-        // "Label B": gap = 120 - 115 = 5 → < 50 → no offset
-        #expect(results[1].tapY == 120.0, "Small gap should prevent offset")
+        // "Label B": gap = 120 - 115 = 5 → < 50 → no offset, use text center
+        #expect(results[1].tapY == 127.5, "Small gap should prevent offset, use text center")
     }
 
     // MARK: - First element at top of screen
@@ -191,8 +191,8 @@ struct TapPointCalculatorTests {
         )
 
         #expect(results.count == 1)
-        // Gap from y=0 to textTopY=5 is 5 → < 50 → no offset
-        #expect(results[0].tapY == 5.0, "Small gap from screen top should prevent offset")
+        // Gap from y=0 to textTopY=5 is 5 → < 50 → no offset, use text center
+        #expect(results[0].tapY == 12.5, "Small gap from screen top should use text center")
     }
 
     @Test("first element with large gap from top gets offset")
@@ -233,8 +233,8 @@ struct TapPointCalculatorTests {
         let results = TapPointCalculator.computeTapPoints(
             elements: elements, windowWidth: windowWidth
         )
-        // "Header": wide text, no offset
-        #expect(results[0].tapY == 0.0)
+        // "Header": wide text, no offset → text center = (0+5)/2 = 2.5
+        #expect(results[0].tapY == 2.5)
         // "App": gap = 60 - 5 = 55 > 50 → offset 30, tapY = 60 - 30 = 30
         #expect(results[1].tapY == 30.0, "Tap Y should be offset when gap > 50")
     }
@@ -251,8 +251,8 @@ struct TapPointCalculatorTests {
         let results = TapPointCalculator.computeTapPoints(
             elements: elements, windowWidth: windowWidth
         )
-        // "Tiny": wide text, no offset
-        #expect(results[0].tapY == 0.0)
+        // "Tiny": wide text, no offset → text center = (0+1)/2 = 0.5
+        #expect(results[0].tapY == 0.5)
         // "X": gap = 52 - 1 = 51 > 50 → offset 30 → tapY = 52 - 30 = 22
         #expect(results[1].tapY == 22.0, "Should apply offset when gap exceeds threshold")
     }
@@ -327,7 +327,7 @@ struct TapPointCalculatorTests {
             elements: elements, windowWidth: windowWidth
         )
 
-        #expect(results[0].tapY == 100.0, "16-char label should not get offset")
+        #expect(results[0].tapY == 107.5, "16-char label should use text center")
     }
 
     @Test("gap of exactly 50 does not trigger offset")
@@ -342,10 +342,10 @@ struct TapPointCalculatorTests {
             elements: elements, windowWidth: windowWidth
         )
 
-        // "First": gap = 0, not > 50 → no offset
-        #expect(results[0].tapY == 0.0)
-        // "Second": gap = 60 - 10 = 50, not > 50 → no offset
-        #expect(results[1].tapY == 60.0, "Gap exactly at threshold should not trigger offset")
+        // "First": gap = 0, not > 50 → no offset, use text center = (0+10)/2 = 5.0
+        #expect(results[0].tapY == 5.0)
+        // "Second": gap = 60 - 10 = 50, not > 50 → no offset, use text center = (60+75)/2 = 67.5
+        #expect(results[1].tapY == 67.5, "Gap exactly at threshold should use text center")
     }
 
     @Test("gap just above 50 triggers fixed offset")
