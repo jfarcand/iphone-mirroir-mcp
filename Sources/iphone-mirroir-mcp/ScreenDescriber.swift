@@ -86,18 +86,34 @@ final class ScreenDescriber: Sendable {
         let windowWidth = Double(info.size.width)
         let windowHeight = Double(info.size.height)
 
+        // Detect the iOS content area within the window. In "Larger" display mode,
+        // iOS content renders at 1:1 from the top-left with dark borders on the
+        // right and bottom. OCR reports pixel positions within the window, but macOS
+        // normalizes taps across the full window — so we must scale OCR coordinates
+        // to compensate.
+        let contentPixelRect = ContentBoundsDetector.detect(image: cgImage)
+        let displayScale = Double(cgImage.width) / windowWidth
+        let contentOriginX = Double(contentPixelRect.minX) / displayScale
+        let contentOriginY = Double(contentPixelRect.minY) / displayScale
+        let contentWidth = Double(contentPixelRect.width) / displayScale
+        let contentHeight = Double(contentPixelRect.height) / displayScale
+        let xScale = windowWidth / max(contentWidth, 1.0)
+        let yScale = windowHeight / max(contentHeight, 1.0)
+
         // Convert Vision normalized coordinates (origin: bottom-left) to
         // tap-point coordinates (origin: top-left of mirroring window).
         // Vision bbox.maxY is the top in normalized space → smallest Y in window space.
+        // The content-bounds correction maps OCR positions (which are within the
+        // content area) to full-window coordinates that macOS will normalize correctly.
         let rawElements: [RawTextElement] = observations.compactMap { observation in
             guard let candidate = observation.topCandidates(1).first else { return nil }
             let bbox = observation.boundingBox
             return RawTextElement(
                 text: candidate.string,
-                tapX: bbox.midX * windowWidth,
-                textTopY: (1.0 - bbox.maxY) * windowHeight,
-                textBottomY: (1.0 - bbox.minY) * windowHeight,
-                bboxWidth: bbox.width * windowWidth,
+                tapX: (bbox.midX * windowWidth - contentOriginX) * xScale,
+                textTopY: ((1.0 - bbox.maxY) * windowHeight - contentOriginY) * yScale,
+                textBottomY: ((1.0 - bbox.minY) * windowHeight - contentOriginY) * yScale,
+                bboxWidth: bbox.width * windowWidth * xScale,
                 confidence: candidate.confidence
             )
         }
