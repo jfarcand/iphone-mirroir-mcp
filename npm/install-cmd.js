@@ -216,12 +216,12 @@ function configureClaudeCode() {
 
   if (!config.mcpServers) config.mcpServers = {};
 
-  if (config.mcpServers["iphone-mirroring"]) {
+  if (config.mcpServers["mirroir"]) {
     console.log(`iphone-mirroring already configured in ${configPath}`);
     return;
   }
 
-  config.mcpServers["iphone-mirroring"] = {
+  config.mcpServers["mirroir"] = {
     type: "stdio",
     command: "npx",
     args: ["-y", "iphone-mirroir-mcp"]
@@ -247,12 +247,12 @@ function configureCursor() {
 
   if (!config.mcpServers) config.mcpServers = {};
 
-  if (config.mcpServers["iphone-mirroring"]) {
+  if (config.mcpServers["mirroir"]) {
     console.log(`iphone-mirroring already configured in ${configPath}`);
     return;
   }
 
-  config.mcpServers["iphone-mirroring"] = {
+  config.mcpServers["mirroir"] = {
     command: "npx",
     args: ["-y", "iphone-mirroir-mcp"]
   };
@@ -278,12 +278,12 @@ function configureCopilot() {
 
   if (!config.servers) config.servers = {};
 
-  if (config.servers["iphone-mirroring"]) {
+  if (config.servers["mirroir"]) {
     console.log(`iphone-mirroring already configured in ${configPath}`);
     return;
   }
 
-  config.servers["iphone-mirroring"] = {
+  config.servers["mirroir"] = {
     type: "stdio",
     command: "npx",
     args: ["-y", "iphone-mirroir-mcp"]

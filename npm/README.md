@@ -21,7 +21,7 @@ Then add to your MCP client config:
 ```json
 {
   "mcpServers": {
-    "iphone-mirroring": {
+    "mirroir": {
       "command": "iphone-mirroir-mcp"
     }
   }

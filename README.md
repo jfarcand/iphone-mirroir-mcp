@@ -47,17 +47,17 @@ After install, approve the DriverKit extension if prompted: **System Settings > 
 #### Claude Code
 
 ```bash
-claude mcp add --transport stdio iphone-mirroring -- npx -y iphone-mirroir-mcp
+claude mcp add --transport stdio mirroir -- npx -y iphone-mirroir-mcp
 ```
 
 #### GitHub Copilot (VS Code)
 
-Install from the MCP server gallery: search `@mcp iphone-mirroring` in the Extensions view, or add to `.vscode/mcp.json`:
+Install from the MCP server gallery: search `@mcp mirroir` in the Extensions view, or add to `.vscode/mcp.json`:
 
 ```json
 {
   "servers": {
-    "iphone-mirroring": {
+    "mirroir": {
       "type": "stdio",
       "command": "npx",
       "args": ["-y", "iphone-mirroir-mcp"]
@@ -73,7 +73,7 @@ Add to `.cursor/mcp.json` in your project root:
 ```json
 {
   "mcpServers": {
-    "iphone-mirroring": {
+    "mirroir": {
       "command": "npx",
       "args": ["-y", "iphone-mirroir-mcp"]
     }
@@ -84,13 +84,13 @@ Add to `.cursor/mcp.json` in your project root:
 #### OpenAI Codex
 
 ```bash
-codex mcp add iphone-mirroring -- npx -y iphone-mirroir-mcp
+codex mcp add mirroir -- npx -y iphone-mirroir-mcp
 ```
 
 Or add to `~/.codex/config.toml`:
 
 ```toml
-[mcp_servers.iphone-mirroring]
+[mcp_servers.mirroir]
 command = "npx"
 args = ["-y", "iphone-mirroir-mcp"]
 ```
