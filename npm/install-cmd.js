@@ -183,10 +183,10 @@ function configureClaudeCode() {
   }
 
   if (hasCli) {
-    console.log("Adding iphone-mirroring to Claude Code via CLI...");
+    console.log("Adding mirroir to Claude Code via CLI...");
     try {
       execSync(
-        'claude mcp add --transport stdio iphone-mirroring -- npx -y iphone-mirroir-mcp',
+        'claude mcp add --transport stdio mirroir -- npx -y iphone-mirroir-mcp',
         { stdio: "inherit" }
       );
     } catch (addErr) {
@@ -209,7 +209,7 @@ function configureClaudeCode() {
       config = JSON.parse(fs.readFileSync(configPath, "utf8"));
     } catch (parseErr) {
       console.error(`Could not parse ${configPath} — add the MCP server manually.`);
-      console.log('  claude mcp add --transport stdio iphone-mirroring -- npx -y iphone-mirroir-mcp');
+      console.log('  claude mcp add --transport stdio mirroir -- npx -y iphone-mirroir-mcp');
       return;
     }
   }
@@ -217,7 +217,7 @@ function configureClaudeCode() {
   if (!config.mcpServers) config.mcpServers = {};
 
   if (config.mcpServers["mirroir"]) {
-    console.log(`iphone-mirroring already configured in ${configPath}`);
+    console.log(`mirroir already configured in ${configPath}`);
     return;
   }
 
@@ -248,7 +248,7 @@ function configureCursor() {
   if (!config.mcpServers) config.mcpServers = {};
 
   if (config.mcpServers["mirroir"]) {
-    console.log(`iphone-mirroring already configured in ${configPath}`);
+    console.log(`mirroir already configured in ${configPath}`);
     return;
   }
 
@@ -279,7 +279,7 @@ function configureCopilot() {
   if (!config.servers) config.servers = {};
 
   if (config.servers["mirroir"]) {
-    console.log(`iphone-mirroring already configured in ${configPath}`);
+    console.log(`mirroir already configured in ${configPath}`);
     return;
   }
 
@@ -298,9 +298,9 @@ function configureCodex() {
   // Prefer the codex CLI if available
   try {
     execSync("which codex", { stdio: "ignore" });
-    console.log("Adding iphone-mirroring to Codex via CLI...");
+    console.log("Adding mirroir to Codex via CLI...");
     execSync(
-      'codex mcp add iphone-mirroring -- npx -y iphone-mirroir-mcp',
+      'codex mcp add mirroir -- npx -y iphone-mirroir-mcp',
       { stdio: "inherit" }
     );
     console.log("Codex configured.");
@@ -315,15 +315,15 @@ function configureCodex() {
 
   if (fs.existsSync(configPath)) {
     const content = fs.readFileSync(configPath, "utf8");
-    if (content.includes("[mcp_servers.iphone-mirroring]")) {
-      console.log("iphone-mirroring already configured in ~/.codex/config.toml");
+    if (content.includes("[mcp_servers.mirroir]")) {
+      console.log("mirroir already configured in ~/.codex/config.toml");
       return;
     }
   }
 
   const tomlBlock = [
     "",
-    "[mcp_servers.iphone-mirroring]",
+    "[mcp_servers.mirroir]",
     'command = "npx"',
     'args = ["-y", "iphone-mirroir-mcp"]',
     ""
