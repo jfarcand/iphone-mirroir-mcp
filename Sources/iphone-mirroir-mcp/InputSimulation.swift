@@ -53,11 +53,26 @@ final class InputSimulation: Sendable {
         }
     }
 
+    /// Verify that iPhone Mirroring is connected and accepting input.
+    /// Returns an error message if input should be blocked, nil if safe to proceed.
+    private func checkMirroringConnected(tag: String) -> String? {
+        let state = bridge.getState()
+        guard state == .connected else {
+            DebugLog.log(tag, "ERROR: mirroring not connected (state: \(state))")
+            return "iPhone Mirroring is not connected. Lock the phone or close the app to stop input."
+        }
+        return nil
+    }
+
     /// Common preamble for coordinate-based input operations.
-    /// Validates that the helper is available, the window exists, coordinates are in bounds,
-    /// then logs window state and ensures mirroring is frontmost.
+    /// Validates that mirroring is connected, the helper is available, the window exists,
+    /// coordinates are in bounds, then logs window state and ensures mirroring is frontmost.
     /// Returns `(info, nil)` on success, or `(nil, errorMessage)` on failure.
     private func prepareInput(tag: String, x: Double, y: Double) -> (info: WindowInfo?, error: String?) {
+        if let stateError = checkMirroringConnected(tag: tag) {
+            return (nil, stateError)
+        }
+
         guard let info = bridge.getWindowInfo() else {
             DebugLog.log(tag, "ERROR: window not found")
             return (nil, "iPhone Mirroring window not found")
@@ -197,6 +212,9 @@ final class InputSimulation: Sendable {
     /// Trigger a shake gesture on the mirrored iPhone.
     /// Sends Ctrl+Cmd+Z which triggers shake-to-undo in iOS apps.
     func shake() -> TypeResult {
+        if let stateError = checkMirroringConnected(tag: "shake") {
+            return TypeResult(success: false, warning: nil, error: stateError)
+        }
         guard helperClient.isAvailable else {
             DebugLog.log("shake", "ERROR: helper unavailable")
             return TypeResult(success: false,
@@ -218,6 +236,9 @@ final class InputSimulation: Sendable {
     /// Opens Spotlight, types the app name, waits for results, and presses Return.
     /// Returns nil on success, or an error message on failure.
     func launchApp(name: String) -> String? {
+        if let stateError = checkMirroringConnected(tag: "launchApp") {
+            return stateError
+        }
         DebugLog.log("launchApp", "launching '\(name)'")
 
         // Step 1: Open Spotlight via menu action
@@ -343,6 +364,9 @@ final class InputSimulation: Sendable {
     /// HID segments longer than 15 characters are sent in chunks to stay within
     /// the Karabiner HID report buffer capacity.
     func typeText(_ text: String) -> TypeResult {
+        if let stateError = checkMirroringConnected(tag: "typeText") {
+            return TypeResult(success: false, warning: nil, error: stateError)
+        }
         guard helperClient.isAvailable else {
             DebugLog.log("typeText", "ERROR: helper unavailable")
             return TypeResult(success: false,
@@ -444,6 +468,9 @@ final class InputSimulation: Sendable {
     /// via Karabiner virtual keyboard through the helper daemon.
     /// Activates iPhone Mirroring if needed (at most one Space switch).
     func pressKey(keyName: String, modifiers: [String] = []) -> TypeResult {
+        if let stateError = checkMirroringConnected(tag: "pressKey") {
+            return TypeResult(success: false, warning: nil, error: stateError)
+        }
         guard helperClient.isAvailable else {
             DebugLog.log("pressKey", "ERROR: helper unavailable")
             return TypeResult(success: false,
