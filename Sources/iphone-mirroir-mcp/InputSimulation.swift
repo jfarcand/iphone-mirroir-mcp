@@ -59,7 +59,7 @@ final class InputSimulation: Sendable {
         let state = bridge.getState()
         guard state == .connected else {
             DebugLog.log(tag, "ERROR: mirroring not connected (state: \(state))")
-            return "iPhone Mirroring is not connected. Lock the phone or close the app to stop input."
+            return "iPhone Mirroring is not connected. Is the phone locked or the app closed?"
         }
         return nil
     }
