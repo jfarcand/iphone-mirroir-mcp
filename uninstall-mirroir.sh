@@ -22,6 +22,7 @@ if sudo launchctl list "$PLIST_NAME" >/dev/null 2>&1; then
 fi
 
 sudo rm -f "/usr/local/bin/$HELPER_BIN"
+sudo rm -f "/usr/local/bin/mirroir"
 sudo rm -f "/Library/LaunchDaemons/$PLIST_NAME.plist"
 sudo rm -f "/var/run/iphone-mirroir-helper.sock"
 sudo rm -f "/var/log/iphone-mirroir-helper.log"

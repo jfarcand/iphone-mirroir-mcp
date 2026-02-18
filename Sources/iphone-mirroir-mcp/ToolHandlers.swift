@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 //
 // ABOUTME: Orchestrates MCP tool registration by delegating to category-specific files.
-// ABOUTME: Each tool category (screen, input, navigation, scenario, info) lives in its own file.
+// ABOUTME: Each tool category (screen, input, navigation, scenario, info, automation) lives in its own file.
 
 import Foundation
 import HelperLib
@@ -25,5 +25,13 @@ extension IPhoneMirroirMCP {
         registerInfoTools(server: server, bridge: bridge, input: input,
                           capture: capture)
         registerScenarioTools(server: server)
+        registerScrollToTools(server: server, bridge: bridge, input: input,
+                              describer: describer)
+        registerAppManagementTools(server: server, bridge: bridge, input: input,
+                                   describer: describer)
+        registerMeasureTools(server: server, bridge: bridge, input: input,
+                             describer: describer)
+        registerNetworkTools(server: server, bridge: bridge, input: input,
+                             describer: describer)
     }
 }

@@ -244,4 +244,247 @@ final class StepExecutorTests: XCTestCase {
         XCTAssertEqual(result.status, .passed)
         XCTAssertEqual(result.message, "dry run")
     }
+
+    // MARK: - scroll_to
+
+    func testScrollToAlreadyVisible() {
+        describer.describeResult = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "About", tapX: 100, tapY: 200, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+
+        let result = executor.execute(
+            step: .scrollTo(label: "About", direction: "up", maxScrolls: 10),
+            stepIndex: 0, scenarioName: "test")
+        XCTAssertEqual(result.status, .passed)
+        XCTAssertEqual(result.message, "already visible")
+        XCTAssertEqual(input.swipeCalls.count, 0)
+    }
+
+    func testScrollToFoundAfterScrolls() {
+        // First call: no match; second call (after swipe): no match; third call: found
+        let noMatch = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "General", tapX: 100, tapY: 200, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+        let differentContent = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "Privacy", tapX: 100, tapY: 200, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+        let found = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "About", tapX: 100, tapY: 300, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+        describer.describeResults = [noMatch, noMatch, differentContent, found]
+
+        let result = executor.execute(
+            step: .scrollTo(label: "About", direction: "up", maxScrolls: 10),
+            stepIndex: 0, scenarioName: "test")
+        XCTAssertEqual(result.status, .passed)
+        XCTAssertTrue(result.message?.contains("scroll(s)") ?? false)
+        XCTAssertTrue(input.swipeCalls.count > 0)
+    }
+
+    func testScrollToExhausted() {
+        // Return same content every time — triggers scroll exhaustion
+        let sameContent = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "General", tapX: 100, tapY: 200, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+        describer.describeResult = sameContent
+
+        let result = executor.execute(
+            step: .scrollTo(label: "About", direction: "up", maxScrolls: 5),
+            stepIndex: 0, scenarioName: "test")
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertTrue(result.message?.contains("exhausted") ?? false)
+    }
+
+    func testScrollToMaxReached() {
+        // Different content each time but target never found
+        let page1 = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "Page1", tapX: 100, tapY: 200, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+        let page2 = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "Page2", tapX: 100, tapY: 200, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+        let page3 = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "Page3", tapX: 100, tapY: 200, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+        // Initial check, then 2 scroll attempts (each needs check + post-swipe OCR)
+        describer.describeResults = [page1, page1, page2, page2, page3]
+
+        let result = executor.execute(
+            step: .scrollTo(label: "Target", direction: "up", maxScrolls: 2),
+            stepIndex: 0, scenarioName: "test")
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertTrue(result.message?.contains("Not found after") ?? false)
+    }
+
+    func testScrollToNoWindowInfo() {
+        describer.describeResult = ScreenDescriber.DescribeResult(
+            elements: [], screenshotBase64: ""
+        )
+        bridge.windowInfo = nil
+
+        let result = executor.execute(
+            step: .scrollTo(label: "About", direction: "up", maxScrolls: 5),
+            stepIndex: 0, scenarioName: "test")
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertTrue(result.message?.contains("window info") ?? false)
+    }
+
+    // MARK: - reset_app
+
+    func testResetAppForceQuit() {
+        describer.describeResult = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "Settings", tapX: 200, tapY: 400, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+
+        let result = executor.execute(
+            step: .resetApp(appName: "Settings"), stepIndex: 0, scenarioName: "test")
+        XCTAssertEqual(result.status, .passed)
+        XCTAssertTrue(result.message?.contains("Force-quit") ?? false)
+        // Verify App Switcher was opened and Home was pressed
+        XCTAssertTrue(bridge.menuActionCalls.contains(where: { $0.item == "App Switcher" }))
+        XCTAssertTrue(bridge.menuActionCalls.contains(where: { $0.item == "Home Screen" }))
+        // Verify swipe up was performed on app card
+        XCTAssertEqual(input.swipeCalls.count, 1)
+    }
+
+    func testResetAppNotInSwitcher() {
+        describer.describeResult = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "Other App", tapX: 200, tapY: 400, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+
+        let result = executor.execute(
+            step: .resetApp(appName: "Settings"), stepIndex: 0, scenarioName: "test")
+        XCTAssertEqual(result.status, .passed)
+        XCTAssertTrue(result.message?.contains("already quit") ?? false)
+        XCTAssertEqual(input.swipeCalls.count, 0)
+    }
+
+    func testResetAppSwitcherFailed() {
+        bridge.menuActionResult = false
+
+        let result = executor.execute(
+            step: .resetApp(appName: "Settings"), stepIndex: 0, scenarioName: "test")
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertTrue(result.message?.contains("App Switcher") ?? false)
+    }
+
+    // MARK: - set_network
+
+    func testSetNetworkAirplaneOn() {
+        describer.describeResult = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "Airplane Mode", tapX: 200, tapY: 150, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+
+        let result = executor.execute(
+            step: .setNetwork(mode: "airplane_on"), stepIndex: 0, scenarioName: "test")
+        XCTAssertEqual(result.status, .passed)
+        XCTAssertTrue(result.message?.contains("airplane_on") ?? false)
+        XCTAssertEqual(input.launchAppCalls, ["Settings"])
+        XCTAssertEqual(input.tapCalls.count, 1)
+    }
+
+    func testSetNetworkInvalidMode() {
+        let result = executor.execute(
+            step: .setNetwork(mode: "bluetooth_on"), stepIndex: 0, scenarioName: "test")
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertTrue(result.message?.contains("Unknown mode") ?? false)
+    }
+
+    func testSetNetworkSettingsLaunchFailed() {
+        input.launchAppResult = "Spotlight failed"
+
+        let result = executor.execute(
+            step: .setNetwork(mode: "wifi_off"), stepIndex: 0, scenarioName: "test")
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertTrue(result.message?.contains("Settings") ?? false)
+    }
+
+    func testSetNetworkTargetNotFound() {
+        describer.describeResult = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "General", tapX: 200, tapY: 150, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+
+        let result = executor.execute(
+            step: .setNetwork(mode: "cellular_off"), stepIndex: 0, scenarioName: "test")
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertTrue(result.message?.contains("not found") ?? false)
+    }
+
+    // MARK: - measure
+
+    func testMeasureSuccess() {
+        // Action (tap) needs OCR, then measure polling needs OCR with target
+        let actionScreen = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "Login", tapX: 200, tapY: 400, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+        let targetScreen = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "Dashboard", tapX: 200, tapY: 100, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+        describer.describeResults = [actionScreen, targetScreen]
+
+        let result = executor.execute(
+            step: .measure(name: "login_time", action: .tap(label: "Login"),
+                           until: "Dashboard", maxSeconds: 5.0),
+            stepIndex: 0, scenarioName: "test")
+        XCTAssertEqual(result.status, .passed)
+        XCTAssertTrue(result.message?.contains("login_time") ?? false)
+    }
+
+    func testMeasureActionFailed() {
+        describer.describeResult = nil  // OCR fails, so tap action fails
+
+        let result = executor.execute(
+            step: .measure(name: "test", action: .tap(label: "Login"),
+                           until: "Dashboard", maxSeconds: 5.0),
+            stepIndex: 0, scenarioName: "test")
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertTrue(result.message?.contains("Action failed") ?? false)
+    }
+
+    func testMeasureTimeout() {
+        let actionScreen = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "Login", tapX: 200, tapY: 400, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+        // Target never appears
+        let noTarget = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "Loading", tapX: 200, tapY: 300, confidence: 0.95)],
+            screenshotBase64: ""
+        )
+        describer.describeResults = [actionScreen, noTarget]
+
+        // Use a very short timeout
+        let shortConfig = StepExecutorConfig(
+            waitForTimeoutSeconds: 1,
+            settlingDelayMs: 0,
+            screenshotDir: NSTemporaryDirectory(),
+            dryRun: false
+        )
+        let shortExecutor = StepExecutor(
+            bridge: bridge, input: input,
+            describer: describer, capture: capture,
+            config: shortConfig
+        )
+
+        let result = shortExecutor.execute(
+            step: .measure(name: "test", action: .tap(label: "Login"),
+                           until: "Dashboard", maxSeconds: 0.5),
+            stepIndex: 0, scenarioName: "test")
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertTrue(result.message?.contains("timed out") ?? false)
+    }
 }

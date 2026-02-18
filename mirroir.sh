@@ -104,6 +104,10 @@ swift build -c release
 echo "Built: .build/release/$MCP_BIN"
 echo "Built: .build/release/$HELPER_BIN"
 
+# Create mirroir symlink for ergonomic CLI access
+ln -sf "$MCP_BIN" ".build/release/mirroir"
+echo "Symlink: .build/release/mirroir -> $MCP_BIN"
+
 # --- Step 4: Configure Karabiner ignore rule ---
 
 echo ""
@@ -163,6 +167,11 @@ echo "=== Installing helper daemon (requires sudo) ==="
 
 sudo cp ".build/release/$HELPER_BIN" /usr/local/bin/
 sudo chmod 755 "/usr/local/bin/$HELPER_BIN"
+
+# Install mirroir CLI symlink for ergonomic command-line access
+MCP_FULL_PATH="$(pwd)/.build/release/$MCP_BIN"
+sudo ln -sf "$MCP_FULL_PATH" /usr/local/bin/mirroir
+echo "Installed: /usr/local/bin/mirroir -> $MCP_FULL_PATH"
 
 if sudo launchctl list "$PLIST_NAME" >/dev/null 2>&1; then
     echo "Stopping existing daemon..."

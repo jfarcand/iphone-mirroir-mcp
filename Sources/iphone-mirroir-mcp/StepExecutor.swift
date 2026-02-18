@@ -101,6 +101,17 @@ final class StepExecutor {
             result = executeOpenURL(url: url, startTime: startTime)
         case .shake:
             result = executeShake(startTime: startTime)
+        case .scrollTo(let label, let direction, let maxScrolls):
+            result = executeScrollTo(label: label, direction: direction,
+                                      maxScrolls: maxScrolls, startTime: startTime)
+        case .resetApp(let appName):
+            result = executeResetApp(appName: appName, startTime: startTime)
+        case .setNetwork(let mode):
+            result = executeSetNetwork(mode: mode, startTime: startTime)
+        case .measure(let name, let action, let until, let maxSeconds):
+            result = executeMeasure(name: name, action: action, until: until,
+                                     maxSeconds: maxSeconds, stepIndex: stepIndex,
+                                     scenarioName: scenarioName, startTime: startTime)
         case .skipped(let stepType, let reason):
             let duration = CFAbsoluteTimeGetCurrent() - startTime
             result = StepResult(step: step, status: .skipped,
@@ -363,6 +374,253 @@ final class StepExecutor {
                               durationSeconds: elapsed(startTime))
         }
         return StepResult(step: step, status: .passed, message: nil,
+                          durationSeconds: elapsed(startTime))
+    }
+
+    // MARK: - scroll_to
+
+    private func executeScrollTo(label: String, direction: String, maxScrolls: Int,
+                                  startTime: CFAbsoluteTime) -> StepResult {
+        let step = ScenarioStep.scrollTo(label: label, direction: direction,
+                                          maxScrolls: maxScrolls)
+
+        // Check if already visible
+        if let describeResult = describer.describe(skipOCR: false),
+           ElementMatcher.isVisible(label: label, in: describeResult.elements) {
+            return StepResult(step: step, status: .passed,
+                              message: "already visible",
+                              durationSeconds: elapsed(startTime))
+        }
+
+        guard let windowInfo = bridge.getWindowInfo() else {
+            return StepResult(step: step, status: .failed,
+                              message: "Could not get window info for scroll",
+                              durationSeconds: elapsed(startTime))
+        }
+
+        let centerX = Double(windowInfo.size.width) / 2.0
+        let centerY = Double(windowInfo.size.height) / 2.0
+        let swipeDistance = Double(windowInfo.size.height) * 0.3
+
+        var previousTexts: [String] = []
+
+        for attempt in 0..<maxScrolls {
+            // Perform swipe
+            let fromX: Double, fromY: Double, toX: Double, toY: Double
+            switch direction.lowercased() {
+            case "up":
+                fromX = centerX; fromY = centerY + swipeDistance / 2
+                toX = centerX; toY = centerY - swipeDistance / 2
+            case "down":
+                fromX = centerX; fromY = centerY - swipeDistance / 2
+                toX = centerX; toY = centerY + swipeDistance / 2
+            case "left":
+                fromX = centerX + swipeDistance / 2; fromY = centerY
+                toX = centerX - swipeDistance / 2; toY = centerY
+            case "right":
+                fromX = centerX - swipeDistance / 2; fromY = centerY
+                toX = centerX + swipeDistance / 2; toY = centerY
+            default:
+                return StepResult(step: step, status: .failed,
+                                  message: "Unknown direction: \(direction)",
+                                  durationSeconds: elapsed(startTime))
+            }
+
+            if let error = input.swipe(fromX: fromX, fromY: fromY,
+                                        toX: toX, toY: toY, durationMs: 300) {
+                return StepResult(step: step, status: .failed,
+                                  message: "Swipe failed: \(error)",
+                                  durationSeconds: elapsed(startTime))
+            }
+
+            usleep(config.settlingDelayMs * 1000)
+
+            // Check for element
+            if let describeResult = describer.describe(skipOCR: false) {
+                if ElementMatcher.isVisible(label: label, in: describeResult.elements) {
+                    return StepResult(step: step, status: .passed,
+                                      message: "found after \(attempt + 1) scroll(s)",
+                                      durationSeconds: elapsed(startTime))
+                }
+
+                // Scroll exhaustion: if OCR results unchanged, list reached its end
+                let currentTexts = describeResult.elements.map { $0.text }.sorted()
+                if currentTexts == previousTexts {
+                    return StepResult(step: step, status: .failed,
+                                      message: "Scroll exhausted after \(attempt + 1) scroll(s) — content stopped changing",
+                                      durationSeconds: elapsed(startTime))
+                }
+                previousTexts = currentTexts
+            }
+        }
+
+        return StepResult(step: step, status: .failed,
+                          message: "Not found after \(maxScrolls) scroll(s)",
+                          durationSeconds: elapsed(startTime))
+    }
+
+    // MARK: - reset_app
+
+    private func executeResetApp(appName: String, startTime: CFAbsoluteTime) -> StepResult {
+        let step = ScenarioStep.resetApp(appName: appName)
+
+        // Open App Switcher
+        guard bridge.triggerMenuAction(menu: "View", item: "App Switcher") else {
+            return StepResult(step: step, status: .failed,
+                              message: "Failed to open App Switcher",
+                              durationSeconds: elapsed(startTime))
+        }
+
+        usleep(config.settlingDelayMs * 1000)
+
+        // OCR to find the app card
+        guard let describeResult = describer.describe(skipOCR: false) else {
+            // Can't read screen — return to home and fail
+            _ = bridge.triggerMenuAction(menu: "View", item: "Home Screen")
+            return StepResult(step: step, status: .failed,
+                              message: "Failed to capture screen in App Switcher",
+                              durationSeconds: elapsed(startTime))
+        }
+
+        guard let match = ElementMatcher.findMatch(label: appName,
+                                                     in: describeResult.elements) else {
+            // App not in switcher — already quit, go home
+            _ = bridge.triggerMenuAction(menu: "View", item: "Home Screen")
+            return StepResult(step: step, status: .passed,
+                              message: "App not in switcher (already quit)",
+                              durationSeconds: elapsed(startTime))
+        }
+
+        // Swipe up on the app card to force-quit
+        let cardX = match.element.tapX
+        let cardY = match.element.tapY
+        if let error = input.swipe(fromX: cardX, fromY: cardY,
+                                    toX: cardX, toY: cardY - 300, durationMs: 200) {
+            _ = bridge.triggerMenuAction(menu: "View", item: "Home Screen")
+            return StepResult(step: step, status: .failed,
+                              message: "Failed to swipe app card: \(error)",
+                              durationSeconds: elapsed(startTime))
+        }
+
+        usleep(config.settlingDelayMs * 1000)
+
+        // Return to home screen
+        _ = bridge.triggerMenuAction(menu: "View", item: "Home Screen")
+
+        return StepResult(step: step, status: .passed,
+                          message: "Force-quit \(appName)",
+                          durationSeconds: elapsed(startTime))
+    }
+
+    // MARK: - set_network
+
+    private func executeSetNetwork(mode: String, startTime: CFAbsoluteTime) -> StepResult {
+        let step = ScenarioStep.setNetwork(mode: mode)
+
+        let validModes = ["airplane_on", "airplane_off", "wifi_on", "wifi_off",
+                          "cellular_on", "cellular_off"]
+        guard validModes.contains(mode) else {
+            return StepResult(step: step, status: .failed,
+                              message: "Unknown mode: \(mode). Use: \(validModes.joined(separator: ", "))",
+                              durationSeconds: elapsed(startTime))
+        }
+
+        // Launch Settings
+        if let error = input.launchApp(name: "Settings") {
+            return StepResult(step: step, status: .failed,
+                              message: "Failed to launch Settings: \(error)",
+                              durationSeconds: elapsed(startTime))
+        }
+        usleep(1_500_000)  // 1.5s for Settings to load
+
+        let targetLabel: String
+        switch mode {
+        case "airplane_on", "airplane_off":
+            targetLabel = "Airplane"
+        case "wifi_on", "wifi_off":
+            targetLabel = "Wi-Fi"
+        case "cellular_on", "cellular_off":
+            targetLabel = "Cellular"
+        default:
+            targetLabel = ""
+        }
+
+        // Find and tap the setting row
+        guard let describeResult = describer.describe(skipOCR: false) else {
+            _ = bridge.triggerMenuAction(menu: "View", item: "Home Screen")
+            return StepResult(step: step, status: .failed,
+                              message: "Failed to capture Settings screen",
+                              durationSeconds: elapsed(startTime))
+        }
+
+        guard let match = ElementMatcher.findMatch(label: targetLabel,
+                                                     in: describeResult.elements) else {
+            _ = bridge.triggerMenuAction(menu: "View", item: "Home Screen")
+            return StepResult(step: step, status: .failed,
+                              message: "\"\(targetLabel)\" not found in Settings",
+                              durationSeconds: elapsed(startTime))
+        }
+
+        if let error = input.tap(x: match.element.tapX, y: match.element.tapY) {
+            _ = bridge.triggerMenuAction(menu: "View", item: "Home Screen")
+            return StepResult(step: step, status: .failed,
+                              message: "Failed to tap \(targetLabel): \(error)",
+                              durationSeconds: elapsed(startTime))
+        }
+
+        usleep(config.settlingDelayMs * 1000)
+
+        // Return to home screen
+        _ = bridge.triggerMenuAction(menu: "View", item: "Home Screen")
+
+        return StepResult(step: step, status: .passed,
+                          message: "Toggled \(mode)",
+                          durationSeconds: elapsed(startTime))
+    }
+
+    // MARK: - measure
+
+    private func executeMeasure(name: String, action: ScenarioStep, until: String,
+                                 maxSeconds: Double?, stepIndex: Int,
+                                 scenarioName: String,
+                                 startTime: CFAbsoluteTime) -> StepResult {
+        let step = ScenarioStep.measure(name: name, action: action,
+                                         until: until, maxSeconds: maxSeconds)
+
+        // Execute the nested action
+        let actionResult = execute(step: action, stepIndex: stepIndex,
+                                    scenarioName: scenarioName)
+        if actionResult.status == .failed {
+            return StepResult(step: step, status: .failed,
+                              message: "Action failed: \(actionResult.message ?? "unknown")",
+                              durationSeconds: elapsed(startTime))
+        }
+
+        // Start measuring
+        let measureStart = CFAbsoluteTimeGetCurrent()
+        let timeout = maxSeconds ?? Double(config.waitForTimeoutSeconds)
+        let pollIntervalUs: useconds_t = 500_000  // 0.5 second polls for finer timing
+
+        let maxPolls = Int(timeout * 2)  // 2 polls per second
+        for _ in 0..<maxPolls {
+            if let describeResult = describer.describe(skipOCR: false),
+               ElementMatcher.isVisible(label: until, in: describeResult.elements) {
+                let measuredSeconds = CFAbsoluteTimeGetCurrent() - measureStart
+                if let max = maxSeconds, measuredSeconds > max {
+                    return StepResult(step: step, status: .failed,
+                                      message: "\(name): \(String(format: "%.3f", measuredSeconds))s exceeded \(String(format: "%.1f", max))s max",
+                                      durationSeconds: elapsed(startTime))
+                }
+                return StepResult(step: step, status: .passed,
+                                  message: "\(name): \(String(format: "%.3f", measuredSeconds))s",
+                                  durationSeconds: elapsed(startTime))
+            }
+            usleep(pollIntervalUs)
+        }
+
+        let measuredSeconds = CFAbsoluteTimeGetCurrent() - measureStart
+        return StepResult(step: step, status: .failed,
+                          message: "\(name): timed out after \(String(format: "%.1f", measuredSeconds))s waiting for \"\(until)\"",
                           durationSeconds: elapsed(startTime))
     }
 

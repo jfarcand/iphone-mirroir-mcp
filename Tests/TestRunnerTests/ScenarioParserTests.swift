@@ -295,4 +295,113 @@ final class ScenarioParserTests: XCTestCase {
         let step = ScenarioStep.pressKey(keyName: "l", modifiers: ["command"])
         XCTAssertEqual(step.displayName, "press_key: \"l\" [command]")
     }
+
+    // MARK: - scroll_to
+
+    func testParseScrollToStep() {
+        let steps = ScenarioParser.parseSteps(from: "steps:\n  - scroll_to: \"About\"")
+        XCTAssertEqual(steps.count, 1)
+        if case .scrollTo(let label, let direction, let maxScrolls) = steps[0] {
+            XCTAssertEqual(label, "About")
+            XCTAssertEqual(direction, "up")
+            XCTAssertEqual(maxScrolls, 10)
+        } else {
+            XCTFail("Expected scroll_to step")
+        }
+    }
+
+    func testDisplayNameScrollTo() {
+        let step = ScenarioStep.scrollTo(label: "About", direction: "up", maxScrolls: 10)
+        XCTAssertEqual(step.displayName, "scroll_to: \"About\"")
+    }
+
+    // MARK: - reset_app
+
+    func testParseResetAppStep() {
+        let steps = ScenarioParser.parseSteps(from: "steps:\n  - reset_app: \"Settings\"")
+        XCTAssertEqual(steps.count, 1)
+        if case .resetApp(let appName) = steps[0] {
+            XCTAssertEqual(appName, "Settings")
+        } else {
+            XCTFail("Expected reset_app step")
+        }
+    }
+
+    func testDisplayNameResetApp() {
+        let step = ScenarioStep.resetApp(appName: "Settings")
+        XCTAssertEqual(step.displayName, "reset_app: \"Settings\"")
+    }
+
+    // MARK: - set_network
+
+    func testParseSetNetworkStep() {
+        let steps = ScenarioParser.parseSteps(from: "steps:\n  - set_network: \"airplane_on\"")
+        XCTAssertEqual(steps.count, 1)
+        if case .setNetwork(let mode) = steps[0] {
+            XCTAssertEqual(mode, "airplane_on")
+        } else {
+            XCTFail("Expected set_network step")
+        }
+    }
+
+    func testDisplayNameSetNetwork() {
+        let step = ScenarioStep.setNetwork(mode: "wifi_off")
+        XCTAssertEqual(step.displayName, "set_network: \"wifi_off\"")
+    }
+
+    // MARK: - measure
+
+    func testParseMeasureInlineStep() {
+        let steps = ScenarioParser.parseSteps(
+            from: "steps:\n  - measure: { tap: \"Login\", until: \"Dashboard\", max: 5, name: \"login_time\" }")
+        XCTAssertEqual(steps.count, 1)
+        if case .measure(let name, let action, let until, let maxSeconds) = steps[0] {
+            XCTAssertEqual(name, "login_time")
+            XCTAssertEqual(until, "Dashboard")
+            XCTAssertEqual(maxSeconds, 5.0)
+            if case .tap(let label) = action {
+                XCTAssertEqual(label, "Login")
+            } else {
+                XCTFail("Expected tap action inside measure")
+            }
+        } else {
+            XCTFail("Expected measure step")
+        }
+    }
+
+    func testParseMeasureWithoutName() {
+        let steps = ScenarioParser.parseSteps(
+            from: "steps:\n  - measure: { tap: \"Go\", until: \"Done\" }")
+        XCTAssertEqual(steps.count, 1)
+        if case .measure(let name, _, let until, let maxSeconds) = steps[0] {
+            XCTAssertEqual(name, "measure")
+            XCTAssertEqual(until, "Done")
+            XCTAssertNil(maxSeconds)
+        } else {
+            XCTFail("Expected measure step")
+        }
+    }
+
+    func testDisplayNameMeasure() {
+        let step = ScenarioStep.measure(
+            name: "login", action: .tap(label: "Go"),
+            until: "Done", maxSeconds: 5.0)
+        XCTAssertEqual(step.displayName, "measure: \"login\"")
+    }
+
+    // MARK: - Scenario with new step types
+
+    func testParseScenarioWithNewSteps() {
+        let yaml = """
+        name: Full Flow
+        steps:
+          - reset_app: "Settings"
+          - launch: "Settings"
+          - scroll_to: "About"
+          - set_network: "wifi_off"
+          - measure: { tap: "General", until: "About", max: 3 }
+        """
+        let scenario = ScenarioParser.parse(content: yaml)
+        XCTAssertEqual(scenario.steps.count, 5)
+    }
 }

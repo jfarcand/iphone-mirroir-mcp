@@ -20,7 +20,8 @@
   ],
   "os": ["darwin"],
   "bin": {
-    "iphone-mirroir-mcp": "bin/iphone-mirroir-mcp"
+    "iphone-mirroir-mcp": "bin/iphone-mirroir-mcp",
+    "mirroir": "bin/iphone-mirroir-mcp"
   },
   "scripts": {
     "postinstall": "node install.js"

@@ -34,6 +34,9 @@ jobs:
         run: |
           test -x .build/release/iphone-mirroir-mcp
           test -x .build/release/iphone-mirroir-helper
+          # Verify mirroir CLI symlink was created
+          test -L /usr/local/bin/mirroir
+          mirroir record --help 2>&1 | grep -q "Record user interactions"
 
       - name: Verify Karabiner config has ignore rule
         run: |
@@ -150,6 +153,7 @@ jobs:
               system "swift", "build", "-c", "release", "--disable-sandbox"
               bin.install ".build/release/iphone-mirroir-mcp"
               bin.install ".build/release/iphone-mirroir-helper"
+              bin.install_symlink "iphone-mirroir-mcp" => "mirroir"
             end
 
             service do
@@ -172,6 +176,9 @@ jobs:
         run: |
           which iphone-mirroir-mcp
           which iphone-mirroir-helper
+          which mirroir
+          # Verify mirroir is a symlink to iphone-mirroir-mcp
+          test "$(readlink "$(which mirroir)")" = "iphone-mirroir-mcp"
 
       - name: Start daemon via brew services
         run: sudo brew services start iphone-mirroir-mcp

@@ -19,12 +19,20 @@ final class FakeMirroringIntegrationTests: XCTestCase {
 
     private var bridge: MirroringBridge!
 
-    override func setUp() {
-        super.setUp()
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+
+        // These tests require FakeMirroring — skip when running against real iPhone Mirroring.
+        // This is environment gating: the tests can only pass when FakeMirroring is configured
+        // and running, which CI sets up explicitly.
+        let bundleID = EnvConfig.mirroringBundleID
+        try XCTSkipUnless(
+            bundleID == "com.jfarcand.FakeMirroring",
+            "Integration tests require IPHONE_MIRROIR_BUNDLE_ID=com.jfarcand.FakeMirroring"
+        )
+
         bridge = MirroringBridge()
 
-        // Verify the FakeMirroring app is running with the expected bundle ID
-        let bundleID = EnvConfig.mirroringBundleID
         guard bridge.findProcess() != nil else {
             XCTFail(
                 "FakeMirroring app is not running. "

@@ -24,6 +24,7 @@ final class StubBridge: MirroringBridging, @unchecked Sendable {
     var menuActionResult = true
     var pressResumeResult = true
     var processRunning = true
+    var menuActionCalls: [(menu: String, item: String)] = []
 
     func findProcess() -> NSRunningApplication? {
         processRunning ? NSRunningApplication.current : nil
@@ -42,7 +43,8 @@ final class StubBridge: MirroringBridging, @unchecked Sendable {
     }
 
     func triggerMenuAction(menu: String, item: String) -> Bool {
-        menuActionResult
+        menuActionCalls.append((menu: menu, item: item))
+        return menuActionResult
     }
 
     func pressResume() -> Bool {
@@ -68,15 +70,28 @@ final class StubInput: InputProviding, @unchecked Sendable {
     ]
     var helperAvailable = true
 
-    func tap(x: Double, y: Double) -> String? { tapResult }
-    func swipe(fromX: Double, fromY: Double, toX: Double, toY: Double, durationMs: Int) -> String? { swipeResult }
+    var tapCalls: [(x: Double, y: Double)] = []
+    var swipeCalls: [(fromX: Double, fromY: Double, toX: Double, toY: Double)] = []
+    var launchAppCalls: [String] = []
+
+    func tap(x: Double, y: Double) -> String? {
+        tapCalls.append((x: x, y: y))
+        return tapResult
+    }
+    func swipe(fromX: Double, fromY: Double, toX: Double, toY: Double, durationMs: Int) -> String? {
+        swipeCalls.append((fromX: fromX, fromY: fromY, toX: toX, toY: toY))
+        return swipeResult
+    }
     func drag(fromX: Double, fromY: Double, toX: Double, toY: Double, durationMs: Int) -> String? { dragResult }
     func longPress(x: Double, y: Double, durationMs: Int) -> String? { longPressResult }
     func doubleTap(x: Double, y: Double) -> String? { doubleTapResult }
     func shake() -> TypeResult { shakeResult }
     func typeText(_ text: String) -> TypeResult { typeTextResult }
     func pressKey(keyName: String, modifiers: [String]) -> TypeResult { pressKeyResult }
-    func launchApp(name: String) -> String? { launchAppResult }
+    func launchApp(name: String) -> String? {
+        launchAppCalls.append(name)
+        return launchAppResult
+    }
     func openURL(_ url: String) -> String? { openURLResult }
     func helperStatus() -> [String: Any]? { statusDict }
     var isHelperAvailable: Bool { helperAvailable }
@@ -96,10 +111,18 @@ final class StubCapture: ScreenCapturing, @unchecked Sendable {
 
 final class StubDescriber: ScreenDescribing, @unchecked Sendable {
     var describeResult: ScreenDescriber.DescribeResult?
+    /// Sequential results returned one per call. When exhausted, repeats the last one.
+    var describeResults: [ScreenDescriber.DescribeResult?] = []
+    private var callCount = 0
     var lastSkipOCR: Bool = false
 
     func describe(skipOCR: Bool) -> ScreenDescriber.DescribeResult? {
         lastSkipOCR = skipOCR
+        if !describeResults.isEmpty {
+            let result = describeResults[min(callCount, describeResults.count - 1)]
+            callCount += 1
+            return result
+        }
         return describeResult
     }
 }

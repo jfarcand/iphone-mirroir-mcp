@@ -80,6 +80,10 @@ public struct PermissionPolicy: Sendable {
         "press_home",
         "press_app_switcher",
         "spotlight",
+        "scroll_to",
+        "reset_app",
+        "measure",
+        "set_network",
     ]
 
     public init(skipPermissions: Bool, config: PermissionConfig?) {

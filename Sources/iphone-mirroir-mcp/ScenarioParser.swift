@@ -28,6 +28,10 @@ enum ScenarioStep {
     case home
     case openURL(url: String)
     case shake
+    case scrollTo(label: String, direction: String, maxScrolls: Int)
+    case resetApp(appName: String)
+    case setNetwork(mode: String)
+    indirect case measure(name: String, action: ScenarioStep, until: String, maxSeconds: Double?)
     case skipped(stepType: String, reason: String)
 
     /// Human-readable description for reporting.
@@ -47,6 +51,10 @@ enum ScenarioStep {
         case .home: return "home"
         case .openURL(let url): return "open_url: \"\(url)\""
         case .shake: return "shake"
+        case .scrollTo(let label, _, _): return "scroll_to: \"\(label)\""
+        case .resetApp(let name): return "reset_app: \"\(name)\""
+        case .setNetwork(let mode): return "set_network: \"\(mode)\""
+        case .measure(let name, _, _, _): return "measure: \"\(name)\""
         case .skipped(let type, _): return "\(type) (skipped)"
         }
     }
@@ -161,6 +169,14 @@ enum ScenarioParser {
             return .openURL(url: value)
         case "shake":
             return .shake
+        case "scroll_to":
+            return .scrollTo(label: value, direction: "up", maxScrolls: 10)
+        case "reset_app":
+            return .resetApp(appName: value)
+        case "set_network":
+            return .setNetwork(mode: value)
+        case "measure":
+            return parseMeasure(value)
         // AI-only steps that cannot run deterministically
         case "remember", "condition", "repeat", "verify", "summarize":
             return .skipped(stepType: key,
@@ -192,6 +208,53 @@ enum ScenarioParser {
     private static func parseWaitFor(_ value: String) -> ScenarioStep {
         // Simple case: just a label
         return .waitFor(label: value, timeoutSeconds: nil)
+    }
+
+    /// Parse a measure step value.
+    /// Format: `{ tap: "Login", until: "Dashboard", max: 5, name: "login_time" }`
+    private static func parseMeasure(_ value: String) -> ScenarioStep {
+        var inner = value
+        // Strip surrounding braces if present
+        if inner.hasPrefix("{") && inner.hasSuffix("}") {
+            inner = String(inner.dropFirst().dropLast())
+        }
+
+        // Extract components separated by commas
+        let parts = inner.components(separatedBy: ",").map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }
+
+        var actionStep: ScenarioStep?
+        var until = ""
+        var maxSeconds: Double?
+        var name = "measure"
+
+        for part in parts {
+            guard let colonIdx = part.firstIndex(of: ":") else { continue }
+            let key = String(part[part.startIndex..<colonIdx])
+                .trimmingCharacters(in: .whitespaces)
+            let val = String(part[part.index(after: colonIdx)...])
+                .trimmingCharacters(in: .whitespaces)
+            let stripped = stripQuotes(val)
+
+            switch key {
+            case "until":
+                until = stripped
+            case "max":
+                maxSeconds = Double(stripped)
+            case "name":
+                name = stripped
+            default:
+                // Try to parse as an action step (e.g., tap: "Login")
+                if let step = parseStep(part) {
+                    actionStep = step
+                }
+            }
+        }
+
+        let action = actionStep ?? .skipped(stepType: "measure",
+                                             reason: "No action found in measure step")
+        return .measure(name: name, action: action, until: until, maxSeconds: maxSeconds)
     }
 
     /// Strip surrounding quotes from a value string.

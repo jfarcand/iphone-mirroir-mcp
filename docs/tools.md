@@ -1,6 +1,6 @@
 # Tools Reference
 
-All 22 tools exposed by the MCP server. Mutating tools require [permission](permissions.md) to appear in `tools/list`.
+All 26 tools exposed by the MCP server. Mutating tools require [permission](permissions.md) to appear in `tools/list`.
 
 ## Tool List
 
@@ -23,6 +23,10 @@ All 22 tools exposed by the MCP server. Mutating tools require [permission](perm
 | `press_home` | — | Go to home screen |
 | `press_app_switcher` | — | Open app switcher |
 | `spotlight` | — | Open Spotlight search |
+| `scroll_to` | `label`, `direction`?, `max_scrolls`? | Scroll until a text element becomes visible via OCR |
+| `reset_app` | `name` | Force-quit an app via the App Switcher |
+| `measure` | `action`, `until`, `max_seconds`?, `name`? | Time a screen transition after an action |
+| `set_network` | `mode` | Toggle network settings (airplane, Wi-Fi, cellular) via Settings |
 | `get_orientation` | — | Report portrait/landscape and window dimensions |
 | `status` | — | Connection state, window geometry, and device readiness |
 | `check_health` | — | Comprehensive setup diagnostic: mirroring, helper, Karabiner, screen capture |
@@ -51,6 +55,35 @@ Set `skip_ocr: true` to skip Vision OCR and return only the grid-overlaid screen
 `press_key` sends special keys that `type_text` can't handle — navigation keys, Return to submit forms, Escape to dismiss dialogs, Tab to switch fields, arrows to move through lists. Add modifiers for shortcuts like Cmd+N (new message) or Cmd+Z (undo).
 
 For navigating within apps, combine `spotlight` + `type_text` + `press_key`. For example: `spotlight` → `type_text "Messages"` → `press_key return` → `press_key {"key":"n","modifiers":["command"]}` to open a new conversation.
+
+## Scroll To
+
+`scroll_to` scrolls in a direction until a target text element becomes visible via OCR. It checks if the element is already on screen before scrolling, and detects scroll exhaustion (when the screen content stops changing, meaning the list has reached its end).
+
+- `label` (required): Text to find on screen
+- `direction` (default: "up"): Scroll direction — "up" means swipe up (scroll content down), matching iOS convention
+- `max_scrolls` (default: 10): Maximum scroll attempts before giving up
+
+## Reset App
+
+`reset_app` force-quits an app via the iOS App Switcher. Opens the App Switcher, finds the app card by OCR, swipes it up to dismiss, then returns to the home screen. If the app isn't in the switcher, it's treated as already quit (success). Use before `launch_app` to ensure a fresh app state.
+
+## Measure
+
+`measure` times a screen transition: performs an action, then polls OCR until a target label appears. Reports the measured duration and optionally fails if it exceeds a threshold.
+
+- `action` (required): Action string in `type:value` format — `tap:Label`, `launch:AppName`, or `press_key:return`
+- `until` (required): Text label to wait for after the action
+- `max_seconds` (optional): Maximum allowed seconds — fails if exceeded
+- `name` (optional): Name for reporting (default: "measure")
+
+## Set Network
+
+`set_network` toggles network settings on the iPhone by navigating the Settings app. After toggling, it returns to the home screen.
+
+Supported modes: `airplane_on`, `airplane_off`, `wifi_on`, `wifi_off`, `cellular_on`, `cellular_off`.
+
+This is the most environment-dependent tool — it relies on the Settings app UI layout, which varies by locale and iOS version. `ElementMatcher` substring matching provides some resilience across locales.
 
 ## Scenarios
 
@@ -112,6 +145,10 @@ Steps are intents — the AI maps each to the appropriate MCP tool calls:
 | `press_home` | calls `press_home` to return to home screen |
 | `open_url` | calls `open_url` |
 | `shake` | calls `shake` |
+| `scroll_to: "Label"` | calls `scroll_to` — scrolls until element visible |
+| `reset_app: "AppName"` | calls `reset_app` — force-quit via App Switcher |
+| `set_network: "mode"` | calls `set_network` — toggle airplane/wifi/cellular |
+| `measure: { action, until, max }` | calls `measure` — time screen transitions |
 | `remember: "instruction"` | AI reads dynamic data from screen and holds it for later steps |
 | `condition:` | Branch based on screen state — see below |
 | `repeat:` | Loop over steps until a screen condition is met — see below |

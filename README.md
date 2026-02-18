@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)](https://support.apple.com/en-us/105071)
 
-MCP server that controls a real iPhone through macOS iPhone Mirroring. [Screenshot, tap, swipe, type](docs/tools.md) — from any MCP client. Works with any app on screen, no source code required.
+MCP server that controls a real iPhone through macOS iPhone Mirroring. [Screenshot, tap, swipe, type, scroll_to, measure](docs/tools.md) — from any MCP client. Works with any app on screen, no source code required.
 
 Input flows through [Karabiner](https://karabiner-elements.pqrs.org/) DriverKit virtual HID devices because iPhone Mirroring blocks standard CGEvent injection.
 
@@ -226,25 +226,25 @@ See [Tools Reference](docs/tools.md#scenarios) for the full step type reference 
 Run scenarios deterministically from the command line — no AI in the loop. Steps execute sequentially: OCR finds elements, taps land on coordinates, assertions pass or fail. Designed for CI, regression testing, and scripted automation.
 
 ```bash
-iphone-mirroir-mcp test [options] <scenario>...
+mirroir test [options] <scenario>...
 ```
 
 **Run a scenario:**
 
 ```bash
-iphone-mirroir-mcp test apps/settings/check-about
+mirroir test apps/settings/check-about
 ```
 
 **Run all scenarios with JUnit output:**
 
 ```bash
-iphone-mirroir-mcp test --junit results.xml --verbose
+mirroir test --junit results.xml --verbose
 ```
 
 **Validate scenarios without executing (dry run):**
 
 ```bash
-iphone-mirroir-mcp test --dry-run apps/settings/*.yaml
+mirroir test --dry-run apps/settings/*.yaml
 ```
 
 | Option | Description |
@@ -260,6 +260,38 @@ The test runner uses the same OCR and input subsystems as the MCP server. Steps 
 Scenario resolution searches `<cwd>/.iphone-mirroir-mcp/scenarios/` and `~/.iphone-mirroir-mcp/scenarios/` — same directories as `list_scenarios`. Pass a `.yaml` path to run a specific file, or a name to search the scenario directories.
 
 Exit code is `0` when all scenarios pass, `1` when any step fails.
+
+## Recorder
+
+Record user interactions with iPhone Mirroring as a scenario YAML file. Click, swipe, and type on the mirrored iPhone — the recorder captures everything via a passive CGEvent tap, labels taps with OCR, and outputs a ready-to-edit scenario.
+
+```bash
+mirroir record [options]
+```
+
+**Record a login flow:**
+
+```bash
+mirroir record -o login-flow.yaml -n "Login Flow" --app "MyApp"
+```
+
+**Fast recording without OCR:**
+
+```bash
+mirroir record --no-ocr -o quick-capture.yaml
+```
+
+| Option | Description |
+|---|---|
+| `--output, -o <path>` | Output file (default: `recorded-scenario.yaml`), use `-` for stdout |
+| `--name, -n <name>` | Scenario name (default: "Recorded Scenario") |
+| `--description <text>` | Scenario description |
+| `--app <name>` | App name for the YAML header |
+| `--no-ocr` | Skip OCR label detection (faster, coordinates only) |
+
+The recorder installs a passive CGEvent tap that observes mouse and keyboard events on the mirroring window. Taps are labeled with the nearest OCR text element. Swipe gestures are detected from mouse drag distance and direction. Keyboard input is grouped into `type:` and `press_key:` steps. Press Ctrl+C to stop and save.
+
+The output is a starting point — review the YAML, replace any `FIXME` coordinate-only taps with text labels, and add `wait_for` steps where needed.
 
 ## Updating
 
@@ -295,7 +327,7 @@ brew uninstall iphone-mirroir-mcp
 
 | | |
 |---|---|
-| [Tools Reference](docs/tools.md) | All 22 tools, parameters, and input workflows |
+| [Tools Reference](docs/tools.md) | All 26 tools, parameters, and input workflows |
 | [FAQ](docs/faq.md) | Security, focus stealing, Karabiner, keyboard layouts |
 | [Security](docs/security.md) | Threat model, kill switch, and recommendations |
 | [Permissions](docs/permissions.md) | Fail-closed permission model and config file |
