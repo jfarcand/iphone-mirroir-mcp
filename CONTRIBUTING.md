@@ -14,14 +14,18 @@ Thank you for your interest in contributing! By submitting a contribution, you a
 ```
 iphone-mirroir-mcp/
 ├── Sources/
-│   ├── iphone-mirroir-mcp/     # MCP server (user process)
-│   │   ├── iphone_mirroir_mcp.swift  # Entry point
+│   ├── iphone-mirroir-mcp/     # MCP server + CLI subcommands (user process)
+│   │   ├── iphone_mirroir_mcp.swift  # Entry point (dispatches test/record subcommands)
 │   │   ├── MCPServer.swift           # JSON-RPC 2.0 dispatch
 │   │   ├── ToolHandlers.swift        # Tool registration orchestrator
 │   │   ├── ScreenTools.swift         # screenshot, describe_screen, recording
 │   │   ├── InputTools.swift          # tap, swipe, drag, type, press_key, etc.
 │   │   ├── NavigationTools.swift     # launch_app, open_url, home, spotlight
-│   │   ├── InfoTools.swift           # status, get_orientation
+│   │   ├── ScrollToTools.swift       # scroll_to — scroll until element visible
+│   │   ├── AppManagementTools.swift  # reset_app — force-quit via App Switcher
+│   │   ├── MeasureTools.swift        # measure — time screen transitions
+│   │   ├── NetworkTools.swift        # set_network — toggle airplane/wifi/cellular
+│   │   ├── InfoTools.swift           # status, get_orientation, check_health
 │   │   ├── ScenarioTools.swift       # list_scenarios, get_scenario
 │   │   ├── Protocols.swift           # DI protocol abstractions
 │   │   ├── MirroringBridge.swift     # AX window discovery + menu actions
@@ -30,14 +34,24 @@ iphone-mirroir-mcp/
 │   │   ├── ScreenRecorder.swift      # Video recording state machine
 │   │   ├── ScreenDescriber.swift     # Vision OCR pipeline
 │   │   ├── HelperClient.swift        # Unix socket client to helper daemon
-│   │   └── DebugLog.swift            # Debug logging to stderr + file
+│   │   ├── DebugLog.swift            # Debug logging to stderr + file
+│   │   ├── TestRunner.swift          # `mirroir test` orchestrator
+│   │   ├── ScenarioParser.swift      # YAML → structured ScenarioStep list
+│   │   ├── StepExecutor.swift        # Runs steps against real subsystems
+│   │   ├── ElementMatcher.swift      # Fuzzy OCR text matching (exact/case/substring)
+│   │   ├── ConsoleReporter.swift     # Terminal output formatting for test runner
+│   │   ├── JUnitReporter.swift       # JUnit XML generation for CI
+│   │   ├── EventRecorder.swift       # `mirroir record` — CGEvent tap monitoring
+│   │   ├── YAMLGenerator.swift       # Recorded events → scenario YAML
+│   │   └── RecordCommand.swift       # `mirroir record` CLI entry point
 │   │
 │   ├── iphone-mirroir-helper/  # Root LaunchDaemon
 │   │   ├── HelperDaemon.swift        # Entry point (root verification, signal handlers)
 │   │   ├── CommandServer.swift       # Unix stream socket listener
 │   │   ├── CommandHandlers.swift     # 10 action handlers (click, type, swipe, etc.)
 │   │   ├── CursorSync.swift          # Save/warp/nudge/restore cursor pattern
-│   │   └── KarabinerClient.swift     # Karabiner DriverKit virtual HID protocol
+│   │   ├── KarabinerClient.swift     # Karabiner DriverKit virtual HID protocol
+│   │   └── KarabinerProviding.swift  # Protocol abstraction for Karabiner client
 │   │
 │   └── HelperLib/              # Shared library (linked into both + tests)
 │       ├── MCPProtocol.swift         # JSON-RPC + MCP types (JSONValue, tool defs)
@@ -50,13 +64,17 @@ iphone-mirroir-mcp/
 │       ├── EnvConfig.swift           # Environment variable overrides
 │       ├── TapPointCalculator.swift  # Smart OCR tap coordinate offset
 │       ├── GridOverlay.swift         # Coordinate grid overlay on screenshots
+│       ├── ContentBoundsDetector.swift # Detects iPhone content bounds in screenshots
 │       ├── AppleScriptKeyMap.swift   # macOS virtual key codes
 │       └── ProcessExtensions.swift   # Timeout-aware Process.wait
 │
 ├── Tests/
 │   ├── MCPServerTests/         # XCTest — server routing + tool handlers
 │   ├── HelperDaemonTests/      # XCTest — command dispatch + Karabiner wire
-│   └── HelperLibTests/         # Swift Testing — shared library utilities
+│   ├── HelperLibTests/         # Swift Testing — shared library utilities
+│   ├── TestRunnerTests/        # Swift Testing — test runner, recorder, scenario parser
+│   ├── IntegrationTests/       # XCTest — FakeMirroring integration (requires running app)
+│   └── Fixtures/               # Test scenario YAML files
 │
 ├── scripts/                    # Install/uninstall helper scripts
 ├── Resources/                  # LaunchDaemon plist

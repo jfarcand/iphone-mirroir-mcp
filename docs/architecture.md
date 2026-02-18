@@ -157,6 +157,8 @@ sequenceDiagram
     participant Stdio as stdin/stdout
 
     Main->>Main: signal(SIGPIPE, SIG_IGN)
+    Main->>Main: Check for subcommands (test, record)
+    Note over Main: "test" → TestRunner.run() (exit)<br/>"record" → RecordCommand.run() (exit)
     Main->>Main: Parse CLI flags (--debug, --dangerously-skip-permissions, --yolo)
     Main->>Policy: loadConfig() — check local then global permissions.json
     Main->>Policy: PermissionPolicy(skipPermissions, config)
@@ -246,6 +248,10 @@ The server supports two MCP protocol versions, negotiating the client's preferre
 | `registerNavigationTools` | `NavigationTools.swift` | `launch_app`, `open_url`, `press_home`, `press_app_switcher`, `spotlight` |
 | `registerInfoTools` | `InfoTools.swift` | `status`, `get_orientation`, `check_health` |
 | `registerScenarioTools` | `ScenarioTools.swift` | `list_scenarios`, `get_scenario` |
+| `registerScrollToTools` | `ScrollToTools.swift` | `scroll_to` |
+| `registerAppManagementTools` | `AppManagementTools.swift` | `reset_app` |
+| `registerMeasureTools` | `MeasureTools.swift` | `measure` |
+| `registerNetworkTools` | `NetworkTools.swift` | `set_network` |
 
 Each tool is defined as an `MCPToolDefinition` containing name, description, JSON Schema input definition, and a synchronous handler closure.
 
@@ -610,7 +616,7 @@ flowchart TD
 
 **Readonly tools** (always allowed): `screenshot`, `describe_screen`, `start_recording`, `stop_recording`, `get_orientation`, `status`, `list_scenarios`, `get_scenario`
 
-**Mutating tools** (require permission): `tap`, `swipe`, `drag`, `type_text`, `press_key`, `long_press`, `double_tap`, `shake`, `launch_app`, `open_url`, `press_home`, `press_app_switcher`, `spotlight`
+**Mutating tools** (require permission): `tap`, `swipe`, `drag`, `type_text`, `press_key`, `long_press`, `double_tap`, `shake`, `launch_app`, `open_url`, `press_home`, `press_app_switcher`, `spotlight`, `scroll_to`, `reset_app`, `measure`, `set_network`
 
 **Config loading:** Project-local (`./.iphone-mirroir-mcp/permissions.json`) takes priority over global (`~/.iphone-mirroir-mcp/permissions.json`). Malformed config → `nil` → fail-closed.
 
@@ -776,3 +782,54 @@ Changing the bundle ID switches the entire system to target a different app. No 
 It is built as an SPM executable target, packaged into a `.app` bundle by `scripts/package-fake-app.sh`, and used exclusively in CI. The production binary has no knowledge of FakeMirroring — it simply targets whatever `IPHONE_MIRROIR_BUNDLE_ID` resolves to.
 
 **Ref:** `Sources/FakeMirroring/main.swift`, `docs/testing.md`
+
+## 13. CLI Subcommands
+
+The `iphone-mirroir-mcp` binary doubles as the `mirroir` CLI (via symlink). Subcommands are dispatched in `main()` before MCP server initialization — they create their own subsystem instances and exit directly.
+
+### `mirroir test` — Deterministic Scenario Runner
+
+Executes scenario YAML files without AI in the loop. Steps run sequentially: OCR finds elements, taps land on coordinates, assertions pass or fail.
+
+```
+main() → TestRunner.run(arguments)
+         │
+         ├── ScenarioParser.parse()     ← YAML → [ScenarioStep]
+         ├── StepExecutor.execute()     ← step → subsystem calls
+         │   ├── ElementMatcher.find()  ← fuzzy OCR text matching
+         │   ├── InputProviding.tap()   ← via real subsystems
+         │   └── ScreenDescribing       ← OCR for assertions
+         ├── ConsoleReporter            ← terminal output
+         └── JUnitReporter              ← XML for CI
+```
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `TestRunner` | `TestRunner.swift` | CLI arg parsing, scenario resolution, orchestration |
+| `ScenarioParser` | `ScenarioParser.swift` | YAML → `ScenarioDefinition` with `[ScenarioStep]` |
+| `StepExecutor` | `StepExecutor.swift` | Runs each step against real subsystems |
+| `ElementMatcher` | `ElementMatcher.swift` | Fuzzy OCR text matching (exact → case-insensitive → substring) |
+| `ConsoleReporter` | `ConsoleReporter.swift` | Per-step/per-scenario terminal formatting |
+| `JUnitReporter` | `JUnitReporter.swift` | JUnit XML generation for CI integration |
+
+### `mirroir record` — Interaction Recorder
+
+Captures live user interactions with iPhone Mirroring as scenario YAML via a passive CGEvent tap.
+
+```
+main() → RecordCommand.run(arguments)
+         │
+         ├── EventRecorder.start()       ← passive CGEvent tap
+         │   ├── mouseDown → OCR cache   ← label lookup before screen changes
+         │   ├── mouseUp → classify      ← tap vs swipe vs long_press
+         │   └── keyDown → buffer        ← group into type/press_key steps
+         ├── (Ctrl+C) → EventRecorder.stop()
+         └── YAMLGenerator.generate()    ← events → scenario YAML file
+```
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `RecordCommand` | `RecordCommand.swift` | CLI arg parsing, signal handling, output |
+| `EventRecorder` | `EventRecorder.swift` | CGEvent tap setup, mouse/key event handling |
+| `EventClassifier` | `EventRecorder.swift` | Pure classification logic (distance/duration thresholds) |
+| `YAMLGenerator` | `YAMLGenerator.swift` | Converts `[RecordedEvent]` → scenario YAML |
