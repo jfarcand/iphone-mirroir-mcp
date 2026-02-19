@@ -34,6 +34,52 @@ enum ScenarioStep {
     indirect case measure(name: String, action: ScenarioStep, until: String, maxSeconds: Double?)
     case skipped(stepType: String, reason: String)
 
+    /// The step type as a YAML key string (e.g. "tap", "wait_for", "launch").
+    var typeKey: String {
+        switch self {
+        case .launch: return "launch"
+        case .tap: return "tap"
+        case .type: return "type"
+        case .pressKey: return "press_key"
+        case .swipe: return "swipe"
+        case .waitFor: return "wait_for"
+        case .assertVisible: return "assert_visible"
+        case .assertNotVisible: return "assert_not_visible"
+        case .screenshot: return "screenshot"
+        case .home: return "home"
+        case .openURL: return "open_url"
+        case .shake: return "shake"
+        case .scrollTo: return "scroll_to"
+        case .resetApp: return "reset_app"
+        case .setNetwork: return "set_network"
+        case .measure: return "measure"
+        case .skipped(let stepType, _): return stepType
+        }
+    }
+
+    /// The primary label/value associated with this step, if any.
+    var labelValue: String? {
+        switch self {
+        case .launch(let name): return name
+        case .tap(let label): return label
+        case .type(let text): return text
+        case .pressKey(let key, _): return key
+        case .swipe(let dir): return dir
+        case .waitFor(let label, _): return label
+        case .assertVisible(let label): return label
+        case .assertNotVisible(let label): return label
+        case .screenshot(let label): return label
+        case .home: return nil
+        case .openURL(let url): return url
+        case .shake: return nil
+        case .scrollTo(let label, _, _): return label
+        case .resetApp(let name): return name
+        case .setNetwork(let mode): return mode
+        case .measure(let name, _, _, _): return name
+        case .skipped: return nil
+        }
+    }
+
     /// Human-readable description for reporting.
     var displayName: String {
         switch self {

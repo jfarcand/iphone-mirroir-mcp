@@ -27,6 +27,10 @@ struct IPhoneMirroirMCP {
             let exitCode = RecordCommand.run(arguments: Array(args.dropFirst(2)))
             Darwin.exit(exitCode)
         }
+        if args.count >= 2 && args[1] == "compile" {
+            let exitCode = CompileCommand.run(arguments: Array(args.dropFirst(2)))
+            Darwin.exit(exitCode)
+        }
         let skipPermissions = PermissionPolicy.parseSkipPermissions(from: args)
         DebugLog.enabled = args.contains("--debug")
         DebugLog.reset()

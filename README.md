@@ -261,6 +261,27 @@ Scenario resolution searches `<cwd>/.iphone-mirroir-mcp/scenarios/` and `~/.ipho
 
 Exit code is `0` when all scenarios pass, `1` when any step fails.
 
+### Compiled Scenarios
+
+Compile a scenario once against a real device to capture coordinates, timing, and scroll counts. Replay with zero OCR — pure input injection plus timing. Like JIT compilation for UI automation.
+
+**Compile (learning run):**
+
+```bash
+mirroir compile apps/settings/check-about
+```
+
+**Run compiled (zero OCR):**
+
+```bash
+mirroir test apps/settings/check-about       # auto-detects .compiled.json
+mirroir test --no-compiled check-about        # force full OCR
+```
+
+Each OCR-dependent step (~500ms per call) becomes a direct tap at cached coordinates, a timed sleep, or a replayed scroll sequence. A 10-step scenario that spent 5+ seconds on OCR runs in under a second.
+
+Compiled files are invalidated automatically when the source YAML changes (SHA-256 hash), the window dimensions change, or the format version bumps. See [Compiled Scenarios](docs/compiled-scenarios.md) for the file format, architecture, and design rationale.
+
 ## Recorder
 
 Record user interactions with iPhone Mirroring as a scenario YAML file. Click, swipe, and type on the mirrored iPhone — the recorder captures everything via a passive CGEvent tap, labels taps with OCR, and outputs a ready-to-edit scenario.
@@ -333,6 +354,7 @@ brew uninstall iphone-mirroir-mcp
 | [Permissions](docs/permissions.md) | Fail-closed permission model and config file |
 | [Architecture](docs/architecture.md) | System diagram and how input reaches the iPhone |
 | [Known Limitations](docs/limitations.md) | Focus stealing, keyboard layout gaps, autocorrect |
+| [Compiled Scenarios](docs/compiled-scenarios.md) | JIT compilation for zero-OCR scenario replay |
 | [Testing](docs/testing.md) | FakeMirroring, integration tests, and CI strategy |
 | [Troubleshooting](docs/troubleshooting.md) | Debug mode and common issues |
 | [Contributing](CONTRIBUTING.md) | How to add tools, commands, and tests |

@@ -16,6 +16,7 @@ struct TestRunConfig {
     let timeoutSeconds: Int
     let verbose: Bool
     let dryRun: Bool
+    let noCompiled: Bool
     let showHelp: Bool
 }
 
@@ -89,13 +90,61 @@ enum TestRunner {
             config: executorConfig
         )
 
+        // Load compiled scenarios if available
+        let windowInfo = bridge.getWindowInfo()
+        var compiledMap: [String: CompiledScenario] = [:]
+        if !config.noCompiled {
+            let windowWidth = windowInfo.map { Double($0.size.width) } ?? 0
+            let windowHeight = windowInfo.map { Double($0.size.height) } ?? 0
+            for scenario in scenarios {
+                if let compiled = try? CompiledScenarioIO.load(for: scenario.filePath) {
+                    let staleness = CompiledScenarioIO.checkStaleness(
+                        compiled: compiled, yamlPath: scenario.filePath,
+                        windowWidth: windowWidth, windowHeight: windowHeight)
+                    switch staleness {
+                    case .fresh:
+                        compiledMap[scenario.filePath] = compiled
+                    case .stale(let reason):
+                        fputs("Warning: compiled scenario stale for \(scenario.name): \(reason)\n", stderr)
+                    }
+                }
+            }
+        }
+
         // Execute scenarios
         var allResults: [ConsoleReporter.ScenarioResult] = []
+        var totalCompiledSteps = 0
+        var totalNormalSteps = 0
 
         for scenario in scenarios {
-            let result = executeScenario(scenario: scenario, executor: executor,
+            let result: ConsoleReporter.ScenarioResult
+            if let compiled = compiledMap[scenario.filePath] {
+                let compiledExecutor = CompiledStepExecutor(
+                    bridge: bridge, input: input,
+                    describer: describer, capture: capture,
+                    config: executorConfig
+                )
+                result = executeCompiledScenario(
+                    scenario: scenario, compiled: compiled,
+                    compiledExecutor: compiledExecutor,
+                    normalExecutor: executor,
+                    verbose: config.verbose)
+                totalCompiledSteps += compiled.steps.filter {
+                    $0.hints?.compiledAction != .passthrough
+                }.count
+                totalNormalSteps += compiled.steps.filter {
+                    $0.hints?.compiledAction == .passthrough || $0.hints == nil
+                }.count
+            } else {
+                result = executeScenario(scenario: scenario, executor: executor,
                                          verbose: config.verbose)
+                totalNormalSteps += scenario.steps.count
+            }
             allResults.append(result)
+        }
+
+        if totalCompiledSteps > 0 {
+            fputs("\nCompiled: \(totalCompiledSteps) step(s) OCR-free, \(totalNormalSteps) normal\n", stderr)
         }
 
         // Print summary
@@ -165,6 +214,67 @@ enum TestRunner {
         return scenarioResult
     }
 
+    /// Execute a scenario using compiled hints for OCR-free replay.
+    static func executeCompiledScenario(
+        scenario: ScenarioDefinition,
+        compiled: CompiledScenario,
+        compiledExecutor: CompiledStepExecutor,
+        normalExecutor: StepExecutor,
+        verbose: Bool
+    ) -> ConsoleReporter.ScenarioResult {
+        let stepCount = scenario.steps.count
+        ConsoleReporter.reportScenarioStart(
+            name: scenario.name + " [compiled]",
+            filePath: scenario.filePath, stepCount: stepCount)
+
+        let startTime = CFAbsoluteTimeGetCurrent()
+        var stepResults: [StepResult] = []
+        var stopOnFailure = false
+
+        for (index, step) in scenario.steps.enumerated() {
+            if stopOnFailure {
+                let skippedResult = StepResult(
+                    step: step, status: .skipped,
+                    message: "Skipped due to previous failure",
+                    durationSeconds: 0)
+                stepResults.append(skippedResult)
+                ConsoleReporter.reportStep(index: index, total: stepCount,
+                                           result: skippedResult, verbose: verbose)
+                continue
+            }
+
+            let result: StepResult
+            if index < compiled.steps.count {
+                let compiledStep = compiled.steps[index]
+                result = compiledExecutor.execute(
+                    step: step, compiledStep: compiledStep,
+                    stepIndex: index, scenarioName: scenario.name)
+            } else {
+                // More steps in YAML than compiled — fall back to normal
+                result = normalExecutor.execute(
+                    step: step, stepIndex: index, scenarioName: scenario.name)
+            }
+
+            stepResults.append(result)
+            ConsoleReporter.reportStep(index: index, total: stepCount,
+                                       result: result, verbose: verbose)
+
+            if result.status == .failed {
+                stopOnFailure = true
+            }
+        }
+
+        let totalDuration = CFAbsoluteTimeGetCurrent() - startTime
+        let scenarioResult = ConsoleReporter.ScenarioResult(
+            name: scenario.name,
+            filePath: scenario.filePath,
+            stepResults: stepResults,
+            durationSeconds: totalDuration
+        )
+        ConsoleReporter.reportScenarioEnd(result: scenarioResult)
+        return scenarioResult
+    }
+
     // MARK: - Argument Parsing
 
     /// Parse CLI arguments into TestRunConfig.
@@ -175,6 +285,7 @@ enum TestRunner {
         var timeoutSeconds = 15
         var verbose = false
         var dryRun = false
+        var noCompiled = false
         var showHelp = false
 
         var i = 0
@@ -196,6 +307,8 @@ enum TestRunner {
                 verbose = true
             case "--dry-run":
                 dryRun = true
+            case "--no-compiled":
+                noCompiled = true
             default:
                 if !arg.hasPrefix("-") {
                     scenarioArgs.append(arg)
@@ -211,6 +324,7 @@ enum TestRunner {
             timeoutSeconds: timeoutSeconds,
             verbose: verbose,
             dryRun: dryRun,
+            noCompiled: noCompiled,
             showHelp: showHelp
         )
     }
@@ -309,6 +423,7 @@ enum TestRunner {
           --timeout <sec>     wait_for timeout in seconds (default: 15)
           --verbose, -v       Show detailed output
           --dry-run           Parse and validate without executing
+          --no-compiled       Skip compiled scenarios (force full OCR)
           --help, -h          Show this help
 
         Examples:
