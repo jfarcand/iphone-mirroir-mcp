@@ -146,7 +146,7 @@ jobs:
           TAP_DIR="$(brew --repository)/Library/Taps/local/homebrew-test/Formula"
           mkdir -p "$TAP_DIR"
           cat > "$TAP_DIR/mirroir-mcp.rb" << RUBY
-          class IphoneMirroirMcp < Formula
+          class MirroirMcp < Formula
             desc "MCP server for controlling iPhone through macOS iPhone Mirroring"
             homepage "https://github.com/jfarcand/mirroir-mcp"
             url "file://${TARBALL_PATH}"
