@@ -405,6 +405,52 @@ brew uninstall iphone-mirroir-mcp
 ./uninstall-mirroir.sh
 ```
 
+## Configuration
+
+All timing delays and numeric constants have sensible defaults compiled into the binary. To override any value, create a `settings.json` file:
+
+```bash
+# Project-local (takes priority)
+mkdir -p .iphone-mirroir-mcp
+cat > .iphone-mirroir-mcp/settings.json << 'EOF'
+{
+  "keystrokeDelayUs": 20000,
+  "clickHoldUs": 100000
+}
+EOF
+
+# Global
+cat > ~/.iphone-mirroir-mcp/settings.json << 'EOF'
+{
+  "keystrokeDelayUs": 20000
+}
+EOF
+```
+
+Only include the values you want to change — everything else uses the compiled default. Resolution order for each key (first found wins):
+
+1. Project-local `<cwd>/.iphone-mirroir-mcp/settings.json`
+2. Global `~/.iphone-mirroir-mcp/settings.json`
+3. `IPHONE_MIRROIR_<SCREAMING_SNAKE_CASE>` environment variable
+4. Compiled default ([`TimingConstants.swift`](Sources/HelperLib/TimingConstants.swift))
+
+Environment variables use screaming snake case with an `IPHONE_MIRROIR_` prefix. For example, `keystrokeDelayUs` becomes `IPHONE_MIRROIR_KEYSTROKE_DELAY_US`.
+
+<details>
+<summary>Common tuning examples</summary>
+
+| Key | Default | Unit | When to change |
+|-----|---------|------|----------------|
+| `keystrokeDelayUs` | 15000 | μs | Increase if characters are dropped during typing |
+| `clickHoldUs` | 80000 | μs | Increase if taps aren't registering |
+| `searchResultsPopulateUs` | 1000000 | μs | Increase on slower devices where Spotlight results take longer |
+| `gridSpacing` | 25.0 | points | Increase for less visual clutter, decrease for finer positioning |
+| `waitForTimeoutSeconds` | 15 | seconds | Increase for slow-loading screens in scenarios |
+
+See [`TimingConstants.swift`](Sources/HelperLib/TimingConstants.swift) for all available keys and their defaults.
+
+</details>
+
 ## Documentation
 
 | | |

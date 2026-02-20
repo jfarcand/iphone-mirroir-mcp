@@ -627,9 +627,9 @@ flowchart TD
 | Component | Purpose |
 |-----------|---------|
 | `TimingConstants` | Named constants for all timing delays (microseconds) and non-timing magic numbers. Compile-time defaults. |
-| `EnvConfig` | Reads `IPHONE_MIRROIR_<NAME>` environment variables at access time, falling back to `TimingConstants` defaults. |
+| `EnvConfig` | Reads `settings.json` first (project-local, then global), then `IPHONE_MIRROIR_<SCREAMING_SNAKE_CASE>` environment variables, falling back to `TimingConstants` defaults. |
 
-See the [Environment Variable Overrides](#environment-variable-overrides) table in [CONTRIBUTING.md](../CONTRIBUTING.md).
+Resolution order per key: `<cwd>/.iphone-mirroir-mcp/settings.json` → `~/.iphone-mirroir-mcp/settings.json` → env var → `TimingConstants` default. See [Configuration](../README.md#configuration) in the README.
 
 **Ref:** `Sources/HelperLib/TimingConstants.swift`, `Sources/HelperLib/EnvConfig.swift`
 
