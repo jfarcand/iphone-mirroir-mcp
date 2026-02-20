@@ -88,6 +88,46 @@ function main() {
     console.log("Helper daemon started but may need more time to initialize.");
     console.log("Check: echo '{\"action\":\"status\"}' | nc -U " + HELPER_SOCK);
   }
+
+  // Install prompts and agent profiles to global config dir
+  installPromptsAndAgents();
+}
+
+function installPromptsAndAgents() {
+  const globalConfigDir = path.join(process.env.HOME || "", ".iphone-mirroir-mcp");
+  const promptsDir = path.join(globalConfigDir, "prompts");
+  const agentsDir = path.join(globalConfigDir, "agents");
+
+  fs.mkdirSync(promptsDir, { recursive: true });
+  fs.mkdirSync(agentsDir, { recursive: true });
+
+  // Source directories are in the npm package alongside setup.js
+  const srcPromptsDir = path.join(__dirname, "prompts");
+  const srcAgentsDir = path.join(__dirname, "agents");
+
+  // Copy prompts (skip if user has customized)
+  if (fs.existsSync(srcPromptsDir)) {
+    for (const file of fs.readdirSync(srcPromptsDir)) {
+      if (!file.endsWith(".md")) continue;
+      const dest = path.join(promptsDir, file);
+      if (!fs.existsSync(dest)) {
+        fs.copyFileSync(path.join(srcPromptsDir, file), dest);
+        console.log(`  Installed: ${dest}`);
+      }
+    }
+  }
+
+  // Copy agent profiles (skip if user has customized)
+  if (fs.existsSync(srcAgentsDir)) {
+    for (const file of fs.readdirSync(srcAgentsDir)) {
+      if (!file.endsWith(".yaml")) continue;
+      const dest = path.join(agentsDir, file);
+      if (!fs.existsSync(dest)) {
+        fs.copyFileSync(path.join(srcAgentsDir, file), dest);
+        console.log(`  Installed: ${dest}`);
+      }
+    }
+  }
 }
 
 function checkHelper() {

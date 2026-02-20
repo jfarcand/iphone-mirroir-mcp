@@ -107,6 +107,18 @@ final class StubCapture: ScreenCapturing, @unchecked Sendable {
     }
 }
 
+// MARK: - StubAIProvider
+
+final class StubAIProvider: AIAgentProviding, @unchecked Sendable {
+    var diagnosisResult: AIDiagnosis?
+    var lastPayload: DiagnosticPayload?
+
+    func diagnose(payload: DiagnosticPayload) -> AIDiagnosis? {
+        lastPayload = payload
+        return diagnosisResult
+    }
+}
+
 // MARK: - StubDescriber
 
 final class StubDescriber: ScreenDescribing, @unchecked Sendable {

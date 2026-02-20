@@ -254,6 +254,7 @@ mirroir test --dry-run apps/settings/*.yaml
 | `--timeout <seconds>` | `wait_for` timeout (default: 15) |
 | `--verbose` | Show step-by-step detail |
 | `--dry-run` | Parse and validate without executing |
+| `--agent [model]` | Diagnose compiled failures (see [Agent Diagnosis](#agent-diagnosis)) |
 
 The test runner uses the same OCR and input subsystems as the MCP server. Steps like `tap: "General"` find the element via Vision OCR and tap at the detected coordinates. `wait_for` polls OCR until the label appears or times out. AI-only steps (`remember`, `condition`, `repeat`) are skipped with a warning.
 
@@ -281,6 +282,45 @@ mirroir test --no-compiled check-about        # force full OCR
 Each OCR-dependent step (~500ms per call) becomes a direct tap at cached coordinates, a timed sleep, or a replayed scroll sequence. A 10-step scenario that spent 5+ seconds on OCR runs in under a second.
 
 Compiled files are invalidated automatically when the source YAML changes (SHA-256 hash), the window dimensions change, or the format version bumps. See [Compiled Scenarios](docs/compiled-scenarios.md) for the file format, architecture, and design rationale.
+
+### Agent Diagnosis
+
+When a compiled scenario fails, `--agent` diagnoses the failure. Without a model name, it runs deterministic OCR analysis (element moved? missing? timing?). With a model name, it sends the diagnostic context to an AI for richer analysis.
+
+```bash
+mirroir test --agent scenario.yaml                    # deterministic OCR diagnosis
+mirroir test --agent claude-sonnet-4-6 scenario.yaml  # deterministic + AI via Anthropic
+mirroir test --agent gpt-4o scenario.yaml             # deterministic + AI via OpenAI
+mirroir test --agent ollama:llama3 scenario.yaml      # deterministic + AI via local Ollama
+mirroir test --agent copilot scenario.yaml            # deterministic + AI via Copilot CLI
+```
+
+**Built-in models:** `claude-sonnet-4-6`, `claude-haiku-4-5`, `gpt-4o`. Set the corresponding API key env var (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`).
+
+**Custom agents:** Place a YAML profile in `~/.iphone-mirroir-mcp/agents/`. Two modes:
+
+```yaml
+# API mode — call a cloud provider
+name: my-agent
+mode: api
+provider: anthropic
+model: claude-sonnet-4-6-20250514
+api_key_env: MY_KEY
+```
+
+```yaml
+# Command mode — run a local CLI
+name: my-agent
+mode: command
+command: copilot
+args: ["-p", "Analyze: ${PAYLOAD}"]
+```
+
+Command mode supports `${PAYLOAD}` substitution in args for CLIs that take prompts as arguments (like `claude --print -p` or `copilot -p`). Without `${PAYLOAD}`, the diagnostic JSON is piped to stdin.
+
+The system prompt is loaded from `~/.iphone-mirroir-mcp/prompts/diagnosis.md` — edit it to customize AI behavior. The default prompt is installed from the repo-level `prompts/` directory.
+
+All AI errors are non-fatal: deterministic diagnosis always runs regardless.
 
 ## Recorder
 

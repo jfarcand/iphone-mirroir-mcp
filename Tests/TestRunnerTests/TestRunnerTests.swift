@@ -20,6 +20,7 @@ final class TestRunnerConfigTests: XCTestCase {
         XCTAssertEqual(config.timeoutSeconds, 15)
         XCTAssertFalse(config.verbose)
         XCTAssertFalse(config.dryRun)
+        XCTAssertNil(config.agent)
         XCTAssertFalse(config.showHelp)
     }
 
@@ -83,6 +84,55 @@ final class TestRunnerConfigTests: XCTestCase {
         let config = TestRunner.parseArguments(["--unknown", "scenario1"])
         // --unknown starts with - so it's treated as a flag, not a scenario
         XCTAssertEqual(config.scenarioArgs, ["scenario1"])
+    }
+
+    // MARK: - Agent Flag Parsing
+
+    func testParseBareAgentFlag() {
+        // --agent with no model name → deterministic only (empty string)
+        let config = TestRunner.parseArguments(["--agent"])
+        XCTAssertEqual(config.agent, "")
+    }
+
+    func testParseAgentWithModelName() {
+        // --agent claude-sonnet-4-6 → AI model name
+        let config = TestRunner.parseArguments(["--agent", "claude-sonnet-4-6", "scenario.yaml"])
+        XCTAssertEqual(config.agent, "claude-sonnet-4-6")
+        XCTAssertEqual(config.scenarioArgs, ["scenario.yaml"])
+    }
+
+    func testParseAgentFollowedByYAML() {
+        // --agent scenario.yaml → bare agent, scenario.yaml is a scenario arg
+        let config = TestRunner.parseArguments(["--agent", "scenario.yaml"])
+        XCTAssertEqual(config.agent, "")
+        XCTAssertEqual(config.scenarioArgs, ["scenario.yaml"])
+    }
+
+    func testParseAgentFollowedByYMLFile() {
+        // --agent test.yml → bare agent, test.yml is a scenario arg
+        let config = TestRunner.parseArguments(["--agent", "test.yml"])
+        XCTAssertEqual(config.agent, "")
+        XCTAssertEqual(config.scenarioArgs, ["test.yml"])
+    }
+
+    func testParseAgentFollowedByFlag() {
+        // --agent --verbose → bare agent, verbose flag still parsed
+        let config = TestRunner.parseArguments(["--agent", "--verbose"])
+        XCTAssertEqual(config.agent, "")
+        XCTAssertTrue(config.verbose)
+    }
+
+    func testParseAgentOllamaModel() {
+        // --agent ollama:llama3 → Ollama model
+        let config = TestRunner.parseArguments(["--agent", "ollama:llama3", "test.yaml"])
+        XCTAssertEqual(config.agent, "ollama:llama3")
+        XCTAssertEqual(config.scenarioArgs, ["test.yaml"])
+    }
+
+    func testParseNoAgentByDefault() {
+        // No --agent flag → nil
+        let config = TestRunner.parseArguments(["scenario.yaml"])
+        XCTAssertNil(config.agent)
     }
 
     // MARK: - Scenario Resolution

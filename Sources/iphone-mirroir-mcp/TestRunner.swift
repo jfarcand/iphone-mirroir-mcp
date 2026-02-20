@@ -17,7 +17,8 @@ struct TestRunConfig {
     let verbose: Bool
     let dryRun: Bool
     let noCompiled: Bool
-    let agent: Bool
+    /// Agent mode: nil = no agent, "" = deterministic only, non-empty = AI model name.
+    let agent: String?
     let showHelp: Bool
 }
 
@@ -217,18 +218,27 @@ enum TestRunner {
     }
 
     /// Execute a scenario using compiled hints for OCR-free replay.
-    /// When `agent` is true, failed steps trigger a diagnostic OCR call.
+    /// When `agent` is non-nil, failed steps trigger a diagnostic OCR call.
+    /// When `agent` is a non-empty model name, AI diagnosis runs after deterministic analysis.
     static func executeCompiledScenario(
         scenario: ScenarioDefinition,
         compiled: CompiledScenario,
         compiledExecutor: CompiledStepExecutor,
         normalExecutor: StepExecutor,
         describer: ScreenDescribing,
-        agent: Bool,
+        agent: String?,
         verbose: Bool
     ) -> ConsoleReporter.ScenarioResult {
+        let agentEnabled = agent != nil
         let stepCount = scenario.steps.count
-        let tag = agent ? " [compiled+agent]" : " [compiled]"
+        let tag: String
+        if let modelName = agent, !modelName.isEmpty {
+            tag = " [compiled+agent:\(modelName)]"
+        } else if agentEnabled {
+            tag = " [compiled+agent]"
+        } else {
+            tag = " [compiled]"
+        }
         ConsoleReporter.reportScenarioStart(
             name: scenario.name + tag,
             filePath: scenario.filePath, stepCount: stepCount)
@@ -258,7 +268,7 @@ enum TestRunner {
                     stepIndex: index, scenarioName: scenario.name)
 
                 // Agent diagnostic on failure
-                if agent && result.status == .failed {
+                if agentEnabled && result.status == .failed {
                     if let rec = AgentDiagnostic.diagnose(
                         step: step, compiledStep: compiledStep,
                         failureMessage: result.message, describer: describer) {
@@ -270,7 +280,7 @@ enum TestRunner {
                     step: step, stepIndex: index, scenarioName: scenario.name)
 
                 // Agent diagnostic on normal step failure within a compiled scenario
-                if agent && result.status == .failed {
+                if agentEnabled && result.status == .failed {
                     let synthStep = CompiledStep(
                         index: index, type: step.typeKey,
                         label: step.labelValue,
@@ -292,10 +302,19 @@ enum TestRunner {
             }
         }
 
-        // Print agent diagnostic report
-        if agent && !recommendations.isEmpty {
+        // Print deterministic diagnostic report
+        if agentEnabled && !recommendations.isEmpty {
             AgentDiagnostic.printReport(recommendations: recommendations,
                                          scenarioName: scenario.name)
+        }
+
+        // Run AI diagnosis if a model name was specified
+        if let modelName = agent, !modelName.isEmpty, !recommendations.isEmpty {
+            runAIDiagnosis(
+                modelName: modelName,
+                recommendations: recommendations,
+                scenarioName: scenario.name,
+                scenarioFilePath: scenario.filePath)
         }
 
         let totalDuration = CFAbsoluteTimeGetCurrent() - startTime
@@ -309,6 +328,34 @@ enum TestRunner {
         return scenarioResult
     }
 
+    /// Resolve and invoke the AI agent for diagnosis. Errors are non-fatal warnings.
+    private static func runAIDiagnosis(
+        modelName: String,
+        recommendations: [AgentDiagnostic.Recommendation],
+        scenarioName: String,
+        scenarioFilePath: String
+    ) {
+        guard let agentConfig = AIAgentRegistry.resolve(name: modelName) else {
+            let available = AIAgentRegistry.availableAgents().joined(separator: ", ")
+            fputs("Error: Unknown agent '\(modelName)'. Available: \(available)\n", stderr)
+            return
+        }
+
+        guard let provider = AIAgentRegistry.createProvider(config: agentConfig) else {
+            fputs("Warning: Could not create provider for agent '\(modelName)'\n", stderr)
+            return
+        }
+
+        let payload = AgentDiagnostic.buildPayload(
+            recommendations: recommendations,
+            scenarioName: scenarioName,
+            scenarioFilePath: scenarioFilePath)
+
+        if let diagnosis = provider.diagnose(payload: payload) {
+            AgentDiagnostic.printAIReport(diagnosis: diagnosis, scenarioName: scenarioName)
+        }
+    }
+
     // MARK: - Argument Parsing
 
     /// Parse CLI arguments into TestRunConfig.
@@ -320,7 +367,7 @@ enum TestRunner {
         var verbose = false
         var dryRun = false
         var noCompiled = false
-        var agent = false
+        var agent: String?
         var showHelp = false
 
         var i = 0
@@ -345,7 +392,19 @@ enum TestRunner {
             case "--no-compiled":
                 noCompiled = true
             case "--agent":
-                agent = true
+                // Peek-ahead: if next arg doesn't start with "-" and isn't a .yaml path,
+                // consume it as the model name. Otherwise, bare --agent = deterministic only.
+                if i + 1 < args.count {
+                    let next = args[i + 1]
+                    if !next.hasPrefix("-") && !next.hasSuffix(".yaml") && !next.hasSuffix(".yml") {
+                        agent = next
+                        i += 1
+                    } else {
+                        agent = ""
+                    }
+                } else {
+                    agent = ""
+                }
             default:
                 if !arg.hasPrefix("-") {
                     scenarioArgs.append(arg)
@@ -462,13 +521,18 @@ enum TestRunner {
           --verbose, -v       Show detailed output
           --dry-run           Parse and validate without executing
           --no-compiled       Skip compiled scenarios (force full OCR)
-          --agent             Diagnose compiled failures via OCR (one call per failure)
+          --agent [model]     Diagnose compiled failures. Without model: deterministic OCR only.
+                              With model: deterministic + AI diagnosis.
+                              Built-in: claude-sonnet-4-6, claude-haiku-4-5, gpt-4o
+                              Ollama: ollama:<model>  Custom: name from agents/ dir
           --help, -h          Show this help
 
         Examples:
           iphone-mirroir-mcp test check-about
           iphone-mirroir-mcp test apps/settings/check-about.yaml
           iphone-mirroir-mcp test --junit results.xml apps/settings/*.yaml
+          iphone-mirroir-mcp test --agent scenario.yaml           # deterministic diagnosis
+          iphone-mirroir-mcp test --agent claude-sonnet-4-6 scenario.yaml  # AI diagnosis
           iphone-mirroir-mcp test                    # run all discovered scenarios
         """
         fputs(usage + "\n", stderr)

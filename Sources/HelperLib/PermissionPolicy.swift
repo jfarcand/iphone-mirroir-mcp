@@ -195,6 +195,16 @@ public struct PermissionPolicy: Sendable {
         [localConfigDir + "/scenarios", globalConfigDir + "/scenarios"]
     }
 
+    /// Returns the agent profile directories in resolution order (project-local first, then global).
+    public static var agentDirs: [String] {
+        [localConfigDir + "/agents", globalConfigDir + "/agents"]
+    }
+
+    /// Returns the prompt directories in resolution order (project-local first, then global).
+    public static var promptDirs: [String] {
+        [localConfigDir + "/prompts", globalConfigDir + "/prompts"]
+    }
+
     /// Parse CLI arguments for the skip-permissions flag.
     /// Returns true if `--dangerously-skip-permissions` or `--yolo` is present.
     public static func parseSkipPermissions(from args: [String]) -> Bool {

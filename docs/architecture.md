@@ -811,6 +811,12 @@ main() → TestRunner.run(arguments)
 | `ElementMatcher` | `ElementMatcher.swift` | Fuzzy OCR text matching (exact → case-insensitive → substring) |
 | `ConsoleReporter` | `ConsoleReporter.swift` | Per-step/per-scenario terminal formatting |
 | `JUnitReporter` | `JUnitReporter.swift` | JUnit XML generation for CI integration |
+| `AgentDiagnostic` | `AgentDiagnostic.swift` | Deterministic OCR-based failure diagnosis + AI payload builder |
+| `AIAgentRegistry` | `AIAgentProvider.swift` | Agent config model, built-in registry, YAML profile loader, resolver |
+| `AnthropicProvider` | `AnthropicProvider.swift` | Anthropic Messages API client |
+| `OpenAIProvider` | `OpenAIProvider.swift` | OpenAI Chat Completions API client |
+| `OllamaProvider` | `OllamaProvider.swift` | Local Ollama API client |
+| `CommandProvider` | `CommandProvider.swift` | Local CLI agent via Process stdin/stdout |
 
 ### `mirroir record` — Interaction Recorder
 

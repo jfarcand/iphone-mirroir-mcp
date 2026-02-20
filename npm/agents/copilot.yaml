@@ -1,0 +1,4 @@
+name: copilot
+mode: command
+command: copilot
+args: ["-p", "You are an expert iOS UI automation debugger. Analyze this diagnostic payload and respond ONLY in JSON: {\"analysis\": \"...\", \"suggested_fixes\": [{\"field\": \"...\", \"was\": \"...\", \"should_be\": \"...\"}], \"confidence\": \"high|medium|low\"}\n\nPayload:\n${PAYLOAD}"]

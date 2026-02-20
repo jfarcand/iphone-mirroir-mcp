@@ -258,4 +258,67 @@ enum AgentDiagnostic {
     private static func fmt(_ value: Double) -> String {
         String(format: "%.1f", value)
     }
+
+    // MARK: - AI Diagnosis
+
+    /// Build a diagnostic payload from deterministic recommendations for AI analysis.
+    static func buildPayload(
+        recommendations: [Recommendation],
+        scenarioName: String,
+        scenarioFilePath: String
+    ) -> DiagnosticPayload {
+        let steps = recommendations.map { rec in
+            DiagnosticPayload.FailedStep(
+                stepIndex: rec.stepIndex,
+                stepType: rec.stepType,
+                label: rec.label,
+                deterministicDiagnosis: rec.diagnosis,
+                patches: rec.patches.map { p in
+                    DiagnosticPayload.PatchInfo(
+                        field: p.field, was: p.was, shouldBe: p.shouldBe)
+                }
+            )
+        }
+        return DiagnosticPayload(
+            scenarioName: scenarioName,
+            scenarioFilePath: scenarioFilePath,
+            failedSteps: steps)
+    }
+
+    /// Print AI diagnosis results to stderr.
+    static func printAIReport(diagnosis: AIDiagnosis, scenarioName: String) {
+        fputs("\n--- AI Diagnosis (\(diagnosis.modelUsed)): \(scenarioName) ---\n", stderr)
+        fputs("\nAnalysis: \(diagnosis.analysis)\n", stderr)
+
+        if !diagnosis.suggestedFixes.isEmpty {
+            fputs("\nSuggested Fixes:\n", stderr)
+            for fix in diagnosis.suggestedFixes {
+                fputs("  \(fix.field): \(fix.was) -> \(fix.shouldBe)\n", stderr)
+            }
+        }
+
+        fputs("Confidence: \(diagnosis.confidence)\n", stderr)
+        fputs("---\n", stderr)
+    }
+}
+
+/// Diagnostic context sent to an AI agent for analysis.
+struct DiagnosticPayload: Codable {
+    let scenarioName: String
+    let scenarioFilePath: String
+    let failedSteps: [FailedStep]
+
+    struct FailedStep: Codable {
+        let stepIndex: Int
+        let stepType: String
+        let label: String?
+        let deterministicDiagnosis: String
+        let patches: [PatchInfo]
+    }
+
+    struct PatchInfo: Codable {
+        let field: String
+        let was: String
+        let shouldBe: String
+    }
 }

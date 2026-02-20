@@ -204,7 +204,39 @@ while [ "$elapsed" -lt "$HELPER_TIMEOUT" ]; do
 done
 printf "\r                    \n"
 
-# --- Step 6: Verify setup ---
+# --- Step 6: Install prompts and agent profiles ---
+
+echo ""
+echo "=== Installing prompts and agent profiles ==="
+
+GLOBAL_CONFIG_DIR="$HOME/.iphone-mirroir-mcp"
+mkdir -p "$GLOBAL_CONFIG_DIR/prompts" "$GLOBAL_CONFIG_DIR/agents"
+
+# Copy prompts (skip if user has customized)
+for f in prompts/*.md; do
+    [ -f "$f" ] || continue
+    dest="$GLOBAL_CONFIG_DIR/prompts/$(basename "$f")"
+    if [ ! -f "$dest" ]; then
+        cp "$f" "$dest"
+        echo "  Installed: $dest"
+    else
+        echo "  Skipped (user-customized): $dest"
+    fi
+done
+
+# Copy agent profiles (skip if user has customized)
+for f in agents/*.yaml; do
+    [ -f "$f" ] || continue
+    dest="$GLOBAL_CONFIG_DIR/agents/$(basename "$f")"
+    if [ ! -f "$dest" ]; then
+        cp "$f" "$dest"
+        echo "  Installed: $dest"
+    else
+        echo "  Skipped (user-customized): $dest"
+    fi
+done
+
+# --- Step 7: Verify setup ---
 
 echo ""
 echo "=== Verifying setup ==="
