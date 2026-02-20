@@ -13,13 +13,13 @@ import ImageIO
 /// elements to precise tap coordinates.
 public enum GridOverlay {
     /// Points between grid lines in the mirroring window's coordinate space.
-    public static let gridSpacing: CGFloat = 25.0
+    public static var gridSpacing: CGFloat { CGFloat(EnvConfig.gridSpacing) }
     /// Alpha for grid lines — subtle but visible on both light and dark backgrounds.
-    static let gridLineAlpha: CGFloat = 0.3
+    static var gridLineAlpha: CGFloat { CGFloat(EnvConfig.gridLineAlpha) }
     /// Font size in points for coordinate labels (scaled for Retina internally).
-    static let gridLabelFontSize: CGFloat = 8.0
+    static var gridLabelFontSize: CGFloat { CGFloat(EnvConfig.gridLabelFontSize) }
     /// Show coordinate labels every N grid lines to reduce clutter at high density.
-    static let labelEveryN: Int = 2
+    static var labelEveryN: Int { EnvConfig.gridLabelEveryN }
 
     /// Overlay a coordinate grid on raw PNG data.
     ///
