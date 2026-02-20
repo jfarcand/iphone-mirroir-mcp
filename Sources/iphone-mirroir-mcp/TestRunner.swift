@@ -17,6 +17,7 @@ struct TestRunConfig {
     let verbose: Bool
     let dryRun: Bool
     let noCompiled: Bool
+    let agent: Bool
     let showHelp: Bool
 }
 
@@ -128,6 +129,7 @@ enum TestRunner {
                     scenario: scenario, compiled: compiled,
                     compiledExecutor: compiledExecutor,
                     normalExecutor: executor,
+                    describer: describer, agent: config.agent,
                     verbose: config.verbose)
                 totalCompiledSteps += compiled.steps.filter {
                     $0.hints?.compiledAction != .passthrough
@@ -215,21 +217,26 @@ enum TestRunner {
     }
 
     /// Execute a scenario using compiled hints for OCR-free replay.
+    /// When `agent` is true, failed steps trigger a diagnostic OCR call.
     static func executeCompiledScenario(
         scenario: ScenarioDefinition,
         compiled: CompiledScenario,
         compiledExecutor: CompiledStepExecutor,
         normalExecutor: StepExecutor,
+        describer: ScreenDescribing,
+        agent: Bool,
         verbose: Bool
     ) -> ConsoleReporter.ScenarioResult {
         let stepCount = scenario.steps.count
+        let tag = agent ? " [compiled+agent]" : " [compiled]"
         ConsoleReporter.reportScenarioStart(
-            name: scenario.name + " [compiled]",
+            name: scenario.name + tag,
             filePath: scenario.filePath, stepCount: stepCount)
 
         let startTime = CFAbsoluteTimeGetCurrent()
         var stepResults: [StepResult] = []
         var stopOnFailure = false
+        var recommendations: [AgentDiagnostic.Recommendation] = []
 
         for (index, step) in scenario.steps.enumerated() {
             if stopOnFailure {
@@ -249,10 +256,31 @@ enum TestRunner {
                 result = compiledExecutor.execute(
                     step: step, compiledStep: compiledStep,
                     stepIndex: index, scenarioName: scenario.name)
+
+                // Agent diagnostic on failure
+                if agent && result.status == .failed {
+                    if let rec = AgentDiagnostic.diagnose(
+                        step: step, compiledStep: compiledStep,
+                        failureMessage: result.message, describer: describer) {
+                        recommendations.append(rec)
+                    }
+                }
             } else {
-                // More steps in YAML than compiled — fall back to normal
                 result = normalExecutor.execute(
                     step: step, stepIndex: index, scenarioName: scenario.name)
+
+                // Agent diagnostic on normal step failure within a compiled scenario
+                if agent && result.status == .failed {
+                    let synthStep = CompiledStep(
+                        index: index, type: step.typeKey,
+                        label: step.labelValue,
+                        hints: StepHints.passthrough())
+                    if let rec = AgentDiagnostic.diagnose(
+                        step: step, compiledStep: synthStep,
+                        failureMessage: result.message, describer: describer) {
+                        recommendations.append(rec)
+                    }
+                }
             }
 
             stepResults.append(result)
@@ -262,6 +290,12 @@ enum TestRunner {
             if result.status == .failed {
                 stopOnFailure = true
             }
+        }
+
+        // Print agent diagnostic report
+        if agent && !recommendations.isEmpty {
+            AgentDiagnostic.printReport(recommendations: recommendations,
+                                         scenarioName: scenario.name)
         }
 
         let totalDuration = CFAbsoluteTimeGetCurrent() - startTime
@@ -286,6 +320,7 @@ enum TestRunner {
         var verbose = false
         var dryRun = false
         var noCompiled = false
+        var agent = false
         var showHelp = false
 
         var i = 0
@@ -309,6 +344,8 @@ enum TestRunner {
                 dryRun = true
             case "--no-compiled":
                 noCompiled = true
+            case "--agent":
+                agent = true
             default:
                 if !arg.hasPrefix("-") {
                     scenarioArgs.append(arg)
@@ -325,6 +362,7 @@ enum TestRunner {
             verbose: verbose,
             dryRun: dryRun,
             noCompiled: noCompiled,
+            agent: agent,
             showHelp: showHelp
         )
     }
@@ -424,6 +462,7 @@ enum TestRunner {
           --verbose, -v       Show detailed output
           --dry-run           Parse and validate without executing
           --no-compiled       Skip compiled scenarios (force full OCR)
+          --agent             Diagnose compiled failures via OCR (one call per failure)
           --help, -h          Show this help
 
         Examples:
