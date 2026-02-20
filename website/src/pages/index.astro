@@ -75,6 +75,21 @@ steps:
   - press_key: "return"
   - screenshot: "message_sent"`;
 
+const scenarioSpotify = `name: Play a Song
+target: spotify
+app: Spotify (macOS)
+description: Search for a song and play it.
+
+steps:
+  - switch_target: "spotify"
+  - tap: "Search"
+  - wait_for: "What do you want to listen to?"
+  - type: "\${SONG:-Bohemian Rhapsody}"
+  - wait_for: "\${SONG:-Bohemian Rhapsody}"
+  - tap: "\${SONG:-Bohemian Rhapsody}"
+  - assert_visible: "Playing"
+  - screenshot: "now_playing"`;
+
 const scenariosRepo = "jfarcand/mirroir-scenarios";
 const scenariosBase = `https://github.com/${scenariosRepo}`;
 const rawBase = `https://raw.githubusercontent.com/${scenariosRepo}/main`;
@@ -178,7 +193,7 @@ try {
       Give your AI an iPhone.
     </p>
     <p class="subtitle">
-      MCP server that controls a real iPhone through macOS iPhone Mirroring. Screenshot, tap, swipe, type — from any MCP client. Works with any app on screen, no source code required. Can also drive any macOS window beyond iPhone Mirroring.
+      We built an MCP server to control iPhones through macOS iPhone Mirroring. Then we realized the same tools — screenshot, tap, swipe, type — work on any macOS window. Same security model. Same scenarios. Same AI.
     </p>
   </header>
 
@@ -280,6 +295,10 @@ try {
       <div class="scenario-col">
         <h3>Cross-app workflow</h3>
         <Code code={scenarioWaze} lang="yaml" theme="github-dark" />
+      </div>
+      <div class="scenario-col">
+        <h3>macOS window</h3>
+        <Code code={scenarioSpotify} lang="yaml" theme="github-dark" />
       </div>
     </div>
 
@@ -513,6 +532,10 @@ try {
       <details>
         <summary>Why does it need a DriverKit virtual HID?</summary>
         <p>iPhone Mirroring ignores programmatic <code>CGEvent</code> injection — it only responds to the system HID path. The installer uses the <a href="https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice">standalone Karabiner DriverKit package</a> (just the virtual HID, no keyboard grabber). Existing Karabiner-Elements installs are detected and reused.</p>
+      </details>
+      <details>
+        <summary>Can it control macOS apps too, not just iPhone?</summary>
+        <p>Yes. Add a target in <code>.mirroir-mcp/targets.json</code> pointing at any macOS window — Spotify, Figma, Terminal, anything. The same 28 tools work on any target. Use <code>switch_target</code> to move between iPhone and macOS windows.</p>
       </details>
       <details>
         <summary>Can I restrict which tools the AI can use?</summary>

@@ -331,10 +331,10 @@ section > p {
   margin-bottom: 0;
 }
 
-/* Scenario examples (two-column) */
+/* Scenario examples (three-column) */
 .scenario-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 1.25rem;
   margin: 1rem 0;
 }
@@ -347,8 +347,14 @@ section > p {
 }
 
 .scenario-col pre {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   margin-bottom: 0;
+}
+
+@media (max-width: 900px) {
+  .scenario-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 700px) {

@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)](https://support.apple.com/en-us/105071)
 
-MCP server that controls a real iPhone through macOS iPhone Mirroring. [Screenshot, tap, swipe, type, scroll_to, measure](docs/tools.md) — from any MCP client. Works with any app on screen, no source code required.
+We built an MCP server to control iPhones through macOS iPhone Mirroring — then realized the same tools work on any macOS window. [Screenshot, tap, swipe, type, scroll_to, measure](docs/tools.md) — from any MCP client. Same security model. Same scenarios. Same AI. No source code required.
 
 When automation breaks — a button moves, a label changes, timing drifts — [Agent Diagnosis](#agent-diagnosis) tells you *why* and how to fix it. Self-diagnosing automation, not just self-running.
 
