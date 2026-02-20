@@ -6,7 +6,7 @@
 
 import XCTest
 import HelperLib
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 final class MCPServerRoutingTests: XCTestCase {
 
@@ -39,7 +39,7 @@ final class MCPServerRoutingTests: XCTestCase {
         guard case .object(let serverInfo) = result["serverInfo"] else {
             return XCTFail("Expected serverInfo object")
         }
-        XCTAssertEqual(serverInfo["name"], .string("iphone-mirroir-mcp"))
+        XCTAssertEqual(serverInfo["name"], .string("mirroir-mcp"))
         XCTAssertEqual(serverInfo["version"], .string("0.14.1"))
 
         guard case .object(let capabilities) = result["capabilities"] else {

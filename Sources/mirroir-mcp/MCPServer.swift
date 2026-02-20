@@ -96,7 +96,7 @@ final class MCPServer: Sendable {
                 "tools": .object([:]),
             ]),
             "serverInfo": .object([
-                "name": .string("iphone-mirroir-mcp"),
+                "name": .string("mirroir-mcp"),
                 "version": .string("0.14.1"),
             ]),
         ])

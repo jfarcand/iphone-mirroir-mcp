@@ -7,7 +7,7 @@
 import Foundation
 import HelperLib
 
-extension IPhoneMirroirMCP {
+extension MirroirMCP {
     static func registerScenarioTools(server: MCPServer) {
         // list_scenarios — discover available YAML scenarios from config directories
         server.registerTool(MCPToolDefinition(
@@ -15,8 +15,8 @@ extension IPhoneMirroirMCP {
             description: """
                 List all available test scenarios from both project-local and global \
                 config directories. Returns scenario names and descriptions extracted \
-                from YAML files in <cwd>/.iphone-mirroir-mcp/scenarios/ and \
-                ~/.iphone-mirroir-mcp/scenarios/. Project-local scenarios with the \
+                from YAML files in <cwd>/.mirroir-mcp/scenarios/ and \
+                ~/.mirroir-mcp/scenarios/. Project-local scenarios with the \
                 same filename override global ones.
                 """,
             inputSchema: [
@@ -28,8 +28,8 @@ extension IPhoneMirroirMCP {
                 if scenarios.isEmpty {
                     return .text(
                         "No scenarios found.\n" +
-                        "Place .yaml files in <cwd>/.iphone-mirroir-mcp/scenarios/ or " +
-                        "~/.iphone-mirroir-mcp/scenarios/")
+                        "Place .yaml files in <cwd>/.mirroir-mcp/scenarios/ or " +
+                        "~/.mirroir-mcp/scenarios/")
                 }
 
                 var lines: [String] = []
@@ -96,7 +96,7 @@ extension IPhoneMirroirMCP {
                     return .error(
                         "Scenario '\(name)' not found. No scenarios installed.\n" +
                         "Searched: \(searchedDirs)\n" +
-                        "Install scenarios: https://github.com/jfarcand/iphone-mirroir-scenarios")
+                        "Install scenarios: https://github.com/jfarcand/mirroir-scenarios")
                 }
 
                 let available = scenarios.map { "  - \($0.name)" }.joined(separator: "\n")

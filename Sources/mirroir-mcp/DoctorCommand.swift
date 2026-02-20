@@ -35,7 +35,7 @@ struct DoctorCheck {
 /// Runs diagnostic checks on the iPhone Mirroring setup and reports results
 /// with colored output and actionable fix hints.
 ///
-/// Usage: `iphone-mirroir-mcp doctor [--no-color] [--json] [--help]`
+/// Usage: `mirroir-mcp doctor [--no-color] [--json] [--help]`
 enum DoctorCommand {
 
     /// Parse arguments and run all checks. Returns exit code (0 = all pass, 1 = any failure).
@@ -97,7 +97,7 @@ enum DoctorCommand {
 
     static func printUsage() {
         let usage = """
-        Usage: iphone-mirroir-mcp doctor [options]
+        Usage: mirroir-mcp doctor [options]
 
         Check every prerequisite for a working iPhone Mirroring MCP setup.
         Runs 10 diagnostic checks and reports results with fix hints.
@@ -108,9 +108,9 @@ enum DoctorCommand {
           --help, -h    Show this help
 
         Examples:
-          iphone-mirroir-mcp doctor
-          iphone-mirroir-mcp doctor --json
-          iphone-mirroir-mcp doctor --no-color
+          mirroir-mcp doctor
+          mirroir-mcp doctor --json
+          mirroir-mcp doctor --no-color
         """
         fputs(usage + "\n", stderr)
     }
@@ -200,7 +200,7 @@ enum DoctorCommand {
     }
 
     static func checkHelperDaemon() -> DoctorCheck {
-        let socketPath = "/var/run/iphone-mirroir-helper.sock"
+        let socketPath = "/var/run/mirroir-helper.sock"
         let fm = FileManager.default
 
         guard fm.fileExists(atPath: socketPath) else {
@@ -208,7 +208,7 @@ enum DoctorCommand {
                 name: "Helper daemon",
                 status: .failed,
                 detail: "socket not found",
-                fixHint: "Run setup to install the helper daemon: npx iphone-mirroir-mcp setup"
+                fixHint: "Run setup to install the helper daemon: npx mirroir-mcp setup"
             )
         }
 
@@ -219,7 +219,7 @@ enum DoctorCommand {
                 name: "Helper daemon",
                 status: .failed,
                 detail: "not responding",
-                fixHint: "The helper socket exists but the daemon is not responding. Try: sudo launchctl kickstart -k system/com.jfarcand.iphone-mirroir-helper"
+                fixHint: "The helper socket exists but the daemon is not responding. Try: sudo launchctl kickstart -k system/com.jfarcand.mirroir-helper"
             )
         }
 

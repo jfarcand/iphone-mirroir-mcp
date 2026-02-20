@@ -16,7 +16,7 @@ jobs:
 
       - name: Clone scenarios repo
         run: |
-          git clone https://github.com/jfarcand/iphone-mirroir-scenarios.git .iphone-mirroir-mcp/scenarios
+          git clone https://github.com/jfarcand/mirroir-scenarios.git .mirroir-mcp/scenarios
 
       - name: Build (debug)
         run: swift build
@@ -39,16 +39,16 @@ jobs:
 
       - name: Integration tests (FakeMirroring)
         env:
-          IPHONE_MIRROIR_BUNDLE_ID: com.jfarcand.FakeMirroring
-          IPHONE_MIRROIR_PROCESS_NAME: FakeMirroring
+          MIRROIR_BUNDLE_ID: com.jfarcand.FakeMirroring
+          MIRROIR_PROCESS_NAME: FakeMirroring
         run: swift test --filter IntegrationTests
 
       - name: Test runner (FakeMirroring)
         env:
-          IPHONE_MIRROIR_BUNDLE_ID: com.jfarcand.FakeMirroring
-          IPHONE_MIRROIR_PROCESS_NAME: FakeMirroring
+          MIRROIR_BUNDLE_ID: com.jfarcand.FakeMirroring
+          MIRROIR_PROCESS_NAME: FakeMirroring
         run: |
-          .build/release/iphone-mirroir-mcp test --junit test-results.xml --verbose Tests/Fixtures/scenarios/fake-mirroring-check.yaml
+          .build/release/mirroir-mcp test --junit test-results.xml --verbose Tests/Fixtures/scenarios/fake-mirroring-check.yaml
 
       - name: Upload test results
         if: always()
@@ -61,18 +61,18 @@ jobs:
 
       - name: Binary info
         run: |
-          ls -lh .build/release/iphone-mirroir-mcp .build/release/iphone-mirroir-helper
-          file .build/release/iphone-mirroir-mcp
-          file .build/release/iphone-mirroir-helper
+          ls -lh .build/release/mirroir-mcp .build/release/mirroir-helper
+          file .build/release/mirroir-mcp
+          file .build/release/mirroir-helper
 
       - name: Test MCP initialize
         run: |
           echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
-            | .build/release/iphone-mirroir-mcp 2>/dev/null \
+            | .build/release/mirroir-mcp 2>/dev/null \
             | python3 -c "
           import sys, json
           obj = json.loads(sys.stdin.readline())
-          assert obj['result']['serverInfo']['name'] == 'iphone-mirroir-mcp'
+          assert obj['result']['serverInfo']['name'] == 'mirroir-mcp'
           assert obj['result']['protocolVersion'] == '2025-11-25', f'Expected protocol version 2025-11-25, got: {obj[\"result\"][\"protocolVersion\"]}'
           print('MCP initialize: OK (protocol version 2025-11-25)')
           "
@@ -80,7 +80,7 @@ jobs:
       - name: Test tools/list
         run: |
           printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' \
-            | .build/release/iphone-mirroir-mcp --dangerously-skip-permissions 2>/dev/null \
+            | .build/release/mirroir-mcp --dangerously-skip-permissions 2>/dev/null \
             | python3 -c "
           import sys, json
           lines = sys.stdin.readlines()
@@ -94,7 +94,7 @@ jobs:
       - name: Test tool schemas
         run: |
           printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' \
-            | .build/release/iphone-mirroir-mcp --dangerously-skip-permissions 2>/dev/null \
+            | .build/release/mirroir-mcp --dangerously-skip-permissions 2>/dev/null \
             | python3 -c "
           import sys, json
           lines = sys.stdin.readlines()
@@ -125,7 +125,7 @@ jobs:
       - name: Test fail-closed default (readonly only)
         run: |
           printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' \
-            | .build/release/iphone-mirroir-mcp 2>/dev/null \
+            | .build/release/mirroir-mcp 2>/dev/null \
             | python3 -c "
           import sys, json
           lines = sys.stdin.readlines()
@@ -139,7 +139,7 @@ jobs:
       - name: Test --yolo alias shows all tools
         run: |
           printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' \
-            | .build/release/iphone-mirroir-mcp --yolo 2>/dev/null \
+            | .build/release/mirroir-mcp --yolo 2>/dev/null \
             | python3 -c "
           import sys, json
           lines = sys.stdin.readlines()
@@ -152,7 +152,7 @@ jobs:
       - name: Test unknown method returns error
         run: |
           printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"nonexistent/method","params":{}}\n' \
-            | .build/release/iphone-mirroir-mcp 2>/dev/null \
+            | .build/release/mirroir-mcp 2>/dev/null \
             | python3 -c "
           import sys, json
           lines = sys.stdin.readlines()
@@ -165,7 +165,7 @@ jobs:
       - name: Test invalid JSON is handled
         run: |
           printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\nthis is not json\n' \
-            | .build/release/iphone-mirroir-mcp 2>/dev/null \
+            | .build/release/mirroir-mcp 2>/dev/null \
             | python3 -c "
           import sys, json
           lines = sys.stdin.readlines()
@@ -195,16 +195,16 @@ jobs:
 
       - name: Create release archive
         run: |
-          cp Resources/com.jfarcand.iphone-mirroir-helper.plist .build/release/
+          cp Resources/com.jfarcand.mirroir-helper.plist .build/release/
           cd .build/release
-          tar czf $GITHUB_WORKSPACE/iphone-mirroir-mcp-darwin-arm64.tar.gz iphone-mirroir-mcp iphone-mirroir-helper com.jfarcand.iphone-mirroir-helper.plist
+          tar czf $GITHUB_WORKSPACE/mirroir-mcp-darwin-arm64.tar.gz mirroir-mcp mirroir-helper com.jfarcand.mirroir-helper.plist
 
       - name: Generate checksums
-        run: shasum -a 256 iphone-mirroir-mcp-darwin-arm64.tar.gz > SHA256SUMS
+        run: shasum -a 256 mirroir-mcp-darwin-arm64.tar.gz > SHA256SUMS
 
       - name: Upload release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            iphone-mirroir-mcp-darwin-arm64.tar.gz
+            mirroir-mcp-darwin-arm64.tar.gz
             SHA256SUMS

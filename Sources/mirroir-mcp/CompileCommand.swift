@@ -10,7 +10,7 @@ import HelperLib
 /// Orchestrates the `compile` subcommand: executes scenarios with a recording describer,
 /// captures OCR coordinates and timing, and writes `.compiled.json` files.
 ///
-/// Usage: `iphone-mirroir-mcp compile [options] <scenario...>`
+/// Usage: `mirroir-mcp compile [options] <scenario...>`
 enum CompileCommand {
 
     /// Parse arguments and run the compiler. Returns exit code (0 = success, 1 = error).
@@ -284,7 +284,7 @@ enum CompileCommand {
 
     static func printUsage() {
         let usage = """
-        Usage: iphone-mirroir-mcp compile [options] <scenario...>
+        Usage: mirroir-mcp compile [options] <scenario...>
 
         Run scenarios against a real device to capture coordinates and timing.
         Produces .compiled.json files for OCR-free replay via `test`.
@@ -297,9 +297,9 @@ enum CompileCommand {
           --help, -h          Show this help
 
         Examples:
-          iphone-mirroir-mcp compile apps/settings/check-about
-          iphone-mirroir-mcp compile check-about settings-wifi
-          iphone-mirroir-mcp compile apps/settings/*.yaml
+          mirroir-mcp compile apps/settings/check-about
+          mirroir-mcp compile check-about settings-wifi
+          mirroir-mcp compile apps/settings/*.yaml
         """
         fputs(usage + "\n", stderr)
     }

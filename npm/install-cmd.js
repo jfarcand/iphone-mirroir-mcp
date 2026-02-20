@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ABOUTME: Interactive one-command installer for iphone-mirroir-mcp.
+// ABOUTME: Interactive one-command installer for mirroir-mcp.
 // ABOUTME: Handles standalone DriverKit install (or reuses Karabiner-Elements), helper daemon setup, and MCP client configuration.
 
 const { execSync, execFileSync, spawnSync } = require("child_process");
@@ -7,7 +7,7 @@ const fs = require("fs");
 const path = require("path");
 const readline = require("readline");
 
-const HELPER_SOCK = "/var/run/iphone-mirroir-helper.sock";
+const HELPER_SOCK = "/var/run/mirroir-helper.sock";
 const KARABINER_APP = "/Applications/Karabiner-Elements.app";
 const DRIVERKIT_MANAGER = "/Applications/.Karabiner-VirtualHIDDevice-Manager.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Manager";
 const DRIVERKIT_VERSION = "6.10.0";
@@ -106,14 +106,14 @@ function buildFromSource() {
   execSync("swift build -c release", { cwd: REPO_ROOT, stdio: "inherit" });
 
   const releaseBin = path.join(REPO_ROOT, ".build", "release");
-  const plistSrc = path.join(REPO_ROOT, "Resources", "com.jfarcand.iphone-mirroir-helper.plist");
+  const plistSrc = path.join(REPO_ROOT, "Resources", "com.jfarcand.mirroir-helper.plist");
 
   fs.mkdirSync(BIN_DIR, { recursive: true });
-  fs.copyFileSync(path.join(releaseBin, "iphone-mirroir-helper"), path.join(BIN_DIR, "iphone-mirroir-helper"));
-  fs.chmodSync(path.join(BIN_DIR, "iphone-mirroir-helper"), 0o755);
-  fs.copyFileSync(path.join(releaseBin, "iphone-mirroir-mcp"), path.join(BIN_DIR, "iphone-mirroir-mcp-native"));
-  fs.chmodSync(path.join(BIN_DIR, "iphone-mirroir-mcp-native"), 0o755);
-  fs.copyFileSync(plistSrc, path.join(BIN_DIR, "com.jfarcand.iphone-mirroir-helper.plist"));
+  fs.copyFileSync(path.join(releaseBin, "mirroir-helper"), path.join(BIN_DIR, "mirroir-helper"));
+  fs.chmodSync(path.join(BIN_DIR, "mirroir-helper"), 0o755);
+  fs.copyFileSync(path.join(releaseBin, "mirroir-mcp"), path.join(BIN_DIR, "mirroir-mcp-native"));
+  fs.chmodSync(path.join(BIN_DIR, "mirroir-mcp-native"), 0o755);
+  fs.copyFileSync(plistSrc, path.join(BIN_DIR, "com.jfarcand.mirroir-helper.plist"));
 }
 
 // --- Helper Daemon ---
@@ -140,20 +140,20 @@ function ensureHelper() {
   console.log("[2/3] Helper daemon not running. Setting up...");
 
   // If helper binary is missing and we're in a source checkout, build first
-  const helperBin = path.join(BIN_DIR, "iphone-mirroir-helper");
+  const helperBin = path.join(BIN_DIR, "mirroir-helper");
   if (!fs.existsSync(helperBin) && isSourceCheckout()) {
     buildFromSource();
   }
 
   if (!fs.existsSync(SETUP_SCRIPT)) {
-    console.error("Setup script not found. Run: npm rebuild iphone-mirroir-mcp");
+    console.error("Setup script not found. Run: npm rebuild mirroir-mcp");
     process.exit(1);
   }
 
   try {
     execFileSync("node", [SETUP_SCRIPT], { stdio: "inherit" });
   } catch (setupErr) {
-    console.error("Helper setup failed. See https://github.com/jfarcand/iphone-mirroir-mcp for manual install.");
+    console.error("Helper setup failed. See https://github.com/jfarcand/mirroir-mcp for manual install.");
     process.exit(1);
   }
 }
@@ -199,11 +199,11 @@ async function configureMcpClient() {
       configureCodex();
       break;
     case "5":
-      console.log("Skipped. See https://github.com/jfarcand/iphone-mirroir-mcp for manual config.");
+      console.log("Skipped. See https://github.com/jfarcand/mirroir-mcp for manual config.");
       break;
     default:
       console.log("Invalid choice. Skipping client configuration.");
-      console.log("See https://github.com/jfarcand/iphone-mirroir-mcp for manual config.");
+      console.log("See https://github.com/jfarcand/mirroir-mcp for manual config.");
       break;
   }
 }
@@ -222,7 +222,7 @@ function configureClaudeCode() {
     console.log("Adding mirroir to Claude Code via CLI...");
     try {
       execSync(
-        'claude mcp add --transport stdio mirroir -- npx -y iphone-mirroir-mcp',
+        'claude mcp add --transport stdio mirroir -- npx -y mirroir-mcp',
         { stdio: "inherit" }
       );
     } catch (addErr) {
@@ -245,7 +245,7 @@ function configureClaudeCode() {
       config = JSON.parse(fs.readFileSync(configPath, "utf8"));
     } catch (parseErr) {
       console.error(`Could not parse ${configPath} — add the MCP server manually.`);
-      console.log('  claude mcp add --transport stdio mirroir -- npx -y iphone-mirroir-mcp');
+      console.log('  claude mcp add --transport stdio mirroir -- npx -y mirroir-mcp');
       return;
     }
   }
@@ -260,7 +260,7 @@ function configureClaudeCode() {
   config.mcpServers["mirroir"] = {
     type: "stdio",
     command: "npx",
-    args: ["-y", "iphone-mirroir-mcp"]
+    args: ["-y", "mirroir-mcp"]
   };
 
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
@@ -290,7 +290,7 @@ function configureCursor() {
 
   config.mcpServers["mirroir"] = {
     command: "npx",
-    args: ["-y", "iphone-mirroir-mcp"]
+    args: ["-y", "mirroir-mcp"]
   };
 
   fs.mkdirSync(dir, { recursive: true });
@@ -322,7 +322,7 @@ function configureCopilot() {
   config.servers["mirroir"] = {
     type: "stdio",
     command: "npx",
-    args: ["-y", "iphone-mirroir-mcp"]
+    args: ["-y", "mirroir-mcp"]
   };
 
   fs.mkdirSync(dir, { recursive: true });
@@ -336,7 +336,7 @@ function configureCodex() {
     execSync("which codex", { stdio: "ignore" });
     console.log("Adding mirroir to Codex via CLI...");
     execSync(
-      'codex mcp add mirroir -- npx -y iphone-mirroir-mcp',
+      'codex mcp add mirroir -- npx -y mirroir-mcp',
       { stdio: "inherit" }
     );
     console.log("Codex configured.");
@@ -361,7 +361,7 @@ function configureCodex() {
     "",
     "[mcp_servers.mirroir]",
     'command = "npx"',
-    'args = ["-y", "iphone-mirroir-mcp"]',
+    'args = ["-y", "mirroir-mcp"]',
     ""
   ].join("\n");
 
@@ -374,7 +374,7 @@ function configureCodex() {
 
 async function main() {
   console.log("");
-  console.log("=== iphone-mirroir-mcp installer ===");
+  console.log("=== mirroir-mcp installer ===");
   console.log("");
 
   ensureDriverKit();

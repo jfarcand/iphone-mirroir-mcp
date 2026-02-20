@@ -11,10 +11,10 @@ jobs:
   install-test:
     runs-on: macos-15
     env:
-      PLIST_NAME: com.jfarcand.iphone-mirroir-helper
-      HELPER_BIN: iphone-mirroir-helper
-      MCP_BIN: iphone-mirroir-mcp
-      SOCKET_PATH: /var/run/iphone-mirroir-helper.sock
+      PLIST_NAME: com.jfarcand.mirroir-helper
+      HELPER_BIN: mirroir-helper
+      MCP_BIN: mirroir-mcp
+      SOCKET_PATH: /var/run/mirroir-helper.sock
 
     steps:
       - uses: actions/checkout@v4
@@ -89,7 +89,7 @@ jobs:
           if [ -z "$RESPONSE" ]; then
             echo "FAIL: no response from helper daemon"
             echo "--- daemon log ---"
-            sudo cat /var/log/iphone-mirroir-helper.log 2>/dev/null || echo "(no log)"
+            sudo cat /var/log/mirroir-helper.log 2>/dev/null || echo "(no log)"
             exit 1
           fi
 
@@ -131,7 +131,7 @@ jobs:
             | python3 -c "
           import sys, json
           obj = json.loads(sys.stdin.readline())
-          assert obj['result']['serverInfo']['name'] == 'iphone-mirroir-mcp'
+          assert obj['result']['serverInfo']['name'] == 'mirroir-mcp'
           print('MCP initialize from install path: OK')
           "
 

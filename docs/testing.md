@@ -28,8 +28,8 @@ FakeMirroring is **not a mock** — it is a real macOS app exercising real macOS
 The MCP server discovers the mirroring app by bundle ID and process name. Two environment variables control this:
 
 ```
-IPHONE_MIRROIR_BUNDLE_ID=com.jfarcand.FakeMirroring
-IPHONE_MIRROIR_PROCESS_NAME=FakeMirroring
+MIRROIR_BUNDLE_ID=com.jfarcand.FakeMirroring
+MIRROIR_PROCESS_NAME=FakeMirroring
 ```
 
 When unset, they default to `com.apple.ScreenContinuity` and `iPhone Mirroring` — the real app. This is the same `EnvConfig` system used for all runtime configuration (timing constants, HID parameters, etc.), so there is no test-only code path in production.
@@ -116,12 +116,12 @@ Exercise the **installed binary** via JSON-RPC over stdio:
 ```bash
 # MCP initialize — verifies server starts and responds
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
-  | .build/release/iphone-mirroir-mcp 2>/dev/null \
-  | python3 -c "..." # assert serverInfo.name == 'iphone-mirroir-mcp'
+  | .build/release/mirroir-mcp 2>/dev/null \
+  | python3 -c "..." # assert serverInfo.name == 'mirroir-mcp'
 
 # MCP tools/call screenshot — verifies full pipeline (binary → AX → screencapture → base64)
 printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n...' \
-  | .build/release/iphone-mirroir-mcp --dangerously-skip-permissions 2>/dev/null \
+  | .build/release/mirroir-mcp --dangerously-skip-permissions 2>/dev/null \
   | python3 -c "..." # assert response contains image content block
 ```
 
@@ -149,7 +149,7 @@ Tests the Homebrew installation path using a local tap.
 
 ```
 install standalone DriverKit pkg → git archive tarball → brew tap-new local/test →
-  generate formula with file:// URL → brew install local/test/iphone-mirroir-mcp →
+  generate formula with file:// URL → brew install local/test/mirroir-mcp →
   sudo brew services start → build FakeMirroring → launch →
   swift test --filter IntegrationTests (8 tests) →
   MCP initialize → MCP tools/call screenshot
@@ -190,8 +190,8 @@ swift build -c release --product FakeMirroring
 open .build/release/FakeMirroring.app
 
 # 2. Run integration tests
-IPHONE_MIRROIR_BUNDLE_ID=com.jfarcand.FakeMirroring \
-IPHONE_MIRROIR_PROCESS_NAME=FakeMirroring \
+MIRROIR_BUNDLE_ID=com.jfarcand.FakeMirroring \
+MIRROIR_PROCESS_NAME=FakeMirroring \
 swift test --filter IntegrationTests
 ```
 

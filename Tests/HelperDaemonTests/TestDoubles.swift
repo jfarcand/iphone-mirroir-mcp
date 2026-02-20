@@ -6,7 +6,7 @@
 
 import Foundation
 import HelperLib
-@testable import iphone_mirroir_helper
+@testable import mirroir_helper
 
 final class StubKarabiner: KarabinerProviding {
     var isKeyboardReady = true

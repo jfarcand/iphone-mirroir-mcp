@@ -1,17 +1,17 @@
 #!/bin/bash
-# ABOUTME: Builds and installs the iphone-mirroir-helper as a LaunchDaemon.
+# ABOUTME: Builds and installs the mirroir-helper as a LaunchDaemon.
 # ABOUTME: Requires sudo for installation into /usr/local/bin and /Library/LaunchDaemons.
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-PLIST_NAME="com.jfarcand.iphone-mirroir-helper"
-HELPER_BIN="iphone-mirroir-helper"
-SOCKET="/var/run/iphone-mirroir-helper.sock"
-LOG="/var/log/iphone-mirroir-helper.log"
+PLIST_NAME="com.jfarcand.mirroir-helper"
+HELPER_BIN="mirroir-helper"
+SOCKET="/var/run/mirroir-helper.sock"
+LOG="/var/log/mirroir-helper.log"
 
-echo "=== Building iphone-mirroir-helper ==="
+echo "=== Building mirroir-helper ==="
 cd "$PROJECT_DIR"
 
 # Build as the real user, not root. Running `swift build` as root creates

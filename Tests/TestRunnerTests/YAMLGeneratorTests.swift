@@ -5,7 +5,7 @@
 // ABOUTME: Covers all recorded event kinds and the complete document generation.
 
 import XCTest
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 final class YAMLGeneratorTests: XCTestCase {
 

@@ -1,11 +1,11 @@
 // swift-tools-version: 6.0
-// ABOUTME: Swift package manifest for the iPhone Mirroring MCP server.
+// ABOUTME: Swift package manifest for the Mirroir MCP server.
 // ABOUTME: Deployment target is macOS 14 for API availability; iPhone Mirroring requires macOS 15+ at runtime.
 
 import PackageDescription
 
 let package = Package(
-    name: "iphone-mirroir-mcp",
+    name: "mirroir-mcp",
     platforms: [
         .macOS(.v14)
     ],
@@ -19,7 +19,7 @@ let package = Package(
             ]
         ),
         .executableTarget(
-            name: "iphone-mirroir-mcp",
+            name: "mirroir-mcp",
             dependencies: ["HelperLib"],
             linkerSettings: [
                 .linkedFramework("ApplicationServices"),
@@ -29,7 +29,7 @@ let package = Package(
             ]
         ),
         .executableTarget(
-            name: "iphone-mirroir-helper",
+            name: "mirroir-helper",
             dependencies: ["HelperLib"],
             linkerSettings: [
                 .linkedFramework("CoreGraphics"),
@@ -49,22 +49,22 @@ let package = Package(
         ),
         .testTarget(
             name: "MCPServerTests",
-            dependencies: ["iphone-mirroir-mcp", "HelperLib"]
+            dependencies: ["mirroir-mcp", "HelperLib"]
         ),
         .testTarget(
             name: "HelperDaemonTests",
-            dependencies: ["iphone-mirroir-helper", "HelperLib"]
+            dependencies: ["mirroir-helper", "HelperLib"]
         ),
         .testTarget(
             name: "IntegrationTests",
-            dependencies: ["iphone-mirroir-mcp", "HelperLib"],
+            dependencies: ["mirroir-mcp", "HelperLib"],
             linkerSettings: [
                 .linkedFramework("Vision"),
             ]
         ),
         .testTarget(
             name: "TestRunnerTests",
-            dependencies: ["iphone-mirroir-mcp", "HelperLib"]
+            dependencies: ["mirroir-mcp", "HelperLib"]
         ),
     ]
 )

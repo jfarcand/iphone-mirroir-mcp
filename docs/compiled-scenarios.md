@@ -146,10 +146,10 @@ There is no auto-recompilation. Compilation requires a real device with the app 
 
 ## Where Compiled Files Live
 
-Compiled `.json` files live alongside their source `.yaml` files. For scenarios in the [iphone-mirroir-scenarios](https://github.com/jfarcand/iphone-mirroir-scenarios) repository:
+Compiled `.json` files live alongside their source `.yaml` files. For scenarios in the [mirroir-scenarios](https://github.com/jfarcand/mirroir-scenarios) repository:
 
 ```
-iphone-mirroir-scenarios/
+mirroir-scenarios/
   apps/
     settings/
       check-about.yaml              ← source (committed)
@@ -194,10 +194,10 @@ AI-only steps (`remember`, `condition`, `repeat`, `verify`, `summarize`) require
 
 | File | Purpose |
 |------|---------|
-| `Sources/iphone-mirroir-mcp/CompiledScenario.swift` | Data model: `CompiledScenario`, `CompiledStep`, `StepHints`, file I/O, SHA-256 |
-| `Sources/iphone-mirroir-mcp/RecordingDescriber.swift` | Decorator that caches OCR results during compilation |
-| `Sources/iphone-mirroir-mcp/CompileCommand.swift` | CLI `compile` subcommand orchestration |
-| `Sources/iphone-mirroir-mcp/CompiledStepExecutor.swift` | Replays compiled steps with zero OCR |
+| `Sources/mirroir-mcp/CompiledScenario.swift` | Data model: `CompiledScenario`, `CompiledStep`, `StepHints`, file I/O, SHA-256 |
+| `Sources/mirroir-mcp/RecordingDescriber.swift` | Decorator that caches OCR results during compilation |
+| `Sources/mirroir-mcp/CompileCommand.swift` | CLI `compile` subcommand orchestration |
+| `Sources/mirroir-mcp/CompiledStepExecutor.swift` | Replays compiled steps with zero OCR |
 | `Tests/TestRunnerTests/CompiledScenarioTests.swift` | JSON round-trip, staleness, path derivation tests |
 | `Tests/TestRunnerTests/CompiledStepExecutorTests.swift` | Compiled tap, sleep, scroll, passthrough tests |
 

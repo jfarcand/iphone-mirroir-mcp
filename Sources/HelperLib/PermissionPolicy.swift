@@ -12,8 +12,8 @@ public enum PermissionDecision: Sendable, Equatable {
     case denied(reason: String)
 }
 
-/// JSON-decodable permission configuration loaded from ~/.iphone-mirroir-mcp/permissions.json.
-/// The loader checks project-local (<cwd>/.iphone-mirroir-mcp/) first, then global (~/.iphone-mirroir-mcp/).
+/// JSON-decodable permission configuration loaded from ~/.mirroir-mcp/permissions.json.
+/// The loader checks project-local (<cwd>/.mirroir-mcp/) first, then global (~/.mirroir-mcp/).
 public struct PermissionConfig: Codable, Sendable {
     /// Whitelist of mutating tools to allow (case-insensitive).
     public var allow: [String]?
@@ -37,7 +37,7 @@ public struct PermissionPolicy: Sendable {
     public let config: PermissionConfig?
 
     /// Base directory name for config files (both global and project-local).
-    public static let configDirName = ".iphone-mirroir-mcp"
+    public static let configDirName = ".mirroir-mcp"
 
     /// Path to the global config directory.
     public static var globalConfigDir: String {
@@ -50,7 +50,7 @@ public struct PermissionPolicy: Sendable {
     }
 
     /// Display path for error messages (shows the global config path with tilde).
-    public static let configPath = "~/.iphone-mirroir-mcp/permissions.json"
+    public static let configPath = "~/.mirroir-mcp/permissions.json"
 
     /// Tools that are always visible and allowed (observation-only, no side effects).
     public static let readonlyTools: Set<String> = [

@@ -3,16 +3,16 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.jfarcand.iphone-mirroir-helper</string>
+    <string>com.jfarcand.mirroir-helper</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/iphone-mirroir-helper</string>
+        <string>/usr/local/bin/mirroir-helper</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardErrorPath</key>
-    <string>/var/log/iphone-mirroir-helper.log</string>
+    <string>/var/log/mirroir-helper.log</string>
 </dict>
 </plist>

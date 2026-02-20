@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-// Sets up the iphone-mirroir-helper daemon as a macOS LaunchDaemon.
+// Sets up the mirroir-helper daemon as a macOS LaunchDaemon.
 // Requires sudo for copying the helper binary and plist to system directories.
 
 const { execSync, spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
-const PLIST_NAME = "com.jfarcand.iphone-mirroir-helper";
-const HELPER_SOCK = "/var/run/iphone-mirroir-helper.sock";
-const HELPER_DEST = "/usr/local/bin/iphone-mirroir-helper";
+const PLIST_NAME = "com.jfarcand.mirroir-helper";
+const HELPER_SOCK = "/var/run/mirroir-helper.sock";
+const HELPER_DEST = "/usr/local/bin/mirroir-helper";
 const PLIST_DEST = `/Library/LaunchDaemons/${PLIST_NAME}.plist`;
 const KARABINER_SOCK_DIR = "/Library/Application Support/org.pqrs/tmp/rootonly/vhidd_server";
 const DRIVERKIT_MANAGER = "/Applications/.Karabiner-VirtualHIDDevice-Manager.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Manager";
@@ -17,16 +17,16 @@ const DRIVERKIT_URL = `https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHI
 
 function main() {
   const binDir = path.join(__dirname, "bin");
-  const helperSrc = path.join(binDir, "iphone-mirroir-helper");
+  const helperSrc = path.join(binDir, "mirroir-helper");
   const plistSrc = path.join(binDir, `${PLIST_NAME}.plist`);
 
   if (!fs.existsSync(helperSrc)) {
-    console.error("Helper binary not found. Run: npm rebuild iphone-mirroir-mcp");
+    console.error("Helper binary not found. Run: npm rebuild mirroir-mcp");
     process.exit(1);
   }
 
   if (!fs.existsSync(plistSrc)) {
-    console.error("LaunchDaemon plist not found. Run: npm rebuild iphone-mirroir-mcp");
+    console.error("LaunchDaemon plist not found. Run: npm rebuild mirroir-mcp");
     process.exit(1);
   }
 
@@ -65,7 +65,7 @@ function main() {
     }
   }
 
-  console.log("=== Setting up iphone-mirroir-helper daemon ===");
+  console.log("=== Setting up mirroir-helper daemon ===");
   console.log("");
   console.log("This requires administrator privileges to install the helper daemon.");
   console.log("");
@@ -124,7 +124,7 @@ function main() {
 }
 
 function installPromptsAndAgents() {
-  const globalConfigDir = path.join(process.env.HOME || "", ".iphone-mirroir-mcp");
+  const globalConfigDir = path.join(process.env.HOME || "", ".mirroir-mcp");
   const promptsDir = path.join(globalConfigDir, "prompts");
   const agentsDir = path.join(globalConfigDir, "agents");
 

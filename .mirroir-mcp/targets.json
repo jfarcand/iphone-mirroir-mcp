@@ -8,6 +8,11 @@
       "type": "generic-window",
       "process_name": "qemu-system-aarch64",
       "window_title_contains": "Android Emulator"
+    },
+    "claude": {
+      "type": "generic-window",
+      "bundle_id": "com.anthropic.claudefordesktop",
+      "window_title_contains": "Claude"
     }
   }
 }

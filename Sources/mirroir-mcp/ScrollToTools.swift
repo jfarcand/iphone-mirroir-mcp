@@ -7,7 +7,7 @@
 import Foundation
 import HelperLib
 
-extension IPhoneMirroirMCP {
+extension MirroirMCP {
     static func registerScrollToTools(
         server: MCPServer,
         registry: TargetRegistry

@@ -6,7 +6,7 @@
 
 import XCTest
 import HelperLib
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 final class NavigationToolHandlerTests: XCTestCase {
 
@@ -21,7 +21,7 @@ final class NavigationToolHandlerTests: XCTestCase {
         bridge = StubBridge()
         input = StubInput()
         let registry = makeTestRegistry(bridge: bridge, input: input)
-        IPhoneMirroirMCP.registerNavigationTools(
+        MirroirMCP.registerNavigationTools(
             server: server, registry: registry, policy: policy
         )
     }
@@ -66,7 +66,7 @@ final class NavigationToolHandlerTests: XCTestCase {
         let policy = PermissionPolicy(skipPermissions: true, config: config)
         let policyServer = MCPServer(policy: policy)
         let policyRegistry = makeTestRegistry(bridge: bridge, input: input)
-        IPhoneMirroirMCP.registerNavigationTools(
+        MirroirMCP.registerNavigationTools(
             server: policyServer, registry: policyRegistry, policy: policy
         )
 

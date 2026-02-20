@@ -1,14 +1,14 @@
 <p align="center">
-  <img src="website/public/mirroir-wordmark.svg" alt="iphone-mirroir-mcp" width="128" />
+  <img src="website/public/mirroir-wordmark.svg" alt="mirroir-mcp" width="128" />
 </p>
 
-# iphone-mirroir-mcp
+# mirroir-mcp
 
-[![npm version](https://img.shields.io/npm/v/iphone-mirroir-mcp)](https://www.npmjs.com/package/iphone-mirroir-mcp)
-[![Build](https://github.com/jfarcand/iphone-mirroir-mcp/actions/workflows/build.yml/badge.svg)](https://github.com/jfarcand/iphone-mirroir-mcp/actions/workflows/build.yml)
-[![Install](https://github.com/jfarcand/iphone-mirroir-mcp/actions/workflows/install.yml/badge.svg)](https://github.com/jfarcand/iphone-mirroir-mcp/actions/workflows/install.yml)
-[![Installers](https://github.com/jfarcand/iphone-mirroir-mcp/actions/workflows/installers.yml/badge.svg)](https://github.com/jfarcand/iphone-mirroir-mcp/actions/workflows/installers.yml)
-[![MCP Compliance](https://github.com/jfarcand/iphone-mirroir-mcp/actions/workflows/mcp-compliance.yml/badge.svg)](https://github.com/jfarcand/iphone-mirroir-mcp/actions/workflows/mcp-compliance.yml)
+[![npm version](https://img.shields.io/npm/v/mirroir-mcp)](https://www.npmjs.com/package/mirroir-mcp)
+[![Build](https://github.com/jfarcand/mirroir-mcp/actions/workflows/build.yml/badge.svg)](https://github.com/jfarcand/mirroir-mcp/actions/workflows/build.yml)
+[![Install](https://github.com/jfarcand/mirroir-mcp/actions/workflows/install.yml/badge.svg)](https://github.com/jfarcand/mirroir-mcp/actions/workflows/install.yml)
+[![Installers](https://github.com/jfarcand/mirroir-mcp/actions/workflows/installers.yml/badge.svg)](https://github.com/jfarcand/mirroir-mcp/actions/workflows/installers.yml)
+[![MCP Compliance](https://github.com/jfarcand/mirroir-mcp/actions/workflows/mcp-compliance.yml/badge.svg)](https://github.com/jfarcand/mirroir-mcp/actions/workflows/mcp-compliance.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)](https://support.apple.com/en-us/105071)
 
@@ -29,16 +29,16 @@ Input flows through [Karabiner DriverKit](https://github.com/pqrs-org/Karabiner-
 /bin/bash -c "$(curl -fsSL https://mirroir.dev/get-mirroir.sh)"
 ```
 
-or via [npx](https://www.npmjs.com/package/iphone-mirroir-mcp):
+or via [npx](https://www.npmjs.com/package/mirroir-mcp):
 
 ```bash
-npx -y iphone-mirroir-mcp install
+npx -y mirroir-mcp install
 ```
 
 or via [Homebrew](https://tap.mirroir.dev):
 
 ```bash
-brew tap jfarcand/tap && brew install iphone-mirroir-mcp
+brew tap jfarcand/tap && brew install mirroir-mcp
 ```
 
 After install, approve the DriverKit system extension if prompted: **System Settings > General > Login Items & Extensions**. If you have Karabiner-Elements, enable all its toggles. If you installed the standalone DriverKit package, enable the Karabiner-DriverKit-VirtualHIDDevice toggle. The first time you take a screenshot, macOS will prompt for **Screen Recording** and **Accessibility** permissions. Grant both.
@@ -49,7 +49,7 @@ After install, approve the DriverKit system extension if prompted: **System Sett
 #### Claude Code
 
 ```bash
-claude mcp add --transport stdio mirroir -- npx -y iphone-mirroir-mcp
+claude mcp add --transport stdio mirroir -- npx -y mirroir-mcp
 ```
 
 #### GitHub Copilot (VS Code)
@@ -62,7 +62,7 @@ Install from the MCP server gallery: search `@mcp mirroir` in the Extensions vie
     "mirroir": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "iphone-mirroir-mcp"]
+      "args": ["-y", "mirroir-mcp"]
     }
   }
 }
@@ -77,7 +77,7 @@ Add to `.cursor/mcp.json` in your project root:
   "mcpServers": {
     "mirroir": {
       "command": "npx",
-      "args": ["-y", "iphone-mirroir-mcp"]
+      "args": ["-y", "mirroir-mcp"]
     }
   }
 }
@@ -86,7 +86,7 @@ Add to `.cursor/mcp.json` in your project root:
 #### OpenAI Codex
 
 ```bash
-codex mcp add mirroir -- npx -y iphone-mirroir-mcp
+codex mcp add mirroir -- npx -y mirroir-mcp
 ```
 
 Or add to `~/.codex/config.toml`:
@@ -94,7 +94,7 @@ Or add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.mirroir]
 command = "npx"
-args = ["-y", "iphone-mirroir-mcp"]
+args = ["-y", "mirroir-mcp"]
 ```
 
 #### Helper daemon only
@@ -102,7 +102,7 @@ args = ["-y", "iphone-mirroir-mcp"]
 If your MCP client is already configured but the helper daemon isn't running:
 
 ```bash
-npx iphone-mirroir-mcp setup
+npx mirroir-mcp setup
 ```
 
 </details>
@@ -111,12 +111,12 @@ npx iphone-mirroir-mcp setup
 <summary>Install from source</summary>
 
 ```bash
-git clone https://github.com/jfarcand/iphone-mirroir-mcp.git
-cd iphone-mirroir-mcp
+git clone https://github.com/jfarcand/mirroir-mcp.git
+cd mirroir-mcp
 ./mirroir.sh
 ```
 
-The installer handles everything: installs the standalone DriverKit package if no virtual HID is available (or reuses existing Karabiner-Elements), waits for extension approval, builds both binaries, configures the Karabiner ignore rule when needed, installs the helper daemon, and runs a verification check. Use the full path to the binary in your `.mcp.json`: `<repo>/.build/release/iphone-mirroir-mcp`.
+The installer handles everything: installs the standalone DriverKit package if no virtual HID is available (or reuses existing Karabiner-Elements), waits for extension approval, builds both binaries, configures the Karabiner ignore rule when needed, installs the helper daemon, and runs a verification check. Use the full path to the binary in your `.mcp.json`: `<repo>/.build/release/mirroir-mcp`.
 
 </details>
 
@@ -171,7 +171,7 @@ mirroir test --agent copilot scenario.yaml            # deterministic + AI via C
 
 **Built-in models:** `claude-sonnet-4-6`, `claude-haiku-4-5`, `gpt-4o`. Set the corresponding API key env var (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`).
 
-**Custom agents:** Place a YAML profile in `~/.iphone-mirroir-mcp/agents/` (global) or `<cwd>/.iphone-mirroir-mcp/agents/` (project-local, takes priority). Two modes:
+**Custom agents:** Place a YAML profile in `~/.mirroir-mcp/agents/` (global) or `<cwd>/.mirroir-mcp/agents/` (project-local, takes priority). Two modes:
 
 ```yaml
 # API mode — call a cloud provider
@@ -192,7 +192,7 @@ args: ["-p", "Analyze: ${PAYLOAD}"]
 
 Command mode supports `${PAYLOAD}` substitution in args for CLIs that take prompts as arguments (like `claude --print -p` or `copilot -p`). Without `${PAYLOAD}`, the diagnostic JSON is piped to stdin.
 
-The system prompt is loaded from `~/.iphone-mirroir-mcp/prompts/diagnosis.md` (or `<cwd>/.iphone-mirroir-mcp/prompts/diagnosis.md`, project-local takes priority) — edit it to customize AI behavior. The default prompt is installed from the repo-level `prompts/` directory.
+The system prompt is loaded from `~/.mirroir-mcp/prompts/diagnosis.md` (or `<cwd>/.mirroir-mcp/prompts/diagnosis.md`, project-local takes priority) — edit it to customize AI behavior. The default prompt is installed from the repo-level `prompts/` directory.
 
 All AI errors are non-fatal: deterministic diagnosis always runs regardless.
 
@@ -234,33 +234,33 @@ steps:
   - screenshot: "message_sent"
 ```
 
-`${VAR}` placeholders are resolved from environment variables. Use `${VAR:-default}` for fallback values. Place scenarios in `~/.iphone-mirroir-mcp/scenarios/` (global) or `<cwd>/.iphone-mirroir-mcp/scenarios/` (project-local). Both directories are scanned recursively.
+`${VAR}` placeholders are resolved from environment variables. Use `${VAR:-default}` for fallback values. Place scenarios in `~/.mirroir-mcp/scenarios/` (global) or `<cwd>/.mirroir-mcp/scenarios/` (project-local). Both directories are scanned recursively.
 
 ### Scenario Marketplace
 
-Ready-to-use scenarios that automate anything a human can do on an iPhone — tap, type, navigate, chain apps together. If you can do it manually, you can script it. Install from [jfarcand/iphone-mirroir-scenarios](https://github.com/jfarcand/iphone-mirroir-scenarios):
+Ready-to-use scenarios that automate anything a human can do on an iPhone — tap, type, navigate, chain apps together. If you can do it manually, you can script it. Install from [jfarcand/mirroir-scenarios](https://github.com/jfarcand/mirroir-scenarios):
 
 #### Claude Code
 
 ```bash
-claude plugin marketplace add jfarcand/iphone-mirroir-scenarios
-claude plugin install scenarios@iphone-mirroir-scenarios
+claude plugin marketplace add jfarcand/mirroir-scenarios
+claude plugin install scenarios@mirroir-scenarios
 ```
 
 #### GitHub Copilot CLI
 
 ```bash
-copilot plugin marketplace add jfarcand/iphone-mirroir-scenarios
-copilot plugin install scenarios@iphone-mirroir-scenarios
+copilot plugin marketplace add jfarcand/mirroir-scenarios
+copilot plugin install scenarios@mirroir-scenarios
 ```
 
 #### Manual (all other clients)
 
 ```bash
-git clone https://github.com/jfarcand/iphone-mirroir-scenarios ~/.iphone-mirroir-mcp/scenarios
+git clone https://github.com/jfarcand/mirroir-scenarios ~/.mirroir-mcp/scenarios
 ```
 
-Once installed, scenarios are available through the `list_scenarios` and `get_scenario` tools. Claude Code and Copilot CLI load the [SKILL.md](https://github.com/jfarcand/iphone-mirroir-scenarios/blob/main/plugins/scenarios/skills/scenarios/SKILL.md) automatically, which teaches the AI how to interpret and execute each step type. For other clients, ask the AI to call `list_scenarios` and then execute the steps.
+Once installed, scenarios are available through the `list_scenarios` and `get_scenario` tools. Claude Code and Copilot CLI load the [SKILL.md](https://github.com/jfarcand/mirroir-scenarios/blob/main/plugins/scenarios/skills/scenarios/SKILL.md) automatically, which teaches the AI how to interpret and execute each step type. For other clients, ask the AI to call `list_scenarios` and then execute the steps.
 
 See [Tools Reference](docs/tools.md#scenarios) for the full step type reference and directory layout.
 
@@ -301,7 +301,7 @@ mirroir test --dry-run apps/settings/*.yaml
 
 The test runner uses the same OCR and input subsystems as the MCP server. Steps like `tap: "General"` find the element via Vision OCR and tap at the detected coordinates. `wait_for` polls OCR until the label appears or times out. AI-only steps (`remember`, `condition`, `repeat`) are skipped with a warning.
 
-Scenario resolution searches `<cwd>/.iphone-mirroir-mcp/scenarios/` and `~/.iphone-mirroir-mcp/scenarios/` — same directories as `list_scenarios`. Pass a `.yaml` path to run a specific file, or a name to search the scenario directories.
+Scenario resolution searches `<cwd>/.mirroir-mcp/scenarios/` and `~/.mirroir-mcp/scenarios/` — same directories as `list_scenarios`. Pass a `.yaml` path to run a specific file, or a name to search the scenario directories.
 
 Exit code is `0` when all scenarios pass, `1` when any step fails.
 
@@ -382,11 +382,11 @@ mirroir doctor --no-color # plain text (no ANSI colors)
 /bin/bash -c "$(curl -fsSL https://mirroir.dev/get-mirroir.sh)"
 
 # npx (always fetches latest)
-npx -y iphone-mirroir-mcp install
+npx -y mirroir-mcp install
 
 # Homebrew
-brew upgrade iphone-mirroir-mcp
-sudo brew services restart iphone-mirroir-mcp
+brew upgrade mirroir-mcp
+sudo brew services restart mirroir-mcp
 
 # From source
 git pull
@@ -397,8 +397,8 @@ sudo ./scripts/reinstall-helper.sh
 
 ```bash
 # Homebrew
-sudo brew services stop iphone-mirroir-mcp
-brew uninstall iphone-mirroir-mcp
+sudo brew services stop mirroir-mcp
+brew uninstall mirroir-mcp
 
 # From source — removes helper daemon, Karabiner config changes,
 # and optionally standalone DriverKit or Karabiner-Elements
@@ -411,8 +411,8 @@ All timing delays and numeric constants have sensible defaults compiled into the
 
 ```bash
 # Project-local (takes priority)
-mkdir -p .iphone-mirroir-mcp
-cat > .iphone-mirroir-mcp/settings.json << 'EOF'
+mkdir -p .mirroir-mcp
+cat > .mirroir-mcp/settings.json << 'EOF'
 {
   "keystrokeDelayUs": 20000,
   "clickHoldUs": 100000
@@ -420,7 +420,7 @@ cat > .iphone-mirroir-mcp/settings.json << 'EOF'
 EOF
 
 # Global
-cat > ~/.iphone-mirroir-mcp/settings.json << 'EOF'
+cat > ~/.mirroir-mcp/settings.json << 'EOF'
 {
   "keystrokeDelayUs": 20000
 }
@@ -429,12 +429,12 @@ EOF
 
 Only include the values you want to change — everything else uses the compiled default. Resolution order for each key (first found wins):
 
-1. Project-local `<cwd>/.iphone-mirroir-mcp/settings.json`
-2. Global `~/.iphone-mirroir-mcp/settings.json`
-3. `IPHONE_MIRROIR_<SCREAMING_SNAKE_CASE>` environment variable
+1. Project-local `<cwd>/.mirroir-mcp/settings.json`
+2. Global `~/.mirroir-mcp/settings.json`
+3. `MIRROIR_<SCREAMING_SNAKE_CASE>` environment variable
 4. Compiled default ([`TimingConstants.swift`](Sources/HelperLib/TimingConstants.swift))
 
-Environment variables use screaming snake case with an `IPHONE_MIRROIR_` prefix. For example, `keystrokeDelayUs` becomes `IPHONE_MIRROIR_KEYSTROKE_DELAY_US`.
+Environment variables use screaming snake case with an `MIRROIR_` prefix. For example, `keystrokeDelayUs` becomes `MIRROIR_KEYSTROKE_DELAY_US`.
 
 <details>
 <summary>Common tuning examples</summary>

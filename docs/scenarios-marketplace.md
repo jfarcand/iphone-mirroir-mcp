@@ -6,8 +6,8 @@ Scenarios are YAML files that describe multi-step iPhone automation flows as int
 
 The system has two layers:
 
-1. **This repository** (`iphone-mirroir-mcp`) — provides 26 MCP tools for iPhone interaction
-2. **Scenario repositories** (e.g., [jfarcand/iphone-mirroir-scenarios](https://github.com/jfarcand/iphone-mirroir-scenarios)) — provide reusable YAML scenario files + plugin discovery
+1. **This repository** (`mirroir-mcp`) — provides 26 MCP tools for iPhone interaction
+2. **Scenario repositories** (e.g., [jfarcand/mirroir-scenarios](https://github.com/jfarcand/mirroir-scenarios)) — provide reusable YAML scenario files + plugin discovery
 
 Scenarios are intentionally simple. Steps like `tap: "Email"` don't specify pixel coordinates — the AI uses `describe_screen` for fuzzy OCR matching and adapts to unexpected dialogs, layout changes, and timing differences.
 
@@ -18,8 +18,8 @@ Scenarios can be installed via AI coding assistant plugin systems or manually.
 ### Claude Code
 
 ```bash
-claude plugin marketplace add jfarcand/iphone-mirroir-scenarios
-claude plugin install scenarios@iphone-mirroir-scenarios
+claude plugin marketplace add jfarcand/mirroir-scenarios
+claude plugin install scenarios@mirroir-scenarios
 ```
 
 Plugin metadata lives in `.claude-plugin/marketplace.json` in the scenario repository. The `SKILL.md` file in the scenario repo teaches Claude how to interpret scenario steps.
@@ -27,8 +27,8 @@ Plugin metadata lives in `.claude-plugin/marketplace.json` in the scenario repos
 ### GitHub Copilot CLI
 
 ```bash
-copilot plugin marketplace add jfarcand/iphone-mirroir-scenarios
-copilot plugin install scenarios@iphone-mirroir-scenarios
+copilot plugin marketplace add jfarcand/mirroir-scenarios
+copilot plugin install scenarios@mirroir-scenarios
 ```
 
 Plugin metadata lives in `.github/plugin/marketplace.json` in the scenario repository.
@@ -39,12 +39,12 @@ Clone or copy scenario YAML files into one of the scan directories:
 
 ```bash
 # Global — available in all projects
-git clone https://github.com/jfarcand/iphone-mirroir-scenarios.git \
-    ~/.iphone-mirroir-mcp/scenarios/
+git clone https://github.com/jfarcand/mirroir-scenarios.git \
+    ~/.mirroir-mcp/scenarios/
 
 # Project-local — available only in current project
-mkdir -p .iphone-mirroir-mcp/scenarios/
-cp my-scenario.yaml .iphone-mirroir-mcp/scenarios/
+mkdir -p .mirroir-mcp/scenarios/
+cp my-scenario.yaml .mirroir-mcp/scenarios/
 ```
 
 Project-local scenarios with the same filename override global ones.
@@ -202,7 +202,7 @@ Scenario YAML files should be validated for:
 
 ## Available Scenarios
 
-Scenarios are maintained in the [iphone-mirroir-scenarios](https://github.com/jfarcand/iphone-mirroir-scenarios) repository. Install them via the plugin system (see [Plugin Discovery](#plugin-discovery) above) or clone manually into `~/.iphone-mirroir-mcp/scenarios/`.
+Scenarios are maintained in the [mirroir-scenarios](https://github.com/jfarcand/mirroir-scenarios) repository. Install them via the plugin system (see [Plugin Discovery](#plugin-discovery) above) or clone manually into `~/.mirroir-mcp/scenarios/`.
 
 ## Contributing a Scenario
 

@@ -5,7 +5,7 @@
 // ABOUTME: Validates the diagnostic command's pure-logic methods without requiring system state.
 
 import XCTest
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 final class DoctorCommandTests: XCTestCase {
 

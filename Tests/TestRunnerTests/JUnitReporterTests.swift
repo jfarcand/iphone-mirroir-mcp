@@ -5,7 +5,7 @@
 // ABOUTME: Validates output against standard JUnit XML schema expectations.
 
 import XCTest
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 final class JUnitReporterTests: XCTestCase {
 

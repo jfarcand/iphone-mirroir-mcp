@@ -7,7 +7,7 @@
 import Foundation
 import HelperLib
 
-extension IPhoneMirroirMCP {
+extension MirroirMCP {
     static func registerInfoTools(
         server: MCPServer,
         registry: TargetRegistry
@@ -112,7 +112,7 @@ extension IPhoneMirroirMCP {
                 } else {
                     checks.append(
                         "[FAIL] Helper daemon not reachable — " +
-                        "run 'npx iphone-mirroir-mcp setup' or check launchd")
+                        "run 'npx mirroir-mcp setup' or check launchd")
                     allOk = false
                 }
 

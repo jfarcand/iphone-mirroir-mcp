@@ -6,7 +6,7 @@
 
 import XCTest
 import HelperLib
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 final class TargetToolHandlerTests: XCTestCase {
 
@@ -35,7 +35,7 @@ final class TargetToolHandlerTests: XCTestCase {
         registry = TargetRegistry(
             targets: ["iphone": iphoneCtx, "android": androidCtx],
             defaultName: "iphone")
-        IPhoneMirroirMCP.registerTargetTools(server: server, registry: registry)
+        MirroirMCP.registerTargetTools(server: server, registry: registry)
     }
 
     private func callTool(_ name: String, args: [String: JSONValue] = [:]) -> JSONRPCResponse {

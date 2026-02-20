@@ -16,7 +16,7 @@ private func log(_ message: String) {
 @main
 struct HelperDaemon {
     static func main() {
-        log("iphone-mirroir-helper starting (pid: \(ProcessInfo.processInfo.processIdentifier))")
+        log("mirroir-helper starting (pid: \(ProcessInfo.processInfo.processIdentifier))")
 
         // Verify running as root
         guard getuid() == 0 else {

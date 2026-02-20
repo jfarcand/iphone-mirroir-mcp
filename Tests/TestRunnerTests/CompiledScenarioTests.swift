@@ -5,7 +5,7 @@
 // ABOUTME: Validates path derivation, SHA-256 hashing, and version/dimension mismatch handling.
 
 import XCTest
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 final class CompiledScenarioTests: XCTestCase {
 

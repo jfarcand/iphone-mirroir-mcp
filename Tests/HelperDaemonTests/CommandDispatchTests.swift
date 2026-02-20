@@ -7,7 +7,7 @@
 import XCTest
 import Foundation
 import HelperLib
-@testable import iphone_mirroir_helper
+@testable import mirroir_helper
 
 final class CommandDispatchTests: XCTestCase {
 

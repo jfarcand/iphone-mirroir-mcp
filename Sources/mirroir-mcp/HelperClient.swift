@@ -8,13 +8,13 @@ import Darwin
 import Foundation
 import os
 
-/// Client for communicating with the iphone-mirroir-helper LaunchDaemon.
+/// Client for communicating with the mirroir-helper LaunchDaemon.
 /// Connects to the helper's Unix stream socket and sends newline-delimited JSON commands.
 ///
 /// The helper handles all Karabiner virtual HID interaction (which requires root).
 /// This client runs in the unprivileged MCP server process.
 final class HelperClient: Sendable {
-    private let socketPath = "/var/run/iphone-mirroir-helper.sock"
+    private let socketPath = "/var/run/mirroir-helper.sock"
     private let socketFd = OSAllocatedUnfairLock(initialState: Int32(-1))
 
     /// Whether the helper daemon is reachable and devices are ready.
@@ -137,7 +137,7 @@ final class HelperClient: Sendable {
         return """
             Helper daemon not running. Tap, type, and swipe require the helper daemon.\n\
             Run this in your terminal to complete setup:\n\
-              npx iphone-mirroir-mcp setup\n\
+              npx mirroir-mcp setup\n\
             Screenshots and menu actions (Home, Spotlight, App Switcher) still work without it.
             """
     }

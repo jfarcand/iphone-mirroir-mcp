@@ -1,15 +1,15 @@
 #!/bin/bash
-# ABOUTME: Full uninstaller for iphone-mirroir-mcp.
+# ABOUTME: Full uninstaller for mirroir-mcp.
 # ABOUTME: Removes helper daemon, Karabiner config changes, and optionally standalone DriverKit or Karabiner-Elements.
 
 set -e
 
-PLIST_NAME="com.jfarcand.iphone-mirroir-helper"
-HELPER_BIN="iphone-mirroir-helper"
+PLIST_NAME="com.jfarcand.mirroir-helper"
+HELPER_BIN="mirroir-helper"
 KARABINER_CONFIG="$HOME/.config/karabiner/karabiner.json"
 DRIVERKIT_MANAGER="/Applications/.Karabiner-VirtualHIDDevice-Manager.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Manager"
 
-echo "=== Uninstalling iphone-mirroir-mcp ==="
+echo "=== Uninstalling mirroir-mcp ==="
 
 # --- Step 1: Stop and remove helper daemon ---
 
@@ -25,9 +25,9 @@ fi
 sudo rm -f "/usr/local/bin/$HELPER_BIN"
 sudo rm -f "/usr/local/bin/mirroir"
 sudo rm -f "/Library/LaunchDaemons/$PLIST_NAME.plist"
-sudo rm -f "/var/run/iphone-mirroir-helper.sock"
-sudo rm -f "/var/log/iphone-mirroir-helper.log"
-rm -f "$HOME/.iphone-mirroir-mcp/debug.log"
+sudo rm -f "/var/run/mirroir-helper.sock"
+sudo rm -f "/var/log/mirroir-helper.log"
+rm -f "$HOME/.mirroir-mcp/debug.log"
 echo "Helper daemon removed."
 
 # --- Step 2: Remove permissions config ---
@@ -35,7 +35,7 @@ echo "Helper daemon removed."
 echo ""
 echo "--- Permissions config ---"
 
-MCP_CONFIG_DIR="$HOME/.iphone-mirroir-mcp"
+MCP_CONFIG_DIR="$HOME/.mirroir-mcp"
 if [ -d "$MCP_CONFIG_DIR" ]; then
     read -p "Remove permissions config ($MCP_CONFIG_DIR)? [y/N] " remove_config
     case "$remove_config" in

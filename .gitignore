@@ -12,10 +12,13 @@ DerivedData/
 claude_docs/*
 claude_code/*
 update-helper.sh
-npm/bin/iphone-mirroir-mcp-native
-npm/bin/iphone-mirroir-helper
-npm/bin/com.jfarcand.iphone-mirroir-helper.plist
-.iphone-mirroir-mcp/scenarios/
+npm/bin/mirroir-mcp-native
+npm/bin/mirroir-helper
+npm/bin/com.jfarcand.mirroir-helper.plist
+.mirroir-mcp/scenarios/
+mirroir-test-results/
+integrations/
+.vscode/launch.json
 website/node_modules/
 website/dist/
 website/.astro/

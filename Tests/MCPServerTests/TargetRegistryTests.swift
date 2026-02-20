@@ -6,7 +6,7 @@
 
 import XCTest
 import HelperLib
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 final class TargetRegistryTests: XCTestCase {
 

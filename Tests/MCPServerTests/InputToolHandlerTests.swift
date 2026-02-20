@@ -6,7 +6,7 @@
 
 import XCTest
 import HelperLib
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 final class InputToolHandlerTests: XCTestCase {
 
@@ -21,7 +21,7 @@ final class InputToolHandlerTests: XCTestCase {
         bridge = StubBridge()
         input = StubInput()
         let registry = makeTestRegistry(bridge: bridge, input: input)
-        IPhoneMirroirMCP.registerInputTools(server: server, registry: registry)
+        MirroirMCP.registerInputTools(server: server, registry: registry)
     }
 
     private func callTool(_ name: String, args: [String: JSONValue] = [:]) -> JSONRPCResponse {

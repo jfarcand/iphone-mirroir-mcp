@@ -7,7 +7,7 @@ This tool gives an AI agent full control of your iPhone screen — it can tap an
 To limit exposure:
 
 - **Fail-closed permissions**: Without a config file, only read-only tools (screenshot, describe_screen, status) are exposed. Mutating tools are hidden entirely.
-- **`blockedApps`**: Add sensitive apps to the deny list in `~/.iphone-mirroir-mcp/permissions.json`:
+- **`blockedApps`**: Add sensitive apps to the deny list in `~/.mirroir-mcp/permissions.json`:
   ```json
   { "allow": ["tap", "swipe", "type_text"], "blockedApps": ["Wallet", "Banking"] }
   ```
@@ -65,7 +65,7 @@ All input stops immediately. The MCP server detects the disconnection through th
 
 ## Can I restrict which tools the AI can use?
 
-Yes. Drop a `permissions.json` file in `~/.iphone-mirroir-mcp/` (global) or `.iphone-mirroir-mcp/` (project-local):
+Yes. Drop a `permissions.json` file in `~/.mirroir-mcp/` (global) or `.mirroir-mcp/` (project-local):
 
 ```json
 {

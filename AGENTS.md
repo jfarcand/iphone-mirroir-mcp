@@ -4,7 +4,7 @@ This project has companion repos on the same machine. Reference them when needed
 
 | Repo | Local Path | Purpose |
 |------|-----------|---------|
-| [iphone-mirroir-scenarios](https://github.com/jfarcand/iphone-mirroir-scenarios) | `../iphone-mirroir-scenarios` | Community scenario YAML files (apps/, workflows/, testing/) |
+| [mirroir-scenarios](https://github.com/jfarcand/mirroir-scenarios) | `../mirroir-scenarios` | Community scenario YAML files (apps/, workflows/, testing/) |
 
 Compiled `.compiled.json` files live alongside their source `.yaml` in the scenarios repo.
 

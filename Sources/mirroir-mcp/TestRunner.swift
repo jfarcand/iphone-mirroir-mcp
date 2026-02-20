@@ -45,7 +45,7 @@ enum TestRunner {
 
         if scenarioFiles.isEmpty {
             fputs("No scenarios found.\n", stderr)
-            fputs("Place .yaml files in .iphone-mirroir-mcp/scenarios/ or specify paths.\n", stderr)
+            fputs("Place .yaml files in .mirroir-mcp/scenarios/ or specify paths.\n", stderr)
             return 1
         }
 
@@ -455,7 +455,7 @@ enum TestRunner {
             }
 
             // Try to resolve as scenario name
-            let (path, ambiguous) = IPhoneMirroirMCP.resolveScenario(name: arg, dirs: dirs)
+            let (path, ambiguous) = MirroirMCP.resolveScenario(name: arg, dirs: dirs)
             if let path = path {
                 files.append(path)
             } else if !ambiguous.isEmpty {
@@ -476,7 +476,7 @@ enum TestRunner {
         var seenRelPaths = Set<String>()
 
         for dir in dirs {
-            for relPath in IPhoneMirroirMCP.findYAMLFiles(in: dir) {
+            for relPath in MirroirMCP.findYAMLFiles(in: dir) {
                 if seenRelPaths.contains(relPath) { continue }
                 seenRelPaths.insert(relPath)
                 files.append(dir + "/" + relPath)
@@ -506,7 +506,7 @@ enum TestRunner {
     /// Print usage information.
     static func printUsage() {
         let usage = """
-        Usage: iphone-mirroir-mcp test [options] [scenario...]
+        Usage: mirroir-mcp test [options] [scenario...]
 
         Run scenario YAML files deterministically against iPhone Mirroring.
 
@@ -528,12 +528,12 @@ enum TestRunner {
           --help, -h          Show this help
 
         Examples:
-          iphone-mirroir-mcp test check-about
-          iphone-mirroir-mcp test apps/settings/check-about.yaml
-          iphone-mirroir-mcp test --junit results.xml apps/settings/*.yaml
-          iphone-mirroir-mcp test --agent scenario.yaml           # deterministic diagnosis
-          iphone-mirroir-mcp test --agent claude-sonnet-4-6 scenario.yaml  # AI diagnosis
-          iphone-mirroir-mcp test                    # run all discovered scenarios
+          mirroir-mcp test check-about
+          mirroir-mcp test apps/settings/check-about.yaml
+          mirroir-mcp test --junit results.xml apps/settings/*.yaml
+          mirroir-mcp test --agent scenario.yaml           # deterministic diagnosis
+          mirroir-mcp test --agent claude-sonnet-4-6 scenario.yaml  # AI diagnosis
+          mirroir-mcp test                    # run all discovered scenarios
         """
         fputs(usage + "\n", stderr)
     }

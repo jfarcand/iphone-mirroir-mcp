@@ -8,7 +8,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import HelperLib
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 // MARK: - StubBridge
 

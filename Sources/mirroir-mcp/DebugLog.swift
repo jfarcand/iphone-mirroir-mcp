@@ -1,7 +1,7 @@
 // Copyright 2026 jfarcand@apache.org
 // Licensed under the Apache License, Version 2.0
 //
-// ABOUTME: Shared debug logger that writes to stderr and ~/.iphone-mirroir-mcp/debug.log.
+// ABOUTME: Shared debug logger that writes to stderr and ~/.mirroir-mcp/debug.log.
 // ABOUTME: Startup lines always persist to the log file; verbose lines require --debug.
 
 import Foundation

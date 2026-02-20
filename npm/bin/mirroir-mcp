@@ -8,20 +8,20 @@ const path = require("path");
 
 const binDir = __dirname;
 const pkgDir = path.dirname(binDir);
-const binary = path.join(binDir, "iphone-mirroir-mcp-native");
+const binary = path.join(binDir, "mirroir-mcp-native");
 const setupScript = path.join(pkgDir, "setup.js");
 const installScript = path.join(pkgDir, "install-cmd.js");
 
 // Handle "install" subcommand — full interactive installer (Karabiner + helper + MCP client)
 if (process.argv[2] === "install") {
   if (!fs.existsSync(installScript)) {
-    console.error("Install script not found. Run: npm rebuild iphone-mirroir-mcp");
+    console.error("Install script not found. Run: npm rebuild mirroir-mcp");
     process.exit(1);
   }
   try {
     execFileSync("node", [installScript], { stdio: "inherit" });
   } catch (e) {
-    console.error("Install failed. See https://github.com/jfarcand/iphone-mirroir-mcp for manual install.");
+    console.error("Install failed. See https://github.com/jfarcand/mirroir-mcp for manual install.");
     process.exit(1);
   }
   process.exit(0);
@@ -30,13 +30,13 @@ if (process.argv[2] === "install") {
 // Handle "setup" subcommand — interactive helper daemon installation
 if (process.argv[2] === "setup") {
   if (!fs.existsSync(setupScript)) {
-    console.error("Setup script not found. Run: npm rebuild iphone-mirroir-mcp");
+    console.error("Setup script not found. Run: npm rebuild mirroir-mcp");
     process.exit(1);
   }
   try {
     execFileSync("node", [setupScript], { stdio: "inherit" });
   } catch (e) {
-    console.error("Setup failed. See https://github.com/jfarcand/iphone-mirroir-mcp for manual install.");
+    console.error("Setup failed. See https://github.com/jfarcand/mirroir-mcp for manual install.");
     process.exit(1);
   }
   process.exit(0);
@@ -44,11 +44,11 @@ if (process.argv[2] === "setup") {
 
 // Run the MCP server — starts regardless of helper daemon state.
 // If the helper isn't running, tools return helpful error messages
-// telling the user to run: npx iphone-mirroir-mcp setup
+// telling the user to run: npx mirroir-mcp setup
 try {
   execFileSync(binary, process.argv.slice(2), { stdio: "inherit" });
 } catch (e) {
   if (e.status != null) process.exit(e.status);
-  console.error("iphone-mirroir-mcp binary not found. Run: npm rebuild iphone-mirroir-mcp");
+  console.error("mirroir-mcp binary not found. Run: npm rebuild mirroir-mcp");
   process.exit(1);
 }

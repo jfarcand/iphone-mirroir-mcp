@@ -28,15 +28,15 @@ echo ""
 
 log "=== Phase 1: Helper daemon ==="
 
-run "sudo launchctl bootout system/com.jfarcand.iphone-mirroir-helper 2>/dev/null || true"
+run "sudo launchctl bootout system/com.jfarcand.mirroir-helper 2>/dev/null || true"
 sleep 1
 
-run "sudo rm -f /usr/local/bin/iphone-mirroir-helper"
+run "sudo rm -f /usr/local/bin/mirroir-helper"
 run "sudo rm -f /usr/local/bin/mirroir"
-run "sudo rm -f /Library/LaunchDaemons/com.jfarcand.iphone-mirroir-helper.plist"
-run "sudo rm -f /var/run/iphone-mirroir-helper.sock"
-run "sudo rm -f /var/log/iphone-mirroir-helper.log"
-run "rm -f '$HOME/.iphone-mirroir-mcp/debug.log'"
+run "sudo rm -f /Library/LaunchDaemons/com.jfarcand.mirroir-helper.plist"
+run "sudo rm -f /var/run/mirroir-helper.sock"
+run "sudo rm -f /var/log/mirroir-helper.log"
+run "rm -f '$HOME/.mirroir-mcp/debug.log'"
 
 log "Helper daemon removed."
 
@@ -158,10 +158,10 @@ check "No standalone DriverKit Manager" "test -f '$DRIVERKIT_MANAGER'"
 check "No vhidd sockets" "sudo bash -c \"ls '/Library/Application Support/org.pqrs/tmp/rootonly/vhidd_server'/*.sock\" 2>/dev/null"
 check "No org.pqrs support dir" "test -d '/Library/Application Support/org.pqrs'"
 check "No Karabiner config" "test -f '$HOME/.config/karabiner/karabiner.json'"
-check "No helper daemon socket" "test -S /var/run/iphone-mirroir-helper.sock"
-check "No helper binary" "test -f /usr/local/bin/iphone-mirroir-helper"
+check "No helper daemon socket" "test -S /var/run/mirroir-helper.sock"
+check "No helper binary" "test -f /usr/local/bin/mirroir-helper"
 check "No mirroir symlink" "test -L /usr/local/bin/mirroir"
-check "No helper plist" "test -f /Library/LaunchDaemons/com.jfarcand.iphone-mirroir-helper.plist"
+check "No helper plist" "test -f /Library/LaunchDaemons/com.jfarcand.mirroir-helper.plist"
 
 REMAINING=$(ps aux | grep -i -e karabiner -e "org.pqrs" | grep -v grep | wc -l | tr -d ' ')
 if [ "$REMAINING" -le 1 ]; then

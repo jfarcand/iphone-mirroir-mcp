@@ -4,10 +4,10 @@
 
 set -e
 
-BINARY_SRC=".build/release/iphone-mirroir-helper"
-BINARY_DST="/usr/local/bin/iphone-mirroir-helper"
-PLIST="/Library/LaunchDaemons/com.jfarcand.iphone-mirroir-helper.plist"
-LABEL="com.jfarcand.iphone-mirroir-helper"
+BINARY_SRC=".build/release/mirroir-helper"
+BINARY_DST="/usr/local/bin/mirroir-helper"
+PLIST="/Library/LaunchDaemons/com.jfarcand.mirroir-helper.plist"
+LABEL="com.jfarcand.mirroir-helper"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Error: must run as root (sudo $0)"
@@ -24,7 +24,7 @@ launchctl bootout "system/$LABEL" 2>/dev/null || true
 sleep 2
 
 # Kill any lingering process
-pkill -9 -f iphone-mirroir-helper 2>/dev/null || true
+pkill -9 -f mirroir-helper 2>/dev/null || true
 sleep 1
 
 echo "Copying binary..."
@@ -32,7 +32,7 @@ cp "$BINARY_SRC" "$BINARY_DST"
 chmod 755 "$BINARY_DST"
 
 # Clean up stale socket
-rm -f /var/run/iphone-mirroir-helper.sock
+rm -f /var/run/mirroir-helper.sock
 
 echo "Starting helper..."
 if ! launchctl bootstrap system "$PLIST" 2>/dev/null; then
@@ -42,6 +42,6 @@ fi
 
 sleep 2
 echo "Checking status..."
-echo '{"action":"status"}' | nc -U /var/run/iphone-mirroir-helper.sock
+echo '{"action":"status"}' | nc -U /var/run/mirroir-helper.sock
 echo ""
 echo "Done."

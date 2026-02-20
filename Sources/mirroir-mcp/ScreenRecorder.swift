@@ -116,6 +116,6 @@ final class ScreenRecorder: Sendable {
     private func defaultRecordingPath() -> String {
         let timestamp = ISO8601DateFormatter().string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
-        return NSTemporaryDirectory() + "iphone-mirroir-recording-\(timestamp).mov"
+        return NSTemporaryDirectory() + "mirroir-recording-\(timestamp).mov"
     }
 }

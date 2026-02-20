@@ -25,7 +25,7 @@ struct RecordConfig {
 /// Orchestrates the `record` subcommand: installs a CGEvent tap, captures user
 /// interactions with the iPhone Mirroring window, and writes scenario YAML on exit.
 ///
-/// Usage: `iphone-mirroir-mcp record [options]`
+/// Usage: `mirroir-mcp record [options]`
 enum RecordCommand {
 
     /// Parse arguments and run the recorder. Returns exit code (0 = success, 1 = error).
@@ -167,7 +167,7 @@ enum RecordCommand {
 
     static func printUsage() {
         let usage = """
-        Usage: iphone-mirroir-mcp record [options]
+        Usage: mirroir-mcp record [options]
 
         Record user interactions with iPhone Mirroring as a scenario YAML file.
         Captures taps, swipes, and keyboard input. Press Ctrl+C to stop.
@@ -182,9 +182,9 @@ enum RecordCommand {
           --help, -h             Show this help
 
         Examples:
-          iphone-mirroir-mcp record -o login-flow.yaml -n "Login Flow" --app "MyApp"
-          iphone-mirroir-mcp record --no-ocr -o quick-capture.yaml
-          iphone-mirroir-mcp record -o - | tee scenario.yaml
+          mirroir-mcp record -o login-flow.yaml -n "Login Flow" --app "MyApp"
+          mirroir-mcp record --no-ocr -o quick-capture.yaml
+          mirroir-mcp record -o - | tee scenario.yaml
         """
         fputs(usage + "\n", stderr)
     }

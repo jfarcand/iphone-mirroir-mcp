@@ -2,17 +2,17 @@
 // Licensed under the Apache License, Version 2.0
 //
 // ABOUTME: JSON-based configuration overrides for timing and numeric constants.
-// ABOUTME: Reads settings.json first, then IPHONE_MIRROIR_* env vars, falling back to TimingConstants.
+// ABOUTME: Reads settings.json first, then MIRROIR_* env vars, falling back to TimingConstants.
 
 import Foundation
 
 /// Reads timing and numeric constants from a `settings.json` config file, falling back
-/// to `IPHONE_MIRROIR_*` environment variables, then to ``TimingConstants`` defaults.
+/// to `MIRROIR_*` environment variables, then to ``TimingConstants`` defaults.
 ///
 /// Resolution order for each key (first found wins):
-/// 1. `settings.json` value (project-local `<cwd>/.iphone-mirroir-mcp/settings.json`,
-///    then global `~/.iphone-mirroir-mcp/settings.json`)
-/// 2. `IPHONE_MIRROIR_<SCREAMING_SNAKE_CASE>` environment variable
+/// 1. `settings.json` value (project-local `<cwd>/.mirroir-mcp/settings.json`,
+///    then global `~/.mirroir-mcp/settings.json`)
+/// 2. `MIRROIR_<SCREAMING_SNAKE_CASE>` environment variable
 /// 3. ``TimingConstants`` default
 ///
 /// Example `settings.json`:
@@ -326,12 +326,12 @@ public enum EnvConfig {
     // MARK: - App Identity
 
     public static var mirroringBundleID: String {
-        readString("mirroringBundleID", envVar: "IPHONE_MIRROIR_BUNDLE_ID",
+        readString("mirroringBundleID", envVar: "MIRROIR_BUNDLE_ID",
                    default: "com.apple.ScreenContinuity")
     }
 
     public static var mirroringProcessName: String {
-        readString("mirroringProcessName", envVar: "IPHONE_MIRROIR_PROCESS_NAME",
+        readString("mirroringProcessName", envVar: "MIRROIR_PROCESS_NAME",
                    default: "iPhone Mirroring")
     }
 
@@ -340,7 +340,7 @@ public enum EnvConfig {
     /// Load settings from the first available settings.json file.
     /// Resolution order: project-local → global → empty dictionary.
     private static func loadSettings() -> [String: Any] {
-        let configDirName = ".iphone-mirroir-mcp"
+        let configDirName = ".mirroir-mcp"
         let fileName = "settings.json"
 
         let localPath = FileManager.default.currentDirectoryPath + "/" + configDirName + "/" + fileName
@@ -372,9 +372,9 @@ public enum EnvConfig {
 
     private static let env = ProcessInfo.processInfo.environment
 
-    /// Convert camelCase key to IPHONE_MIRROIR_SCREAMING_SNAKE_CASE for env var lookup.
+    /// Convert camelCase key to MIRROIR_SCREAMING_SNAKE_CASE for env var lookup.
     private static func envVarName(_ key: String) -> String {
-        var result = "IPHONE_MIRROIR_"
+        var result = "MIRROIR_"
         for char in key {
             if char.isUppercase {
                 result += "_"

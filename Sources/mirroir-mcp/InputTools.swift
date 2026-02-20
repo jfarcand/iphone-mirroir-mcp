@@ -7,7 +7,7 @@
 import Foundation
 import HelperLib
 
-extension IPhoneMirroirMCP {
+extension MirroirMCP {
     /// Schema fragment for the optional cursor_mode parameter on coordinate tools.
     private static let cursorModeSchema: JSONValue = .object([
         "type": .string("string"),

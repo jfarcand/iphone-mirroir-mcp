@@ -10,7 +10,7 @@ The MCP server only works while iPhone Mirroring is active. Closing the iPhone M
 
 ## Network Exposure
 
-The helper daemon listens on a **local Unix socket only** (`/var/run/iphone-mirroir-helper.sock`). It does not open any network ports. Remote access is not possible unless the socket is explicitly forwarded.
+The helper daemon listens on a **local Unix socket only** (`/var/run/mirroir-helper.sock`). It does not open any network ports. Remote access is not possible unless the socket is explicitly forwarded.
 
 ## Root Daemon
 
@@ -18,7 +18,7 @@ The helper daemon runs as root because Karabiner's HID sockets require root acce
 
 ## Fail-Closed Permissions
 
-Without a config file, only read-only tools (`screenshot`, `describe_screen`, `status`, etc.) are exposed. Mutating tools (`tap`, `type_text`, `launch_app`, etc.) are hidden from the MCP client entirely — it never sees them unless you explicitly allow them in `~/.iphone-mirroir-mcp/permissions.json`.
+Without a config file, only read-only tools (`screenshot`, `describe_screen`, `status`, etc.) are exposed. Mutating tools (`tap`, `type_text`, `launch_app`, etc.) are hidden from the MCP client entirely — it never sees them unless you explicitly allow them in `~/.mirroir-mcp/permissions.json`.
 
 See [Permissions](permissions.md) for configuration details and examples.
 

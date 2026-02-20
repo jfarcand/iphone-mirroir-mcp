@@ -1,11 +1,10 @@
 {
   "servers": {
-    "iphone-mirroring": {
+    "mirroir": {
       "type": "stdio",
-      "command": "npx",
+      "command": "/Users/jeanfrancoisarcand/workspace/jfarcand/mirroir-mcp/.build/release/mirroir-mcp",
       "args": [
-        "-y",
-        "iphone-mirroir-mcp"
+        "--yolo"
       ]
     }
   }

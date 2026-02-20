@@ -6,7 +6,7 @@
 
 import XCTest
 import HelperLib
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 final class ScenarioFileTests: XCTestCase {
 
@@ -19,13 +19,13 @@ final class ScenarioFileTests: XCTestCase {
     }
 
     private static var scenariosDir: String {
-        projectRoot + "/.iphone-mirroir-mcp/scenarios"
+        projectRoot + "/.mirroir-mcp/scenarios"
     }
 
     // MARK: - Global validation
 
     func testAllScenarioFilesParse() throws {
-        let files = IPhoneMirroirMCP.findYAMLFiles(in: Self.scenariosDir)
+        let files = MirroirMCP.findYAMLFiles(in: Self.scenariosDir)
         XCTAssertFalse(files.isEmpty, "No scenario files found in \(Self.scenariosDir)")
 
         for file in files {
@@ -36,7 +36,7 @@ final class ScenarioFileTests: XCTestCase {
     }
 
     func testScenarioCount() {
-        let files = IPhoneMirroirMCP.findYAMLFiles(in: Self.scenariosDir)
+        let files = MirroirMCP.findYAMLFiles(in: Self.scenariosDir)
         XCTAssertEqual(files.count, 24, "Expected 24 scenarios, got \(files.count): \(files)")
     }
 
@@ -47,7 +47,7 @@ final class ScenarioFileTests: XCTestCase {
         // long_press is used in share-recent.yaml — not built into the parser on purpose
         let expectedUnknownTypes: Set<String> = ["long_press"]
 
-        let files = IPhoneMirroirMCP.findYAMLFiles(in: Self.scenariosDir)
+        let files = MirroirMCP.findYAMLFiles(in: Self.scenariosDir)
         for file in files {
             let scenario = try parseScenario(file)
             for step in scenario.steps {
@@ -260,7 +260,7 @@ final class ScenarioFileTests: XCTestCase {
     // MARK: - Step type coverage across all scenarios
 
     func testAllExecutableStepTypesCovered() throws {
-        let files = IPhoneMirroirMCP.findYAMLFiles(in: Self.scenariosDir)
+        let files = MirroirMCP.findYAMLFiles(in: Self.scenariosDir)
         var seenTypes: Set<String> = []
 
         for file in files {
@@ -290,11 +290,11 @@ final class ScenarioFileTests: XCTestCase {
     // MARK: - Header extraction from real files
 
     func testAllFilesHaveValidHeaders() throws {
-        let files = IPhoneMirroirMCP.findYAMLFiles(in: Self.scenariosDir)
+        let files = MirroirMCP.findYAMLFiles(in: Self.scenariosDir)
 
         for file in files {
             let fullPath = Self.scenariosDir + "/" + file
-            let info = IPhoneMirroirMCP.extractScenarioHeader(
+            let info = MirroirMCP.extractScenarioHeader(
                 from: fullPath, source: "local")
             XCTAssertFalse(info.name.isEmpty, "\(file): empty header name")
         }
@@ -322,7 +322,7 @@ final class ScenarioFileTests: XCTestCase {
 
         for file in blockScalarFiles {
             let fullPath = Self.scenariosDir + "/" + file
-            let info = IPhoneMirroirMCP.extractScenarioHeader(
+            let info = MirroirMCP.extractScenarioHeader(
                 from: fullPath, source: "local")
             XCTAssertFalse(info.description.isEmpty,
                 "\(file): block scalar description parsed as empty")
@@ -335,7 +335,7 @@ final class ScenarioFileTests: XCTestCase {
 
     func testEnvVarPatternsAreWellFormed() throws {
         let envVarPattern = try NSRegularExpression(pattern: "\\$\\{([^}]+)\\}")
-        let files = IPhoneMirroirMCP.findYAMLFiles(in: Self.scenariosDir)
+        let files = MirroirMCP.findYAMLFiles(in: Self.scenariosDir)
 
         for file in files {
             let fullPath = Self.scenariosDir + "/" + file
@@ -371,7 +371,7 @@ final class ScenarioFileTests: XCTestCase {
             unsetenv("MESSAGE")
         }
 
-        let substituted = IPhoneMirroirMCP.substituteEnvVars(in: content)
+        let substituted = MirroirMCP.substituteEnvVars(in: content)
         XCTAssertTrue(substituted.contains("Alice"),
             "RECIPIENT not substituted")
         XCTAssertTrue(substituted.contains("Hi there!"),
@@ -387,7 +387,7 @@ final class ScenarioFileTests: XCTestCase {
         // Do NOT set ALARM_LABEL — should fall back to default
         unsetenv("ALARM_LABEL")
 
-        let substituted = IPhoneMirroirMCP.substituteEnvVars(in: content)
+        let substituted = MirroirMCP.substituteEnvVars(in: content)
         XCTAssertTrue(substituted.contains("Wake Up"),
             "Default 'Wake Up' not applied when ALARM_LABEL is unset")
     }

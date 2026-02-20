@@ -6,7 +6,7 @@
 
 import XCTest
 @testable import HelperLib
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 final class ScreenToolHandlerTests: XCTestCase {
 
@@ -28,7 +28,7 @@ final class ScreenToolHandlerTests: XCTestCase {
             bridge: bridge, input: StubInput(),
             capture: capture, recorder: recorder, describer: describer
         )
-        IPhoneMirroirMCP.registerScreenTools(
+        MirroirMCP.registerScreenTools(
             server: server, registry: registry
         )
     }

@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "main", "feature/*", "claude/*" ]
     paths:
-      - 'Sources/iphone-mirroir-mcp/**'
+      - 'Sources/mirroir-mcp/**'
       - 'Sources/HelperLib/**'
       - 'Tests/MCPServerTests/**'
       - 'Tests/HelperLibTests/MCPProtocolTests.swift'
@@ -13,7 +13,7 @@ on:
   pull_request:
     branches: [ main ]
     paths:
-      - 'Sources/iphone-mirroir-mcp/**'
+      - 'Sources/mirroir-mcp/**'
       - 'Sources/HelperLib/**'
       - 'Tests/MCPServerTests/**'
       - 'Tests/HelperLibTests/MCPProtocolTests.swift'
@@ -39,7 +39,7 @@ jobs:
 
       - name: Clone scenarios repo
         run: |
-          git clone https://github.com/jfarcand/iphone-mirroir-scenarios.git .iphone-mirroir-mcp/scenarios
+          git clone https://github.com/jfarcand/mirroir-scenarios.git .mirroir-mcp/scenarios
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -51,13 +51,13 @@ jobs:
 
       - name: Verify binary exists
         run: |
-          test -x .build/release/iphone-mirroir-mcp || { echo "Binary not found"; exit 1; }
-          file .build/release/iphone-mirroir-mcp
+          test -x .build/release/mirroir-mcp || { echo "Binary not found"; exit 1; }
+          file .build/release/mirroir-mcp
 
       - name: Validate MCP protocol version is latest
         run: |
           echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
-            | .build/release/iphone-mirroir-mcp 2>/dev/null \
+            | .build/release/mirroir-mcp 2>/dev/null \
             | python3 -c "
           import sys, json
           obj = json.loads(sys.stdin.readline())

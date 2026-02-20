@@ -96,8 +96,8 @@ Steps like `tap: "Email"` don't specify coordinates — the AI calls `describe_s
 ### Directory Layout
 
 ```
-~/.iphone-mirroir-mcp/scenarios/          # global scenarios
-<cwd>/.iphone-mirroir-mcp/scenarios/      # project-local (overrides global)
+~/.mirroir-mcp/scenarios/          # global scenarios
+<cwd>/.mirroir-mcp/scenarios/      # project-local (overrides global)
 ```
 
 Both directories are scanned recursively, so you can organize scenarios into subdirectories (e.g. `apps/slack/send-message.yaml`). Project-local scenarios with the same relative path override global ones.

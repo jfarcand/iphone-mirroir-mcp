@@ -7,7 +7,7 @@
 import XCTest
 import CoreGraphics
 import HelperLib
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 final class InputSimulationLogicTests: XCTestCase {
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Downloads the pre-built iphone-mirroir-mcp and iphone-mirroir-helper binaries
+// Downloads the pre-built mirroir-mcp and mirroir-helper binaries
 // plus the LaunchDaemon plist from GitHub releases.
 // Only supports macOS (darwin) since iPhone Mirroring is a macOS feature.
 
@@ -10,13 +10,13 @@ const path = require("path");
 const { execSync } = require("child_process");
 
 const VERSION = "0.14.1";
-const REPO = "jfarcand/iphone-mirroir-mcp";
-const BINARY = "iphone-mirroir-mcp";
+const REPO = "jfarcand/mirroir-mcp";
+const BINARY = "mirroir-mcp";
 
 function main() {
   if (process.platform !== "darwin") {
     console.error(
-      "iphone-mirroir-mcp only supports macOS (requires iPhone Mirroring)"
+      "mirroir-mcp only supports macOS (requires iPhone Mirroring)"
     );
     process.exit(1);
   }
@@ -25,7 +25,7 @@ function main() {
   const tarball = `${BINARY}-darwin-${arch}.tar.gz`;
   const url = `https://github.com/${REPO}/releases/download/v${VERSION}/${tarball}`;
   const binDir = path.join(__dirname, "bin");
-  const nativeBin = path.join(binDir, "iphone-mirroir-mcp-native");
+  const nativeBin = path.join(binDir, "mirroir-mcp-native");
 
   // Skip if already downloaded
   if (fs.existsSync(nativeBin)) {
@@ -40,19 +40,19 @@ function main() {
 
   // Save the JS wrapper before tar extraction (the tarball contains a native
   // binary with the same name that would overwrite it)
-  const jsWrapper = path.join(binDir, "iphone-mirroir-mcp");
-  const jsWrapperBackup = path.join(binDir, "iphone-mirroir-mcp.js.bak");
+  const jsWrapper = path.join(binDir, "mirroir-mcp");
+  const jsWrapperBackup = path.join(binDir, "mirroir-mcp.js.bak");
   if (fs.existsSync(jsWrapper)) {
     fs.copyFileSync(jsWrapper, jsWrapperBackup);
   }
 
   download(url, tmpFile, () => {
     verifyChecksum(tarball, tmpFile, () => {
-    // Extract all files: iphone-mirroir-mcp, iphone-mirroir-helper, plist
+    // Extract all files: mirroir-mcp, mirroir-helper, plist
     execSync(`tar xzf "${tmpFile}" -C "${binDir}"`, { stdio: "inherit" });
 
     // Rename native binary to -native to avoid conflicting with the JS wrapper
-    fs.renameSync(path.join(binDir, "iphone-mirroir-mcp"), nativeBin);
+    fs.renameSync(path.join(binDir, "mirroir-mcp"), nativeBin);
     fs.chmodSync(nativeBin, 0o755);
 
     // Restore the JS wrapper that tar extraction overwrote
@@ -63,7 +63,7 @@ function main() {
     }
 
     // Make helper executable
-    const helperBin = path.join(binDir, "iphone-mirroir-helper");
+    const helperBin = path.join(binDir, "mirroir-helper");
     if (fs.existsSync(helperBin)) {
       fs.chmodSync(helperBin, 0o755);
     }

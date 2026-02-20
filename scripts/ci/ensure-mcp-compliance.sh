@@ -1,5 +1,5 @@
 #!/bin/bash
-# ABOUTME: MCP protocol compliance validation script for iphone-mirroir-mcp.
+# ABOUTME: MCP protocol compliance validation script for mirroir-mcp.
 # ABOUTME: Tests the MCP server against the Model Context Protocol specification.
 #
 # Usage: ./scripts/ci/ensure-mcp-compliance.sh
@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 
-echo -e "${BLUE}==== iphone-mirroir-mcp MCP Compliance Validation ====${NC}"
+echo -e "${BLUE}==== mirroir-mcp MCP Compliance Validation ====${NC}"
 echo "Project root: $PROJECT_ROOT"
 
 # Track success
@@ -27,7 +27,7 @@ PASSED_TESTS=0
 FAILED_TESTS=0
 
 # Locate the release binary — build only if not already present (CI builds it in a prior step)
-BINARY="$PROJECT_ROOT/.build/release/iphone-mirroir-mcp"
+BINARY="$PROJECT_ROOT/.build/release/mirroir-mcp"
 if [ -x "$BINARY" ]; then
     echo -e "${GREEN}[OK] Using existing release binary${NC}"
 else
@@ -80,7 +80,7 @@ import sys, json
 obj = json.loads(sys.stdin.readline())
 assert obj.get('jsonrpc') == '2.0', f'Missing jsonrpc 2.0, got: {obj.get(\"jsonrpc\")}'
 assert 'result' in obj, f'Missing result in: {obj}'
-assert obj['result']['serverInfo']['name'] == 'iphone-mirroir-mcp', f'Wrong server name'
+assert obj['result']['serverInfo']['name'] == 'mirroir-mcp', f'Wrong server name'
 assert obj['result']['protocolVersion'] == '2025-11-25', f'Wrong protocol version: {obj[\"result\"][\"protocolVersion\"]}'
 print('OK')
 " 2>&1 | grep -q "OK"; then

@@ -6,7 +6,7 @@
 
 import CoreGraphics
 import XCTest
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 final class EventClassifierTests: XCTestCase {
 

@@ -4,10 +4,10 @@
 
 set -e
 
-REPO="https://github.com/jfarcand/iphone-mirroir-mcp.git"
-INSTALL_DIR="${IPHONE_MIRROIR_HOME:-$HOME/iphone-mirroir-mcp}"
+REPO="https://github.com/jfarcand/mirroir-mcp.git"
+INSTALL_DIR="${MIRROIR_HOME:-$HOME/mirroir-mcp}"
 
-echo "=== iphone-mirroir-mcp installer ==="
+echo "=== mirroir-mcp installer ==="
 echo ""
 
 # --- Check prerequisites ---
@@ -32,7 +32,7 @@ if [ -d "$INSTALL_DIR" ]; then
         git -C "$INSTALL_DIR" pull --ff-only
     else
         echo "Error: $INSTALL_DIR exists but is not a git repository."
-        echo "Remove it or set IPHONE_MIRROIR_HOME to a different path."
+        echo "Remove it or set MIRROIR_HOME to a different path."
         exit 1
     fi
 else

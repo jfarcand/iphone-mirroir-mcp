@@ -33,7 +33,7 @@ final class ScreenCapture: Sendable {
         usleep(EnvConfig.cursorSettleUs)
 
         let tempPath = NSTemporaryDirectory()
-            + "iphone-mirroir-mcp-\(ProcessInfo.processInfo.processIdentifier).png"
+            + "mirroir-mcp-\(ProcessInfo.processInfo.processIdentifier).png"
 
         // Strategy 1: window-ID capture
         if let data = captureByWindowID(info.windowID, to: tempPath) {

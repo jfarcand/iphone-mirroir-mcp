@@ -12,10 +12,10 @@ Thank you for your interest in contributing! By submitting a contribution, you a
 ## Project Structure
 
 ```
-iphone-mirroir-mcp/
+mirroir-mcp/
 ├── Sources/
-│   ├── iphone-mirroir-mcp/     # MCP server + CLI subcommands (user process)
-│   │   ├── iphone_mirroir_mcp.swift  # Entry point (dispatches test/record subcommands)
+│   ├── mirroir-mcp/     # MCP server + CLI subcommands (user process)
+│   │   ├── mirroir_mcp.swift  # Entry point (dispatches test/record subcommands)
 │   │   ├── MCPServer.swift           # JSON-RPC 2.0 dispatch
 │   │   ├── ToolHandlers.swift        # Tool registration orchestrator
 │   │   ├── ScreenTools.swift         # screenshot, describe_screen, recording
@@ -45,7 +45,7 @@ iphone-mirroir-mcp/
 │   │   ├── YAMLGenerator.swift       # Recorded events → scenario YAML
 │   │   └── RecordCommand.swift       # `mirroir record` CLI entry point
 │   │
-│   ├── iphone-mirroir-helper/  # Root LaunchDaemon
+│   ├── mirroir-helper/  # Root LaunchDaemon
 │   │   ├── HelperDaemon.swift        # Entry point (root verification, signal handlers)
 │   │   ├── CommandServer.swift       # Unix stream socket listener
 │   │   ├── CommandHandlers.swift     # 10 action handlers (click, type, swipe, etc.)
@@ -149,7 +149,7 @@ public static let mutatingTools: Set<String> = [
 
 ### Step 2: Add Protocol Method
 
-If the tool needs a protocol abstraction (most input tools do), add a method to the relevant protocol in `Sources/iphone-mirroir-mcp/Protocols.swift`:
+If the tool needs a protocol abstraction (most input tools do), add a method to the relevant protocol in `Sources/mirroir-mcp/Protocols.swift`:
 
 ```swift
 protocol InputProviding: Sendable {
@@ -225,7 +225,7 @@ To add a new action handled by the root helper daemon:
 
 ### Step 1: Add to processCommand
 
-In `Sources/iphone-mirroir-helper/CommandHandlers.swift`, add a case to the action switch:
+In `Sources/mirroir-helper/CommandHandlers.swift`, add a case to the action switch:
 
 ```swift
 case "my_action":
@@ -251,7 +251,7 @@ private func handleMyAction(_ json: [String: Any]) -> Data {
 
 ### Step 3: Add Client Method
 
-In `Sources/iphone-mirroir-mcp/HelperClient.swift`, add a convenience method:
+In `Sources/mirroir-mcp/HelperClient.swift`, add a convenience method:
 
 ```swift
 func myAction(x: Double, y: Double) -> [String: Any]? {
@@ -295,65 +295,65 @@ All test targets use protocol-based DI. Real implementations are swapped with st
 
 ## Environment Variable Overrides
 
-All timing and numeric constants can be overridden via environment variables. The variable name follows the pattern `IPHONE_MIRROIR_<CONSTANT_NAME>`.
+All timing and numeric constants can be overridden via environment variables. The variable name follows the pattern `MIRROIR_<CONSTANT_NAME>`.
 
 ### Cursor & Input Settling
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `IPHONE_MIRROIR_CURSOR_SETTLE_US` | 10,000 (10ms) | Wait after cursor warp for macOS to register position |
-| `IPHONE_MIRROIR_NUDGE_SETTLE_US` | 5,000 (5ms) | Wait between nudge movements |
-| `IPHONE_MIRROIR_CLICK_HOLD_US` | 80,000 (80ms) | Button hold duration for single tap |
-| `IPHONE_MIRROIR_DOUBLE_TAP_HOLD_US` | 40,000 (40ms) | Button hold per tap in double-tap |
-| `IPHONE_MIRROIR_DOUBLE_TAP_GAP_US` | 50,000 (50ms) | Gap between taps in double-tap |
-| `IPHONE_MIRROIR_DRAG_MODE_HOLD_US` | 150,000 (150ms) | Hold before drag movement for iOS drag recognition |
-| `IPHONE_MIRROIR_FOCUS_SETTLE_US` | 200,000 (200ms) | Wait after keyboard focus click |
-| `IPHONE_MIRROIR_KEYSTROKE_DELAY_US` | 15,000 (15ms) | Delay between keystrokes |
+| `MIRROIR_CURSOR_SETTLE_US` | 10,000 (10ms) | Wait after cursor warp for macOS to register position |
+| `MIRROIR_NUDGE_SETTLE_US` | 5,000 (5ms) | Wait between nudge movements |
+| `MIRROIR_CLICK_HOLD_US` | 80,000 (80ms) | Button hold duration for single tap |
+| `MIRROIR_DOUBLE_TAP_HOLD_US` | 40,000 (40ms) | Button hold per tap in double-tap |
+| `MIRROIR_DOUBLE_TAP_GAP_US` | 50,000 (50ms) | Gap between taps in double-tap |
+| `MIRROIR_DRAG_MODE_HOLD_US` | 150,000 (150ms) | Hold before drag movement for iOS drag recognition |
+| `MIRROIR_FOCUS_SETTLE_US` | 200,000 (200ms) | Wait after keyboard focus click |
+| `MIRROIR_KEYSTROKE_DELAY_US` | 15,000 (15ms) | Delay between keystrokes |
 
 ### App Switching & Navigation
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `IPHONE_MIRROIR_SPACE_SWITCH_SETTLE_US` | 300,000 (300ms) | Wait after macOS Space switch |
-| `IPHONE_MIRROIR_SPOTLIGHT_APPEARANCE_US` | 800,000 (800ms) | Wait for Spotlight to appear |
-| `IPHONE_MIRROIR_SEARCH_RESULTS_POPULATE_US` | 1,000,000 (1.0s) | Wait for search results |
-| `IPHONE_MIRROIR_SAFARI_LOAD_US` | 1,500,000 (1.5s) | Wait for Safari page load |
-| `IPHONE_MIRROIR_ADDRESS_BAR_ACTIVATE_US` | 500,000 (500ms) | Wait for address bar activation |
-| `IPHONE_MIRROIR_PRE_RETURN_US` | 300,000 (300ms) | Wait before pressing Return |
+| `MIRROIR_SPACE_SWITCH_SETTLE_US` | 300,000 (300ms) | Wait after macOS Space switch |
+| `MIRROIR_SPOTLIGHT_APPEARANCE_US` | 800,000 (800ms) | Wait for Spotlight to appear |
+| `MIRROIR_SEARCH_RESULTS_POPULATE_US` | 1,000,000 (1.0s) | Wait for search results |
+| `MIRROIR_SAFARI_LOAD_US` | 1,500,000 (1.5s) | Wait for Safari page load |
+| `MIRROIR_ADDRESS_BAR_ACTIVATE_US` | 500,000 (500ms) | Wait for address bar activation |
+| `MIRROIR_PRE_RETURN_US` | 300,000 (300ms) | Wait before pressing Return |
 
 ### Process & System Polling
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `IPHONE_MIRROIR_PROCESS_POLL_US` | 50,000 (50ms) | Polling interval for process completion |
-| `IPHONE_MIRROIR_EARLY_FAILURE_DETECT_US` | 500,000 (500ms) | Wait before checking for early process failure |
-| `IPHONE_MIRROIR_RESUME_FROM_PAUSED_US` | 2,000,000 (2.0s) | Wait after resuming paused mirroring |
-| `IPHONE_MIRROIR_POST_HEARTBEAT_SETTLE_US` | 100,000 (100ms) | Wait after initial Karabiner heartbeat |
+| `MIRROIR_PROCESS_POLL_US` | 50,000 (50ms) | Polling interval for process completion |
+| `MIRROIR_EARLY_FAILURE_DETECT_US` | 500,000 (500ms) | Wait before checking for early process failure |
+| `MIRROIR_RESUME_FROM_PAUSED_US` | 2,000,000 (2.0s) | Wait after resuming paused mirroring |
+| `MIRROIR_POST_HEARTBEAT_SETTLE_US` | 100,000 (100ms) | Wait after initial Karabiner heartbeat |
 
 ### Karabiner HID
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `IPHONE_MIRROIR_KEY_HOLD_US` | 20,000 (20ms) | Key hold duration for virtual keyboard |
-| `IPHONE_MIRROIR_DEAD_KEY_DELAY_US` | 30,000 (30ms) | Delay in dead-key compose sequences (accented characters) |
-| `IPHONE_MIRROIR_RECV_TIMEOUT_US` | 200,000 (200ms) | Socket receive timeout |
+| `MIRROIR_KEY_HOLD_US` | 20,000 (20ms) | Key hold duration for virtual keyboard |
+| `MIRROIR_DEAD_KEY_DELAY_US` | 30,000 (30ms) | Delay in dead-key compose sequences (accented characters) |
+| `MIRROIR_RECV_TIMEOUT_US` | 200,000 (200ms) | Socket receive timeout |
 
 ### Non-Timing Constants
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `IPHONE_MIRROIR_DRAG_INTERPOLATION_STEPS` | 60 | Number of movement steps in drag |
-| `IPHONE_MIRROIR_SWIPE_INTERPOLATION_STEPS` | 20 | Number of scroll steps in swipe |
-| `IPHONE_MIRROIR_SCROLL_PIXEL_SCALE` | 8.0 | Divisor converting pixels to scroll ticks |
-| `IPHONE_MIRROIR_HID_TYPING_CHUNK_SIZE` | 15 | Characters per typing chunk |
-| `IPHONE_MIRROIR_STAFF_GROUP_ID` | 20 | Unix group ID for socket permissions |
+| `MIRROIR_DRAG_INTERPOLATION_STEPS` | 60 | Number of movement steps in drag |
+| `MIRROIR_SWIPE_INTERPOLATION_STEPS` | 20 | Number of scroll steps in swipe |
+| `MIRROIR_SCROLL_PIXEL_SCALE` | 8.0 | Divisor converting pixels to scroll ticks |
+| `MIRROIR_HID_TYPING_CHUNK_SIZE` | 15 | Characters per typing chunk |
+| `MIRROIR_STAFF_GROUP_ID` | 20 | Unix group ID for socket permissions |
 
 ### App Identity
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `IPHONE_MIRROIR_BUNDLE_ID` | `com.apple.ScreenContinuity` | Target app bundle ID for process discovery |
-| `IPHONE_MIRROIR_PROCESS_NAME` | `iPhone Mirroring` | Target app display name for messages |
+| `MIRROIR_BUNDLE_ID` | `com.apple.ScreenContinuity` | Target app bundle ID for process discovery |
+| `MIRROIR_PROCESS_NAME` | `iPhone Mirroring` | Target app display name for messages |
 
 ### Keyboard Layout
 

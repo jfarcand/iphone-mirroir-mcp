@@ -10,7 +10,7 @@ Mutating tools are hidden from `tools/list` entirely — the MCP client never se
 
 ## Config File
 
-Create `~/.iphone-mirroir-mcp/permissions.json` (or `<cwd>/.iphone-mirroir-mcp/permissions.json` for project-local overrides):
+Create `~/.mirroir-mcp/permissions.json` (or `<cwd>/.mirroir-mcp/permissions.json` for project-local overrides):
 
 ```json
 {
@@ -58,8 +58,8 @@ Block Instagram from being launched:
 For development and testing, bypass the permission system entirely:
 
 ```bash
-npx -y iphone-mirroir-mcp --dangerously-skip-permissions
-npx -y iphone-mirroir-mcp --yolo   # alias
+npx -y mirroir-mcp --dangerously-skip-permissions
+npx -y mirroir-mcp --yolo   # alias
 ```
 
 Both flags expose all tools regardless of config. Do not use in production.

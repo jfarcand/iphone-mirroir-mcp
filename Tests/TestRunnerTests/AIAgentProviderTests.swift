@@ -8,7 +8,7 @@ import Foundation
 import Testing
 
 @testable import HelperLib
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 @Suite("AIAgentProvider")
 struct AIAgentProviderTests {
@@ -416,16 +416,16 @@ struct AIAgentProviderTests {
     func agentDirsReturnsDirectories() {
         let dirs = PermissionPolicy.agentDirs
         #expect(dirs.count == 2)
-        #expect(dirs[0].contains(".iphone-mirroir-mcp/agents"))
-        #expect(dirs[1].contains(".iphone-mirroir-mcp/agents"))
+        #expect(dirs[0].contains(".mirroir-mcp/agents"))
+        #expect(dirs[1].contains(".mirroir-mcp/agents"))
     }
 
     @Test("promptDirs returns local and global directories")
     func promptDirsReturnsDirectories() {
         let dirs = PermissionPolicy.promptDirs
         #expect(dirs.count == 2)
-        #expect(dirs[0].contains(".iphone-mirroir-mcp/prompts"))
-        #expect(dirs[1].contains(".iphone-mirroir-mcp/prompts"))
+        #expect(dirs[0].contains(".mirroir-mcp/prompts"))
+        #expect(dirs[1].contains(".mirroir-mcp/prompts"))
     }
 
     // MARK: - Prompt Loading
@@ -443,7 +443,7 @@ struct AIAgentProviderTests {
     func loadPromptFromFile() throws {
         let tmpDir = NSTemporaryDirectory() + "prompt-test-\(UUID().uuidString)"
         defer { try? FileManager.default.removeItem(atPath: tmpDir) }
-        let promptsDir = tmpDir + "/.iphone-mirroir-mcp/prompts"
+        let promptsDir = tmpDir + "/.mirroir-mcp/prompts"
         try FileManager.default.createDirectory(atPath: promptsDir, withIntermediateDirectories: true)
 
         let content = "# Custom Prompt\nAnalyze the failure."

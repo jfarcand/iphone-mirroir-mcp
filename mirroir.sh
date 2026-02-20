@@ -1,13 +1,13 @@
 #!/bin/bash
-# ABOUTME: One-step installer for iphone-mirroir-mcp.
+# ABOUTME: One-step installer for mirroir-mcp.
 # ABOUTME: Installs standalone DriverKit virtual HID (or reuses existing Karabiner-Elements), builds binaries, and verifies setup.
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PLIST_NAME="com.jfarcand.iphone-mirroir-helper"
-HELPER_BIN="iphone-mirroir-helper"
-MCP_BIN="iphone-mirroir-mcp"
+PLIST_NAME="com.jfarcand.mirroir-helper"
+HELPER_BIN="mirroir-helper"
+MCP_BIN="mirroir-mcp"
 KARABINER_CONFIG="$HOME/.config/karabiner/karabiner.json"
 KARABINER_SOCK_DIR="/Library/Application Support/org.pqrs/tmp/rootonly/vhidd_server"
 KARABINER_WAIT_TIMEOUT=120
@@ -202,7 +202,7 @@ sudo launchctl bootstrap system "/Library/LaunchDaemons/$PLIST_NAME.plist"
 
 # Wait for helper to start and verify — the daemon may need several restarts
 # via KeepAlive before the Karabiner virtual HID device becomes ready
-HELPER_SOCK="/var/run/iphone-mirroir-helper.sock"
+HELPER_SOCK="/var/run/mirroir-helper.sock"
 HELPER_TIMEOUT=30
 echo "Waiting for helper daemon (up to ${HELPER_TIMEOUT}s)..."
 elapsed=0
@@ -225,7 +225,7 @@ printf "\r                    \n"
 echo ""
 echo "=== Installing prompts and agent profiles ==="
 
-GLOBAL_CONFIG_DIR="$HOME/.iphone-mirroir-mcp"
+GLOBAL_CONFIG_DIR="$HOME/.mirroir-mcp"
 mkdir -p "$GLOBAL_CONFIG_DIR/prompts" "$GLOBAL_CONFIG_DIR/agents"
 
 # Copy prompts (skip if user has customized)

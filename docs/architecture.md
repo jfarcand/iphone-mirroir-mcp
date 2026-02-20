@@ -9,7 +9,7 @@ MCP Client (Claude Code, Cursor, Copilot, etc.)
     │  stdin/stdout JSON-RPC 2.0
     ▼
 ┌───────────────────────────────────────────────────────┐
-│  iphone-mirroir-mcp  (user process)                   │
+│  mirroir-mcp  (user process)                   │
 │                                                       │
 │  ┌─────────────────┐  ┌──────────────────────────┐    │
 │  │ PermissionPolicy│  │ MCPServer                │    │
@@ -37,11 +37,11 @@ MCP Client (Claude Code, Cursor, Copilot, etc.)
 │  │ Unix socket IPC │                                  │
 │  └────────┬────────┘                                  │
 └───────────┼───────────────────────────────────────────┘
-            │  /var/run/iphone-mirroir-helper.sock
+            │  /var/run/mirroir-helper.sock
             │  newline-delimited JSON
             ▼
 ┌───────────────────────────────────────────────────────┐
-│  iphone-mirroir-helper  (root LaunchDaemon)           │
+│  mirroir-helper  (root LaunchDaemon)           │
 │                                                       │
 │  ┌─────────────────┐  ┌──────────────────────────┐    │
 │  │ CommandServer   │  │ CommandHandlers          │    │
@@ -88,7 +88,7 @@ MCP Client (Claude Code, Cursor, Copilot, etc.)
 
 ```mermaid
 flowchart TD
-    subgraph UserProcess["iphone-mirroir-mcp (user process)"]
+    subgraph UserProcess["mirroir-mcp (user process)"]
         EP[Entry Point] --> MCPSrv[MCPServer]
         MCPSrv --> TH[ToolHandlers]
         TH --> ST[ScreenTools]
@@ -109,7 +109,7 @@ flowchart TD
         Input --> HC[HelperClient]
     end
 
-    subgraph HelperProcess["iphone-mirroir-helper (root LaunchDaemon)"]
+    subgraph HelperProcess["mirroir-helper (root LaunchDaemon)"]
         HD[HelperDaemon] --> CS[CommandServer]
         CS --> CH[CommandHandlers]
         CH --> Sync[CursorSync]
@@ -141,8 +141,8 @@ flowchart TD
 
 | Process | Runs As | System APIs Needed | Why |
 |---------|---------|-------------------|-----|
-| `iphone-mirroir-mcp` | Current user | AXUIElement (Accessibility), Vision (OCR), screencapture, NSWorkspace | Window discovery, screenshots, OCR, app activation — all user-level APIs |
-| `iphone-mirroir-helper` | root | Karabiner DriverKit sockets, CGWarpMouseCursorPosition, CGAssociateMouseAndMouseCursorPosition | Karabiner's virtual HID device sockets live in a root-only directory; cursor warping requires CGEvent privileges |
+| `mirroir-mcp` | Current user | AXUIElement (Accessibility), Vision (OCR), screencapture, NSWorkspace | Window discovery, screenshots, OCR, app activation — all user-level APIs |
+| `mirroir-helper` | root | Karabiner DriverKit sockets, CGWarpMouseCursorPosition, CGAssociateMouseAndMouseCursorPosition | Karabiner's virtual HID device sockets live in a root-only directory; cursor warping requires CGEvent privileges |
 
 `HelperLib` is a shared Swift library linked into both executables and all three test targets. It contains key mappings, permission logic, timing configuration, packed binary structs, and protocol types.
 
@@ -178,7 +178,7 @@ sequenceDiagram
     Server->>Stdio: Blocking readLine() loop (JSON-RPC over stdio)
 ```
 
-**Ref:** `Sources/iphone-mirroir-mcp/iphone_mirroir_mcp.swift`
+**Ref:** `Sources/mirroir-mcp/mirroir_mcp.swift`
 
 ## 4. JSON-RPC Protocol
 
@@ -191,7 +191,7 @@ sequenceDiagram
 
     Client->>Server: {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}
     Server->>Server: Negotiate protocol version
-    Server->>Client: {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"iphone-mirroir-mcp","version":"0.12.3"}}}
+    Server->>Client: {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"mirroir-mcp","version":"0.12.3"}}}
 
     Client->>Server: {"jsonrpc":"2.0","id":2,"method":"tools/list"}
     Server->>Server: Filter tools by PermissionPolicy.isToolVisible()
@@ -235,7 +235,7 @@ The server supports two MCP protocol versions, negotiating the client's preferre
 | `-32602` | Invalid params | Missing tool name or unknown tool |
 | `-32603` | Internal error | Response encoding failure |
 
-**Ref:** `Sources/iphone-mirroir-mcp/MCPServer.swift`
+**Ref:** `Sources/mirroir-mcp/MCPServer.swift`
 
 ## 5. Tool Registration Architecture
 
@@ -255,7 +255,7 @@ The server supports two MCP protocol versions, negotiating the client's preferre
 
 Each tool is defined as an `MCPToolDefinition` containing name, description, JSON Schema input definition, and a synchronous handler closure.
 
-**Ref:** `Sources/iphone-mirroir-mcp/ToolHandlers.swift`, `*Tools.swift`
+**Ref:** `Sources/mirroir-mcp/ToolHandlers.swift`, `*Tools.swift`
 
 ## 6. Protocol Abstractions (DI Layer)
 
@@ -271,7 +271,7 @@ Five protocols abstract system boundaries, enabling dependency injection for tes
 
 All protocols require `Sendable` conformance. Real implementations conform via extensions in `Protocols.swift`.
 
-**Ref:** `Sources/iphone-mirroir-mcp/Protocols.swift`, `Tests/MCPServerTests/TestDoubles.swift`
+**Ref:** `Sources/mirroir-mcp/Protocols.swift`, `Tests/MCPServerTests/TestDoubles.swift`
 
 ## 7. Subsystem Deep Dives
 
@@ -295,7 +295,7 @@ Discovers and interacts with the iPhone Mirroring app via macOS Accessibility AP
 
 **Key Types:** `WindowInfo` (position, size, windowID), `MirroringState` (connected/paused/disconnected), `DeviceOrientation` (portrait/landscape)
 
-**Ref:** `Sources/iphone-mirroir-mcp/MirroringBridge.swift`
+**Ref:** `Sources/mirroir-mcp/MirroringBridge.swift`
 
 ### 7b. InputSimulation
 
@@ -343,10 +343,10 @@ sequenceDiagram
 - Skipped characters are reported back to the caller
 
 **HID Chunking:**
-- Text is sent in 15-character chunks (configurable via `IPHONE_MIRROIR_HID_TYPING_CHUNK_SIZE`)
+- Text is sent in 15-character chunks (configurable via `MIRROIR_HID_TYPING_CHUNK_SIZE`)
 - Each character becomes a `type` command to the helper daemon
 
-**Ref:** `Sources/iphone-mirroir-mcp/InputSimulation.swift`
+**Ref:** `Sources/mirroir-mcp/InputSimulation.swift`
 
 ### 7c. ScreenCapture
 
@@ -359,7 +359,7 @@ Captures screenshots of the iPhone Mirroring window.
 4. Read the PNG file, base64-encode it
 5. Clean up temp file
 
-**Ref:** `Sources/iphone-mirroir-mcp/ScreenCapture.swift`
+**Ref:** `Sources/mirroir-mcp/ScreenCapture.swift`
 
 ### 7d. ScreenRecorder
 
@@ -378,7 +378,7 @@ idle ──start_recording──► recording
 - Stops recording by sending `SIGINT` to the screencapture process (graceful termination)
 - Early failure detection: waits 500ms after launch and checks if process is still running
 
-**Ref:** `Sources/iphone-mirroir-mcp/ScreenRecorder.swift`
+**Ref:** `Sources/mirroir-mcp/ScreenRecorder.swift`
 
 ### 7e. ScreenDescriber (OCR Pipeline)
 
@@ -404,14 +404,14 @@ flowchart LR
 6. **GridOverlay:** Draws 50pt coordinate grid on screenshot for AI reference
 7. **Result:** Returns `DescribeResult` containing text list, annotated image (base64), and raw elements
 
-**Ref:** `Sources/iphone-mirroir-mcp/ScreenDescriber.swift`, `Sources/HelperLib/TapPointCalculator.swift`, `Sources/HelperLib/GridOverlay.swift`
+**Ref:** `Sources/mirroir-mcp/ScreenDescriber.swift`, `Sources/HelperLib/TapPointCalculator.swift`, `Sources/HelperLib/GridOverlay.swift`
 
 ### 7f. HelperClient
 
 Communicates with the root helper daemon over a Unix stream socket.
 
 **Protocol:**
-- Socket path: `/var/run/iphone-mirroir-helper.sock`
+- Socket path: `/var/run/mirroir-helper.sock`
 - Newline-delimited JSON (one command per line, one response per line)
 - Maximum command size: 64KB
 
@@ -419,7 +419,7 @@ Communicates with the root helper daemon over a Unix stream socket.
 - Reconnects on send/receive failure
 - Exposes `isAvailable` property for health checks
 
-**Ref:** `Sources/iphone-mirroir-mcp/HelperClient.swift`
+**Ref:** `Sources/mirroir-mcp/HelperClient.swift`
 
 ## 8. Helper Daemon Architecture
 
@@ -435,7 +435,7 @@ main() → verify root → KarabinerClient.initialize()
 - Initializes `KarabinerClient` — if Karabiner is unavailable, enters degraded mode (touch/keyboard commands fail gracefully, status reports `keyboard_ready: false`)
 - Signal handlers call `CommandServer.stop()` for clean shutdown
 
-**Ref:** `Sources/iphone-mirroir-helper/HelperDaemon.swift`
+**Ref:** `Sources/mirroir-helper/HelperDaemon.swift`
 
 ### 8b. CommandServer
 
@@ -443,7 +443,7 @@ Listens on a Unix stream socket for JSON commands from the MCP server.
 
 | Property | Value |
 |----------|-------|
-| Socket path | `/var/run/iphone-mirroir-helper.sock` |
+| Socket path | `/var/run/mirroir-helper.sock` |
 | Socket type | `SOCK_STREAM` (TCP-like, reliable) |
 | Permissions | Mode `0660`, group: staff (gid 20) |
 | Protocol | Newline-delimited JSON |
@@ -461,7 +461,7 @@ Listens on a Unix stream socket for JSON commands from the MCP server.
 - Success: `{"ok": true}` (or with additional fields like `skipped_characters`)
 - Error: `{"ok": false, "error": "message"}`
 
-**Ref:** `Sources/iphone-mirroir-helper/CommandServer.swift`
+**Ref:** `Sources/mirroir-helper/CommandServer.swift`
 
 ### 8c. CommandHandlers
 
@@ -480,7 +480,7 @@ Ten actions dispatched by `processCommand()`:
 | `shake` | _(none)_ | Sends Ctrl+Cmd+Z (HID keycode 0x1D) |
 | `status` | _(none)_ | Reports `keyboard_ready`, `pointing_ready`, connection state |
 
-**Ref:** `Sources/iphone-mirroir-helper/CommandHandlers.swift`
+**Ref:** `Sources/mirroir-helper/CommandHandlers.swift`
 
 ### 8d. CursorSync Pattern
 
@@ -505,7 +505,7 @@ Every touch command (click, long_press, double_tap, drag) follows this sequence:
 
 **Why disconnect/reconnect:** Physical mouse movement during the warp-nudge-execute sequence would interfere with the target coordinates. Disconnecting the physical mouse ensures no competing input during the operation.
 
-**Ref:** `Sources/iphone-mirroir-helper/CursorSync.swift`
+**Ref:** `Sources/mirroir-helper/CursorSync.swift`
 
 ### 8e. KarabinerClient Wire Protocol
 
@@ -581,7 +581,7 @@ sequenceDiagram
 
 **Server Monitoring:** A periodic timer (every 3s) checks if the server socket still exists. If the Karabiner daemon restarts, the client detects the socket disappearance and marks itself as disconnected.
 
-**Ref:** `Sources/iphone-mirroir-helper/KarabinerClient.swift`, `Sources/HelperLib/PackedStructs.swift`
+**Ref:** `Sources/mirroir-helper/KarabinerClient.swift`, `Sources/HelperLib/PackedStructs.swift`
 
 ## 9. HelperLib Shared Components
 
@@ -618,7 +618,7 @@ flowchart TD
 
 **Mutating tools** (require permission): `tap`, `swipe`, `drag`, `type_text`, `press_key`, `long_press`, `double_tap`, `shake`, `launch_app`, `open_url`, `press_home`, `press_app_switcher`, `spotlight`, `scroll_to`, `reset_app`, `measure`, `set_network`
 
-**Config loading:** Project-local (`./.iphone-mirroir-mcp/permissions.json`) takes priority over global (`~/.iphone-mirroir-mcp/permissions.json`). Malformed config → `nil` → fail-closed.
+**Config loading:** Project-local (`./.mirroir-mcp/permissions.json`) takes priority over global (`~/.mirroir-mcp/permissions.json`). Malformed config → `nil` → fail-closed.
 
 **Ref:** `Sources/HelperLib/PermissionPolicy.swift`
 
@@ -627,9 +627,9 @@ flowchart TD
 | Component | Purpose |
 |-----------|---------|
 | `TimingConstants` | Named constants for all timing delays (microseconds) and non-timing magic numbers. Compile-time defaults. |
-| `EnvConfig` | Reads `settings.json` first (project-local, then global), then `IPHONE_MIRROIR_<SCREAMING_SNAKE_CASE>` environment variables, falling back to `TimingConstants` defaults. |
+| `EnvConfig` | Reads `settings.json` first (project-local, then global), then `MIRROIR_<SCREAMING_SNAKE_CASE>` environment variables, falling back to `TimingConstants` defaults. |
 
-Resolution order per key: `<cwd>/.iphone-mirroir-mcp/settings.json` → `~/.iphone-mirroir-mcp/settings.json` → env var → `TimingConstants` default. See [Configuration](../README.md#configuration) in the README.
+Resolution order per key: `<cwd>/.mirroir-mcp/settings.json` → `~/.mirroir-mcp/settings.json` → env var → `TimingConstants` default. See [Configuration](../README.md#configuration) in the README.
 
 **Ref:** `Sources/HelperLib/TimingConstants.swift`, `Sources/HelperLib/EnvConfig.swift`
 
@@ -745,8 +745,8 @@ The MCP server does not hardcode which app it controls. Two environment variable
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `IPHONE_MIRROIR_BUNDLE_ID` | `com.apple.ScreenContinuity` | Bundle identifier for process discovery via `NSWorkspace` |
-| `IPHONE_MIRROIR_PROCESS_NAME` | `iPhone Mirroring` | Display name (used in user-facing messages) |
+| `MIRROIR_BUNDLE_ID` | `com.apple.ScreenContinuity` | Bundle identifier for process discovery via `NSWorkspace` |
+| `MIRROIR_PROCESS_NAME` | `iPhone Mirroring` | Display name (used in user-facing messages) |
 
 These are read via `EnvConfig` (the same mechanism used for all runtime configuration) and consumed by `MirroringBridge.findProcess()` at the point of use — no caching, no initialization ceremony.
 
@@ -779,13 +779,13 @@ Changing the bundle ID switches the entire system to target a different app. No 
 - **View menu** with Home Screen / Spotlight / App Switcher items for AX traversal tests
 - **Text labels** rendered at 18pt on dark background for Vision OCR validation
 
-It is built as an SPM executable target, packaged into a `.app` bundle by `scripts/package-fake-app.sh`, and used exclusively in CI. The production binary has no knowledge of FakeMirroring — it simply targets whatever `IPHONE_MIRROIR_BUNDLE_ID` resolves to.
+It is built as an SPM executable target, packaged into a `.app` bundle by `scripts/package-fake-app.sh`, and used exclusively in CI. The production binary has no knowledge of FakeMirroring — it simply targets whatever `MIRROIR_BUNDLE_ID` resolves to.
 
 **Ref:** `Sources/FakeMirroring/main.swift`, `docs/testing.md`
 
 ## 13. CLI Subcommands
 
-The `iphone-mirroir-mcp` binary doubles as the `mirroir` CLI (via symlink). Subcommands are dispatched in `main()` before MCP server initialization — they create their own subsystem instances and exit directly.
+The `mirroir-mcp` binary doubles as the `mirroir` CLI (via symlink). Subcommands are dispatched in `main()` before MCP server initialization — they create their own subsystem instances and exit directly.
 
 ### `mirroir test` — Deterministic Scenario Runner
 

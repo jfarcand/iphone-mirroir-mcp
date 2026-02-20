@@ -10,7 +10,7 @@ import Foundation
 import HelperLib
 
 /// Path where the helper listens for commands from the MCP server.
-let helperSocketPath = "/var/run/iphone-mirroir-helper.sock"
+let helperSocketPath = "/var/run/mirroir-helper.sock"
 
 /// Listens on a Unix stream socket and dispatches JSON commands to the Karabiner client.
 /// Each command is a single line of newline-delimited JSON.

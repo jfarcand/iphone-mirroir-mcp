@@ -1,12 +1,12 @@
 #!/bin/bash
-# ABOUTME: Restart the iphone-mirroir-helper daemon via launchd.
+# ABOUTME: Restart the mirroir-helper daemon via launchd.
 # ABOUTME: Handles the stale-bootstrap race by booting out first, waiting, then re-bootstrapping.
 
 set -e
 
-PLIST="/Library/LaunchDaemons/com.jfarcand.iphone-mirroir-helper.plist"
-SERVICE="system/com.jfarcand.iphone-mirroir-helper"
-SOCKET="/var/run/iphone-mirroir-helper.sock"
+PLIST="/Library/LaunchDaemons/com.jfarcand.mirroir-helper.plist"
+SERVICE="system/com.jfarcand.mirroir-helper"
+SOCKET="/var/run/mirroir-helper.sock"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Re-running with sudo..."

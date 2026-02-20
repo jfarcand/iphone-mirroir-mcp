@@ -4,8 +4,8 @@ import { Code } from "astro:components";
 import "../styles/global.css";
 
 const curlCmd = '/bin/bash -c "$(curl -fsSL https://mirroir.dev/get-mirroir.sh)"';
-const npxCmd = "npx -y iphone-mirroir-mcp install";
-const brewCmd = "brew tap jfarcand/tap && brew install iphone-mirroir-mcp";
+const npxCmd = "npx -y mirroir-mcp install";
+const brewCmd = "brew tap jfarcand/tap && brew install mirroir-mcp";
 
 const permissionsCode = `{
   "allow": ["tap", "swipe", "type_text", "press_key", "launch_app"],
@@ -75,7 +75,7 @@ steps:
   - press_key: "return"
   - screenshot: "message_sent"`;
 
-const scenariosRepo = "jfarcand/iphone-mirroir-scenarios";
+const scenariosRepo = "jfarcand/mirroir-scenarios";
 const scenariosBase = `https://github.com/${scenariosRepo}`;
 const rawBase = `https://raw.githubusercontent.com/${scenariosRepo}/main`;
 
@@ -167,18 +167,18 @@ try {
 ---
 
 <Layout
-  title="iphone-mirroir-mcp — Give your AI an iPhone"
+  title="mirroir-mcp — Give your AI an iPhone"
   description="MCP server that controls a real iPhone through macOS iPhone Mirroring. Screenshot, tap, swipe, type — from any MCP client."
 >
   <!-- Hero -->
   <header>
-    <img src={`${import.meta.env.BASE_URL}mirroir-wordmark.svg`} alt="iphone-mirroir-mcp" class="logo" width="80" height="100" />
-    <h1>iphone-mirroir-mcp</h1>
+    <img src={`${import.meta.env.BASE_URL}mirroir-wordmark.svg`} alt="mirroir-mcp" class="logo" width="80" height="100" />
+    <h1>mirroir-mcp</h1>
     <p class="tagline">
       Give your AI an iPhone.
     </p>
     <p class="subtitle">
-      MCP server that controls a real iPhone through macOS iPhone Mirroring. Screenshot, tap, swipe, type — from any MCP client. Works with any app on screen, no source code required.
+      MCP server that controls a real iPhone through macOS iPhone Mirroring. Screenshot, tap, swipe, type — from any MCP client. Works with any app on screen, no source code required. Can also drive any macOS window beyond iPhone Mirroring.
     </p>
   </header>
 
@@ -238,7 +238,7 @@ try {
 
   <!-- Install -->
   <section>
-    <h2>Install iphone-mirroir-mcp</h2>
+    <h2>Install mirroir-mcp</h2>
     <div class="install-block">
       <code><span class="prompt">$</span> {curlCmd}</code>
       <button class="copy-btn" data-copy={curlCmd}>Copy</button>
@@ -247,7 +247,7 @@ try {
       Paste that in a macOS Terminal. Clones the repo, builds from source, installs the DriverKit virtual HID, and starts the helper daemon.
     </p>
     <p class="alt-install">
-      or via <a href="https://www.npmjs.com/package/iphone-mirroir-mcp">npx</a>:
+      or via <a href="https://www.npmjs.com/package/mirroir-mcp">npx</a>:
     </p>
     <div class="install-block install-block-alt">
       <code><span class="prompt">$</span> {npxCmd}</code>
@@ -269,7 +269,7 @@ try {
       Scenarios are reusable YAML files that describe automation flows as intents, not scripts.
       Steps like <code>tap: "Email"</code> don't specify coordinates — the AI finds
       the element by OCR matching and adapts to unexpected dialogs and layout changes.
-      Test an app or automate your morning routine. Share them on the <a href="https://github.com/jfarcand/iphone-mirroir-scenarios">community repository</a>.
+      Test an app or automate your morning routine. Share them on the <a href="https://github.com/jfarcand/mirroir-scenarios">community repository</a>.
     </p>
 
     <div class="scenario-grid">
@@ -395,14 +395,14 @@ try {
 
     <p>
       Agent diagnosis runs in two tiers: deterministic OCR analysis first (free, no API key), then optionally an AI model for richer analysis.
-      Supports <a href="https://github.com/jfarcand/iphone-mirroir-mcp#agent-diagnosis">Anthropic, OpenAI, local Ollama, and CLI agents</a>.
+      Supports <a href="https://github.com/jfarcand/mirroir-mcp#agent-diagnosis">Anthropic, OpenAI, local Ollama, and CLI agents</a>.
     </p>
   </section>
 
   <!-- What it does -->
   <section>
-    <h2>What Does iphone-mirroir-mcp Do?</h2>
-    <p>26 tools exposed as an MCP server.</p>
+    <h2>What Does mirroir-mcp Do?</h2>
+    <p>28 tools exposed as an MCP server.</p>
 
     <div class="tool-grid">
       <div class="tool-category cat-touch">
@@ -489,7 +489,7 @@ try {
     <Code code={permissionsCode} lang="json" theme="github-dark" />
 
     <p>
-      Drop this in <code>~/.iphone-mirroir-mcp/permissions.json</code> to control
+      Drop this in <code>~/.mirroir-mcp/permissions.json</code> to control
       exactly which tools your AI agent can use.
     </p>
   </section>
@@ -520,7 +520,7 @@ try {
       </details>
     </div>
     <p>
-      <a href="https://github.com/jfarcand/iphone-mirroir-mcp/blob/main/docs/faq.md">Read the full FAQ</a>
+      <a href="https://github.com/jfarcand/mirroir-mcp/blob/main/docs/faq.md">Read the full FAQ</a>
     </p>
   </section>
 
@@ -530,16 +530,12 @@ try {
       Why "mirroir"? It's the old French spelling of <em>miroir</em> (mirror) — a nod to the author's roots, not a typo.
     </p>
     <p>
-      <a href="https://github.com/jfarcand/iphone-mirroir-mcp">GitHub</a> &middot;
-      <a href="https://github.com/jfarcand/iphone-mirroir-mcp#readme">Docs</a> &middot;
-      <a href="https://github.com/jfarcand/iphone-mirroir-mcp/discussions/1">Community</a> &middot;
+      <a href="https://github.com/jfarcand/mirroir-mcp">GitHub</a> &middot;
+      <a href="https://github.com/jfarcand/mirroir-mcp#readme">Docs</a> &middot;
+      <a href="https://github.com/jfarcand/mirroir-mcp/discussions/1">Community</a> &middot;
       <a href="https://github.com/sponsors/jfarcand">Sponsor</a> &middot;
       Apache-2.0 &middot;
       macOS 15+
-    </p>
-    <p class="trademark">
-      iPhone is a trademark of Apple Inc., registered in the U.S. and other countries.
-      This project is independent and not affiliated with or endorsed by Apple.
     </p>
   </footer>
 </Layout>

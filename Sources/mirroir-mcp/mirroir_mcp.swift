@@ -14,7 +14,7 @@ private let iphoneMirroringCapabilities: Set<TargetCapability> = [
 ]
 
 @main
-struct IPhoneMirroirMCP {
+struct MirroirMCP {
     static func main() {
         // Ignore SIGPIPE so the server doesn't crash when the MCP client
         // disconnects or its stdio pipe closes unexpectedly.

@@ -129,8 +129,8 @@ enum AIAgentRegistry {
                 maxTokens: EnvConfig.defaultAIMaxTokens, command: nil, args: nil)
         }
 
-        // 3. Local profile: <cwd>/.iphone-mirroir-mcp/agents/<name>.yaml
-        // 4. Global profile: ~/.iphone-mirroir-mcp/agents/<name>.yaml
+        // 3. Local profile: <cwd>/.mirroir-mcp/agents/<name>.yaml
+        // 4. Global profile: ~/.mirroir-mcp/agents/<name>.yaml
         for dir in PermissionPolicy.agentDirs {
             let path = dir + "/" + name + ".yaml"
             if let config = loadYAMLProfile(path: path) {

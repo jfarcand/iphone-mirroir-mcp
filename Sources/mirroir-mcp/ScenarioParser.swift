@@ -120,7 +120,7 @@ enum ScenarioParser {
     /// Returns the parsed definition or throws on file read / parse errors.
     static func parse(filePath: String) throws -> ScenarioDefinition {
         let content = try String(contentsOfFile: filePath, encoding: .utf8)
-        let substituted = IPhoneMirroirMCP.substituteEnvVars(in: content)
+        let substituted = MirroirMCP.substituteEnvVars(in: content)
         return parse(content: substituted, filePath: filePath)
     }
 
@@ -128,7 +128,7 @@ enum ScenarioParser {
     static func parse(content: String, filePath: String = "<inline>") -> ScenarioDefinition {
         let fallbackName = (filePath as NSString).lastPathComponent
             .replacingOccurrences(of: ".yaml", with: "")
-        let header = IPhoneMirroirMCP.extractScenarioHeader(
+        let header = MirroirMCP.extractScenarioHeader(
             from: content, fallbackName: fallbackName, source: "")
 
         let steps = parseSteps(from: content)

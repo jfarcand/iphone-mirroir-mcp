@@ -5,14 +5,14 @@
 
 import XCTest
 import HelperLib
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 /// Integration tests that require the FakeMirroring app to be running.
 ///
 /// Run with:
 /// ```
-/// IPHONE_MIRROIR_BUNDLE_ID=com.jfarcand.FakeMirroring \
-/// IPHONE_MIRROIR_PROCESS_NAME=FakeMirroring \
+/// MIRROIR_BUNDLE_ID=com.jfarcand.FakeMirroring \
+/// MIRROIR_PROCESS_NAME=FakeMirroring \
 /// swift test --filter IntegrationTests
 /// ```
 final class FakeMirroringIntegrationTests: XCTestCase {
@@ -28,7 +28,7 @@ final class FakeMirroringIntegrationTests: XCTestCase {
         let bundleID = EnvConfig.mirroringBundleID
         try XCTSkipUnless(
             bundleID == "com.jfarcand.FakeMirroring",
-            "Integration tests require IPHONE_MIRROIR_BUNDLE_ID=com.jfarcand.FakeMirroring"
+            "Integration tests require MIRROIR_BUNDLE_ID=com.jfarcand.FakeMirroring"
         )
 
         bridge = MirroringBridge()

@@ -5,7 +5,7 @@
 // ABOUTME: Verifies formatting consistency across pass, fail, and skip statuses.
 
 import XCTest
-@testable import iphone_mirroir_mcp
+@testable import mirroir_mcp
 
 final class ConsoleReporterTests: XCTestCase {
 
