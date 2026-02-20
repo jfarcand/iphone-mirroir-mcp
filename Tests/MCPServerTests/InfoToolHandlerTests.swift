@@ -133,8 +133,8 @@ final class InfoToolHandlerTests: XCTestCase {
         XCTAssertFalse(isError(response))
         let text = extractText(response)!
         XCTAssertTrue(text.contains("All checks passed"))
-        XCTAssertTrue(text.contains("[ok] iPhone Mirroring app is running"))
-        XCTAssertTrue(text.contains("[ok] Mirroring connected"))
+        XCTAssertTrue(text.contains("[ok] 'iphone' process is running"))
+        XCTAssertTrue(text.contains("[ok] 'iphone' connected"))
         XCTAssertTrue(text.contains("[ok] Helper daemon connected"))
         XCTAssertTrue(text.contains("[ok] Screen capture working"))
     }
@@ -147,14 +147,14 @@ final class InfoToolHandlerTests: XCTestCase {
         let response = callTool("check_health")
         let text = extractText(response)!
         XCTAssertTrue(text.contains("Issues detected"))
-        XCTAssertTrue(text.contains("[FAIL] iPhone Mirroring app is not running"))
+        XCTAssertTrue(text.contains("[FAIL] 'iphone' process is not running"))
     }
 
     func testCheckHealthPaused() {
         bridge.state = .paused
         let response = callTool("check_health")
         let text = extractText(response)!
-        XCTAssertTrue(text.contains("[WARN] Mirroring is paused"))
+        XCTAssertTrue(text.contains("[WARN] 'iphone' is paused"))
     }
 
     func testCheckHealthHelperDown() {
