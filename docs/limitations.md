@@ -37,7 +37,7 @@ When the iPhone uses a non-US keyboard layout (e.g., Canadian-CSA), the server t
 
 ## DriverKit Extension Persists After Uninstall
 
-Karabiner's DriverKit kernel extension remains loaded until the next reboot, even after a full `brew uninstall --zap`. This is standard macOS behavior for DriverKit extensions and does not affect functionality.
+The DriverKit kernel extension remains loaded until the next reboot, even after uninstalling via `./uninstall-mirroir.sh` or `brew uninstall --zap`. This is standard macOS behavior for DriverKit extensions and does not affect functionality. The extension's `/Library/Application Support/org.pqrs` directory may be recreated while the kernel extension is still loaded — this is expected and clears after reboot.
 
 ## iOS Autocorrect
 

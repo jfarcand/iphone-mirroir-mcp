@@ -32,6 +32,16 @@ If you ran `mirroir.sh` or `npx iphone-mirroir-mcp install`, the standalone pack
 
 **If you want to keep Karabiner-Elements:** The alternating caps bug is intermittent. Workarounds include toggling Caps Lock, disconnecting and reconnecting iPhone Mirroring, or rebooting the Mac. See [Karabiner #3035](https://github.com/pqrs-org/Karabiner-Elements/issues/3035) and [Apple Community thread](https://discussions.apple.com/thread/254551671).
 
+## Doctor
+
+Run `mirroir doctor` to check all 10 prerequisites at once. Each failed check includes a fix hint:
+
+```bash
+mirroir doctor
+```
+
+Use `--json` for machine-readable output or `--no-color` to disable ANSI colors.
+
 ## Common Issues
 
 **`keyboard_ready: false`** — The DriverKit extension isn't running. Go to **System Settings > General > Login Items & Extensions** and enable the Karabiner DriverKit toggle. If you have Karabiner-Elements, enable all its toggles. You may need to enter your password.
@@ -47,3 +57,10 @@ If not responding, restart: `sudo brew services restart iphone-mirroir-mcp` or `
 **"Mirroring paused" screenshots** — The MCP server auto-resumes paused sessions. If it persists, click the iPhone Mirroring window manually once.
 
 **iOS autocorrect mangling typed text** — iOS applies autocorrect to typed text. Disable autocorrect in iPhone Settings > General > Keyboard, or type words followed by spaces to confirm them before autocorrect triggers.
+
+**Compiled scenario fails but you don't know why** — Use `--agent` to diagnose failures. Deterministic OCR analysis runs first (free, no API key), then optionally sends context to an AI for richer root-cause analysis:
+```bash
+mirroir test --agent scenario.yaml                    # deterministic OCR diagnosis
+mirroir test --agent claude-sonnet-4-6 scenario.yaml  # deterministic + AI diagnosis
+```
+See the [Agent Diagnosis](../README.md#agent-diagnosis) section for all supported providers and custom agent configuration.

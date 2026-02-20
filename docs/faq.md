@@ -39,11 +39,11 @@ No. iPhone Mirroring does not bridge the Mac clipboard when paste is triggered p
 
 Text is typed character-by-character through Karabiner's virtual HID keyboard instead.
 
-## Why Karabiner? Can I use it without Karabiner?
+## Why does it need a DriverKit virtual HID?
 
-iPhone Mirroring's compositor ignores programmatic `CGEvent` injection — it only responds to events from the system HID path. Karabiner provides a DriverKit virtual HID keyboard and pointing device that appears as real hardware to macOS, which is the only way to deliver touch and keyboard input to the mirrored iPhone.
+iPhone Mirroring's compositor ignores programmatic `CGEvent` injection — it only responds to events from the system HID path. A DriverKit virtual HID keyboard and pointing device that appears as real hardware to macOS is the only way to deliver touch and keyboard input to the mirrored iPhone.
 
-There is no alternative that works without Karabiner or a similar virtual HID driver.
+The installer uses the [standalone Karabiner DriverKit package](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice) by default — just the virtual HID device, no keyboard grabber, no modifier corruption. If you already have Karabiner-Elements installed, the installer detects it and reuses the existing DriverKit extension instead.
 
 See [Architecture](architecture.md) for the full input path diagram.
 

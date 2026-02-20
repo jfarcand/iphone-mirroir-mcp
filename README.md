@@ -360,6 +360,21 @@ The recorder installs a passive CGEvent tap that observes mouse and keyboard eve
 
 The output is a starting point — review the YAML, replace any `FIXME` coordinate-only taps with text labels, and add `wait_for` steps where needed.
 
+## Doctor
+
+Run 10 prerequisite checks to verify your setup is working:
+
+```bash
+mirroir doctor
+```
+
+Checks DriverKit extension, helper daemon, iPhone Mirroring connection, screen recording permissions, and more. Each failed check includes an actionable fix hint.
+
+```bash
+mirroir doctor --json    # machine-readable output
+mirroir doctor --no-color # plain text (no ANSI colors)
+```
+
 ## Updating
 
 ```bash
@@ -395,7 +410,7 @@ brew uninstall iphone-mirroir-mcp
 | | |
 |---|---|
 | [Tools Reference](docs/tools.md) | All 26 tools, parameters, and input workflows |
-| [FAQ](docs/faq.md) | Security, focus stealing, Karabiner, keyboard layouts |
+| [FAQ](docs/faq.md) | Security, focus stealing, DriverKit, keyboard layouts |
 | [Security](docs/security.md) | Threat model, kill switch, and recommendations |
 | [Permissions](docs/permissions.md) | Fail-closed permission model and config file |
 | [Architecture](docs/architecture.md) | System diagram and how input reaches the iPhone |

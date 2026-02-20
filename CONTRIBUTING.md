@@ -5,7 +5,7 @@ Thank you for your interest in contributing! By submitting a contribution, you a
 ## Getting Started
 
 1. Fork the repository and clone your fork
-2. Run the [installer](mirroir.sh) to set up dependencies (Karabiner, helper daemon)
+2. Run the [installer](mirroir.sh) to set up dependencies (DriverKit virtual HID, helper daemon)
 3. Read this guide and the [Architecture](docs/architecture.md) doc to understand the system
 4. Create a feature branch for your work
 

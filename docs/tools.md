@@ -29,7 +29,7 @@ All 26 tools exposed by the MCP server. Mutating tools require [permission](perm
 | `set_network` | `mode` | Toggle network settings (airplane, Wi-Fi, cellular) via Settings |
 | `get_orientation` | — | Report portrait/landscape and window dimensions |
 | `status` | — | Connection state, window geometry, and device readiness |
-| `check_health` | — | Comprehensive setup diagnostic: mirroring, helper, Karabiner, screen capture |
+| `check_health` | — | Comprehensive setup diagnostic: mirroring, helper, DriverKit, screen capture |
 | `list_scenarios` | — | List available YAML scenarios from project-local and global config dirs |
 | `get_scenario` | `name` | Read a scenario YAML file with ${VAR} env substitution |
 
