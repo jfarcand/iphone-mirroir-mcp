@@ -177,6 +177,28 @@ final class ScenarioFileTests: XCTestCase {
         assertContains(s, "scroll_to")
     }
 
+    // MARK: - Individual scenario validation: apps/mail
+
+    func testEmailTriage() throws {
+        let s = try parseScenario("apps/mail/email-triage.yaml")
+        XCTAssertEqual(s.name, "Email Triage")
+        XCTAssertEqual(s.steps.count, 13)
+        // Two nested condition blocks are flattened by the parser
+        let conditions = s.steps.filter {
+            if case .skipped(let t, _) = $0, t == "condition" { return true }
+            return false
+        }
+        XCTAssertEqual(conditions.count, 2, "Expected 2 nested conditions")
+    }
+
+    func testBatchArchive() throws {
+        let s = try parseScenario("apps/mail/batch-archive.yaml")
+        XCTAssertEqual(s.name, "Batch Archive Inbox")
+        XCTAssertEqual(s.steps.count, 12)
+        assertContains(s, "repeat")
+        assertContains(s, "assert_not_visible")
+    }
+
     // MARK: - Individual scenario validation: testing/
 
     func testLoginFlow() throws {
@@ -191,6 +213,13 @@ final class ScenarioFileTests: XCTestCase {
         XCTAssertEqual(s.name, "Expo Go Debug Menu")
         XCTAssertEqual(s.steps.count, 7)
         assertContains(s, "shake")
+    }
+
+    func testQASmokePack() throws {
+        let s = try parseScenario("testing/expo-go/qa-smoke-pack.yaml")
+        XCTAssertEqual(s.name, "Visual Regression Test")
+        XCTAssertEqual(s.steps.count, 15)
+        assertContains(s, "remember")
     }
 
     // MARK: - Individual scenario validation: workflows/
@@ -218,33 +247,6 @@ final class ScenarioFileTests: XCTestCase {
         XCTAssertEqual(s.steps.count, 20)
         assertContains(s, "home")
         assertContains(s, "press_key")
-    }
-
-    func testEmailTriage() throws {
-        let s = try parseScenario("workflows/email-triage.yaml")
-        XCTAssertEqual(s.name, "Email Triage")
-        XCTAssertEqual(s.steps.count, 13)
-        // Two nested condition blocks are flattened by the parser
-        let conditions = s.steps.filter {
-            if case .skipped(let t, _) = $0, t == "condition" { return true }
-            return false
-        }
-        XCTAssertEqual(conditions.count, 2, "Expected 2 nested conditions")
-    }
-
-    func testBatchArchive() throws {
-        let s = try parseScenario("workflows/batch-archive.yaml")
-        XCTAssertEqual(s.name, "Batch Archive Inbox")
-        XCTAssertEqual(s.steps.count, 12)
-        assertContains(s, "repeat")
-        assertContains(s, "assert_not_visible")
-    }
-
-    func testQASmokePack() throws {
-        let s = try parseScenario("workflows/qa-smoke-pack.yaml")
-        XCTAssertEqual(s.name, "Visual Regression Test")
-        XCTAssertEqual(s.steps.count, 15)
-        assertContains(s, "remember")
     }
 
     // MARK: - Individual scenario validation: ci/
@@ -312,12 +314,12 @@ final class ScenarioFileTests: XCTestCase {
             "apps/maps/save-directions.yaml",
             "apps/photos/share-recent.yaml",
             "apps/slack/check-unread.yaml",
+            "apps/mail/email-triage.yaml",
+            "apps/mail/batch-archive.yaml",
             "workflows/commute-eta-notify.yaml",
             "workflows/morning-briefing.yaml",
             "workflows/standup-autoposter.yaml",
-            "workflows/email-triage.yaml",
-            "workflows/batch-archive.yaml",
-            "workflows/qa-smoke-pack.yaml",
+            "testing/expo-go/qa-smoke-pack.yaml",
         ]
 
         for file in blockScalarFiles {
