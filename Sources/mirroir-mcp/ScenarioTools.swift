@@ -150,18 +150,12 @@ extension MirroirMCP {
     /// Returns relative paths sorted with .md files before .yaml files for the same stem,
     /// ensuring .md takes precedence during discovery.
     static func findScenarioFiles(in baseDir: String) -> [String] {
-        let fm = FileManager.default
-        guard let enumerator = fm.enumerator(atPath: baseDir) else { return [] }
-
-        var relPaths: [String] = []
-        while let entry = enumerator.nextObject() as? String {
-            if entry.hasSuffix(".yaml") || entry.hasSuffix(".md") {
-                relPaths.append(entry)
-            }
+        let results = findFiles(in: baseDir) {
+            $0.hasSuffix(".yaml") || $0.hasSuffix(".md")
         }
 
         // Sort with .md before .yaml for the same stem, so .md wins during dedup
-        return relPaths.sorted { a, b in
+        return results.sorted { a, b in
             let stemA = scenarioStem(a)
             let stemB = scenarioStem(b)
             if stemA == stemB {
@@ -174,14 +168,25 @@ extension MirroirMCP {
 
     /// Recursively find all .yaml files under a directory, returning relative paths sorted.
     static func findYAMLFiles(in baseDir: String) -> [String] {
+        findFiles(in: baseDir) { $0.hasSuffix(".yaml") }
+    }
+
+    /// Recursively find all .md files under a directory, returning relative paths sorted.
+    static func findMDFiles(in baseDir: String) -> [String] {
+        findFiles(in: baseDir) { $0.hasSuffix(".md") }
+    }
+
+    /// Shared file enumeration: recursively scan a directory and return relative paths
+    /// matching the given predicate, sorted alphabetically.
+    private static func findFiles(
+        in baseDir: String,
+        matching predicate: (String) -> Bool
+    ) -> [String] {
         let fm = FileManager.default
         guard let enumerator = fm.enumerator(atPath: baseDir) else { return [] }
-
         var relPaths: [String] = []
         while let entry = enumerator.nextObject() as? String {
-            if entry.hasSuffix(".yaml") {
-                relPaths.append(entry)
-            }
+            if predicate(entry) { relPaths.append(entry) }
         }
         return relPaths.sorted()
     }
