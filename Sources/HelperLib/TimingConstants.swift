@@ -93,6 +93,12 @@ public enum TimingConstants {
     /// macOS built-in staff group ID for socket permissions.
     public static let staffGroupID: UInt32 = 20
 
+    // MARK: - Helper Daemon
+
+    /// Receive timeout (seconds) on client sockets. Prevents the accept loop from
+    /// getting stuck when a client disconnects uncleanly.
+    public static let clientRecvTimeoutSec: Int = 30
+
     // MARK: - Content Bounds Detection
 
     /// Brightness threshold for dark pixel detection (0–255).

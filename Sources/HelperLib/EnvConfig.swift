@@ -137,6 +137,14 @@ public enum EnvConfig {
         readUInt32("staffGroupID", default: TimingConstants.staffGroupID)
     }
 
+    // MARK: - Helper Daemon
+
+    /// Receive timeout (seconds) on client sockets. When recv() blocks longer than
+    /// this without data, it returns EAGAIN so the accept loop can detect dead clients.
+    public static var clientRecvTimeoutSec: Int {
+        readInt("clientRecvTimeoutSec", default: TimingConstants.clientRecvTimeoutSec)
+    }
+
     // MARK: - Content Bounds Detection
 
     public static var brightnessThreshold: UInt8 {

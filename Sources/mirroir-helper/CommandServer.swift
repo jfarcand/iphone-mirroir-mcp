@@ -97,6 +97,13 @@ final class CommandServer {
                 continue
             }
 
+            // Set a receive timeout so recv() doesn't block forever when a client
+            // disconnects uncleanly (e.g. MCP server killed). Without this, the
+            // accept loop gets stuck in handleClient and can't accept new connections.
+            var timeout = timeval(tv_sec: Int(EnvConfig.clientRecvTimeoutSec), tv_usec: 0)
+            setsockopt(clientFd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                       socklen_t(MemoryLayout<timeval>.size))
+
             // Handle one client at a time (MCP server is the only client).
             // defer ensures the fd is closed even if handleClient throws or returns early.
             defer { Darwin.close(clientFd) }
@@ -128,7 +135,16 @@ final class CommandServer {
 
         while running {
             let bytesRead = recv(fd, &readBuf, readBuf.count, 0)
-            if bytesRead <= 0 { break }
+            if bytesRead == 0 { break } // Clean disconnect
+            if bytesRead < 0 {
+                let recvErrno = errno
+                if recvErrno == EAGAIN || recvErrno == EWOULDBLOCK {
+                    // SO_RCVTIMEO fired — client is idle, loop back to check `running`
+                    continue
+                }
+                logHelper("recv() failed: \(String(cString: strerror(recvErrno)))")
+                break
+            }
 
             buffer.append(contentsOf: readBuf[0..<bytesRead])
 
