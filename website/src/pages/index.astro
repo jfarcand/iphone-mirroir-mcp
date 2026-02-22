@@ -500,24 +500,32 @@ if (!skillsAvailable) {
     </script>
   </section>
 
-  <!-- Write → Run → Test → Diagnose pipeline -->
+  <!-- Generate → Write → Run → Test → Diagnose pipeline -->
   <section>
-    <h2>Write, run, test, diagnose</h2>
+    <h2>Generate, write, run, test, diagnose</h2>
     <p>
-      Write a SKILL.md, let the AI execute it via MCP tools, and it auto-compiles coordinates at the end. Replay deterministically from the CLI &mdash; no AI in the loop. When something breaks, <code>--agent</code> tells you why.
+      Tell the AI to explore an app and it produces a SKILL.md automatically. Edit it, run it, test it deterministically from the CLI &mdash; no AI in the loop. When something breaks, <code>--agent</code> tells you why.
     </p>
 
     <div class="pipeline-grid">
       <div class="pipeline-step">
         <div class="pipeline-icon">1</div>
+        <h3>Generate</h3>
+        <p>Tell the AI what to explore. It navigates the app, captures each screen, and produces a SKILL.md &mdash; no manual authoring needed.</p>
+        <div class="pipeline-cmd">
+          <code>generate_skill &rarr; tap/swipe &rarr; capture &rarr; finish</code>
+        </div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-icon">2</div>
         <h3>Write</h3>
-        <p>Author a SKILL.md &mdash; numbered steps, no coordinates.</p>
+        <p>Edit the generated skill or author one from scratch &mdash; numbered steps, no coordinates.</p>
         <div class="pipeline-cmd">
           <code>vim login.md</code>
         </div>
       </div>
       <div class="pipeline-step">
-        <div class="pipeline-icon">2</div>
+        <div class="pipeline-icon">3</div>
         <h3>Run</h3>
         <p>The AI reads the skill via <code>get_skill</code>, executes each step with MCP tools, and auto-compiles coordinates at the end.</p>
         <div class="pipeline-cmd">
@@ -525,7 +533,7 @@ if (!skillsAvailable) {
         </div>
       </div>
       <div class="pipeline-step">
-        <div class="pipeline-icon">3</div>
+        <div class="pipeline-icon">4</div>
         <h3>Test</h3>
         <p>Replay with zero OCR &mdash; pure input injection. A 10-step skill drops from 5+ seconds of OCR to under a second.</p>
         <div class="pipeline-cmd">
@@ -533,7 +541,7 @@ if (!skillsAvailable) {
         </div>
       </div>
       <div class="pipeline-step">
-        <div class="pipeline-icon">4</div>
+        <div class="pipeline-icon">5</div>
         <h3>Diagnose</h3>
         <p>When a step fails, <code>--agent</code> compares expected vs. actual OCR and tells you the root cause and fix.</p>
         <div class="pipeline-cmd">
@@ -551,7 +559,7 @@ if (!skillsAvailable) {
   <!-- What it does -->
   <section>
     <h2>What Does mirroir-mcp Do?</h2>
-    <p>28 tools exposed as an MCP server.</p>
+    <p>31 tools exposed as an MCP server.</p>
 
     <div class="tool-grid">
       <div class="tool-category cat-touch">
