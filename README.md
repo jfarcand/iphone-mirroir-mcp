@@ -211,15 +211,6 @@ steps:
 Install ready-to-use skills from [jfarcand/mirroir-skills](https://github.com/jfarcand/mirroir-skills):
 
 ```bash
-# Claude Code
-claude plugin marketplace add jfarcand/mirroir-skills
-claude plugin install skills@mirroir-skills
-
-# GitHub Copilot CLI
-copilot plugin marketplace add jfarcand/mirroir-skills
-copilot plugin install skills@mirroir-skills
-
-# Manual (all other clients)
 git clone https://github.com/jfarcand/mirroir-skills ~/.mirroir-mcp/skills
 ```
 
@@ -279,7 +270,7 @@ Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` for cloud models. Custom agent profi
 
 ## Recorder
 
-Record interactions with the mirrored iPhone as a YAML skill file.
+Record interactions with the mirrored iPhone as a skill YAML file.
 
 ```bash
 mirroir record -o login-flow.yaml -n "Login Flow" --app "MyApp"
