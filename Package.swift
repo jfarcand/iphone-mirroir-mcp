@@ -34,6 +34,7 @@ let package = Package(
             linkerSettings: [
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("CoreFoundation"),
+                .linkedFramework("SystemConfiguration"),
             ]
         ),
         .executableTarget(
