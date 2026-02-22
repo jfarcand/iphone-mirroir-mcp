@@ -38,10 +38,11 @@ All six files **must** be updated to the new version. No exceptions.
 | 5 | `Tests/MCPServerTests/MCPServerRoutingTests.swift` | `XCTAssertEqual(serverInfo["version"], .string("X.Y.Z"))` |
 | 6 | `../homebrew-tap/Formula/mirroir-mcp.rb` | `url` tag component and will be updated in Step 7 |
 
-**Verify** — grep to make sure no old version remains:
+**Verify** — grep across ALL file types to make sure no old version remains anywhere:
 ```bash
-grep -rn "OLD_VERSION" --include="*.swift" --include="*.json" --include="*.js" .
+grep -rn "OLD_VERSION" --include="*.swift" --include="*.json" --include="*.js" --include="*.md" --include="*.rb" --include="*.sh" --include="*.yml" --include="*.yaml" --include="*.astro" --include="*.css" .
 ```
+If any hit is found, fix it before proceeding. Do NOT skip non-code files — version strings leak into docs, CI, and website.
 
 ## Step 2 — Build and test
 
@@ -148,8 +149,9 @@ Report to ChefFamille:
 ## Mistakes to avoid
 
 - **Tag before commit**: always commit version bump first, then tag that commit.
-- **Stale versions**: grep for the OLD version after bumping — every hit is a file you missed.
+- **Stale versions**: grep for the OLD version across ALL file types after bumping — every hit is a file you missed. Version strings leak into docs, website, CI, and config files.
 - **Wrong SHA256**: always compute SHA from the tagged tarball, never from a pre-tag commit.
 - **npm from wrong directory**: `npm publish` must run from the `npm/` subdirectory.
 - **Skipping tests**: never tag without `swift build && swift test` passing.
 - **Homebrew tap forgotten**: the formula, index.md version, and SHA256 all need updating.
+- **Narrow grep**: do NOT limit version grep to just `.swift`/`.json`/`.js` — include `.md`, `.rb`, `.yml`, `.yaml`, `.astro`, `.css`, `.sh` too.
