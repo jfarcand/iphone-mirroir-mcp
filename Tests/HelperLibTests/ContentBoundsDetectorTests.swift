@@ -97,9 +97,11 @@ struct ContentBoundsDetectorTests {
         #expect(Int(result.height) == 1704)
     }
 
-    @Test("all-sides borders detected (centered content)")
-    func allSidesBorders() {
-        // Content centered with borders on all four sides
+    @Test("centered content ignores left/top borders (only right/bottom detected)")
+    func centeredContentIgnoresLeftTop() {
+        // Content centered with borders on all four sides.
+        // Detector only finds right and bottom edges; origin stays at (0,0).
+        // Width = right edge of content (50 + 700 = 750), height = bottom edge (50 + 700 = 750).
         let image = makeImageWithContent(
             imageWidth: 800, imageHeight: 800,
             contentX: 50, contentY: 50, contentWidth: 700, contentHeight: 700,
@@ -107,10 +109,10 @@ struct ContentBoundsDetectorTests {
         )
         let result = ContentBoundsDetector.detect(image: image)
 
-        #expect(Int(result.origin.x) == 50)
-        #expect(Int(result.origin.y) == 50)
-        #expect(Int(result.width) == 700)
-        #expect(Int(result.height) == 700)
+        #expect(Int(result.origin.x) == 0)
+        #expect(Int(result.origin.y) == 0)
+        #expect(Int(result.width) == 750)
+        #expect(Int(result.height) == 750)
     }
 
     @Test("all-black image returns full rect as fallback")
@@ -125,7 +127,7 @@ struct ContentBoundsDetectorTests {
         #expect(Int(result.height) == 600)
     }
 
-    @Test("content with dark edges but detectable interior")
+    @Test("content with dark edges detects right and bottom only")
     func darkEdgesWithContent() {
         // Content area includes some dark-ish pixels near edges, but the interior
         // has clearly non-dark pixels that the scanlines (at 30-70%) should detect.
@@ -159,11 +161,11 @@ struct ContentBoundsDetectorTests {
         let result = ContentBoundsDetector.detect(image: image)
 
         // Scanlines at 30-70% of 600 = 180,240,300,360,420 — all hit the bright interior.
-        // Left edge detection finds first non-dark at x=110; right at x=490; top at y=110; bottom at y=490.
-        #expect(Int(result.origin.x) == 110)
-        #expect(Int(result.origin.y) == 110)
-        #expect(Int(result.width) == 380)
-        #expect(Int(result.height) == 380)
+        // Only right (x=490) and bottom (y=490) edges detected; origin stays at (0,0).
+        #expect(Int(result.origin.x) == 0)
+        #expect(Int(result.origin.y) == 0)
+        #expect(Int(result.width) == 490)
+        #expect(Int(result.height) == 490)
     }
 
     @Test("small asymmetric bottom-right border")
@@ -210,10 +212,10 @@ struct ContentBoundsDetectorTests {
         let image = ctx.makeImage()!
         let result = ContentBoundsDetector.detect(image: image)
 
-        // Near-black border should be treated as dark, content detected at 50..350
-        #expect(Int(result.origin.x) == 50)
-        #expect(Int(result.origin.y) == 50)
-        #expect(Int(result.width) == 300)
-        #expect(Int(result.height) == 300)
+        // Near-black border treated as dark. Only right (350) and bottom (350) detected.
+        #expect(Int(result.origin.x) == 0)
+        #expect(Int(result.origin.y) == 0)
+        #expect(Int(result.width) == 350)
+        #expect(Int(result.height) == 350)
     }
 }

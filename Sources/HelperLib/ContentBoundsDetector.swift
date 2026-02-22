@@ -11,7 +11,10 @@ import CoreGraphics
 /// In "Larger" display mode, the macOS window is bigger than the iOS content,
 /// which renders at 1:1 point mapping from the top-left with dark borders on the
 /// right and bottom. This detector finds those borders by scanning scanlines from
-/// the edges inward, returning the content rectangle in pixel coordinates.
+/// the right and bottom edges inward, returning the content rectangle in pixel
+/// coordinates. Only right and bottom borders are detected — content always starts
+/// at (0,0) because iOS renders from the top-left corner. Scanning left/top edges
+/// would produce false positives from the window's rounded corners and Dynamic Island.
 ///
 /// When content fills the entire window (Smaller/Actual Size modes), the returned
 /// rectangle equals the full image bounds — making the correction an identity transform.
@@ -52,31 +55,25 @@ public enum ContentBoundsDetector {
 
         ctx.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
 
-        // All coordinates are top-down: row 0 = top of image, y increases downward.
+        // Only scan for right and bottom borders. Content always starts at (0,0)
+        // — the window's rounded corners and Dynamic Island would cause false
+        // left/top border detections.
 
-        // --- Horizontal scanlines: find left/right content edges ---
+        // --- Horizontal scanlines: find right content edge ---
         var maxContentRight = 0
-        var minContentLeft = width
         for fraction in scanlineFractions {
             let row = Int(Double(height) * fraction)
             guard row >= 0 && row < height else { continue }
 
             let rightEdge = scanRowFromRight(row: row, width: width, bytesPerRow: bytesPerRow, pixels: pixelData)
             maxContentRight = max(maxContentRight, rightEdge)
-
-            let leftEdge = scanRowFromLeft(row: row, width: width, bytesPerRow: bytesPerRow, pixels: pixelData)
-            minContentLeft = min(minContentLeft, leftEdge)
         }
 
-        // --- Vertical scanlines: find top/bottom content edges ---
-        var minContentTop = height
+        // --- Vertical scanlines: find bottom content edge ---
         var maxContentBottom = 0
         for fraction in scanlineFractions {
             let x = Int(Double(width) * fraction)
             guard x >= 0 && x < width else { continue }
-
-            let topEdge = scanColFromTop(col: x, height: height, bytesPerRow: bytesPerRow, pixels: pixelData)
-            minContentTop = min(minContentTop, topEdge)
 
             let bottomEdge = scanColFromBottom(col: x, height: height, bytesPerRow: bytesPerRow, pixels: pixelData)
             maxContentBottom = max(maxContentBottom, bottomEdge)
@@ -86,14 +83,8 @@ public enum ContentBoundsDetector {
         if maxContentRight == 0 || maxContentBottom == 0 {
             return fullRect
         }
-        if minContentLeft >= maxContentRight || minContentTop >= maxContentBottom {
-            return fullRect
-        }
 
-        let contentWidth = maxContentRight - minContentLeft
-        let contentHeight = maxContentBottom - minContentTop
-
-        return CGRect(x: minContentLeft, y: minContentTop, width: contentWidth, height: contentHeight)
+        return CGRect(x: 0, y: 0, width: maxContentRight, height: maxContentBottom)
     }
 
     // MARK: - Scanline helpers
@@ -108,29 +99,6 @@ public enum ContentBoundsDetector {
             }
         }
         return 0
-    }
-
-    /// Scan a row from the left edge inward; return the x of the first non-dark pixel.
-    private static func scanRowFromLeft(row: Int, width: Int, bytesPerRow: Int, pixels: [UInt8]) -> Int {
-        let rowOffset = row * bytesPerRow
-        for x in 0..<width {
-            let offset = rowOffset + x * 4
-            if isNonDark(pixels, at: offset) {
-                return x
-            }
-        }
-        return width
-    }
-
-    /// Scan a column from the top (row 0) downward; return the row of the first non-dark pixel.
-    private static func scanColFromTop(col: Int, height: Int, bytesPerRow: Int, pixels: [UInt8]) -> Int {
-        for row in 0..<height {
-            let offset = row * bytesPerRow + col * 4
-            if isNonDark(pixels, at: offset) {
-                return row
-            }
-        }
-        return height
     }
 
     /// Scan a column from the bottom (row height-1) upward;
