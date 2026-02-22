@@ -302,6 +302,44 @@ section > p {
   color: var(--color-muted);
 }
 
+/* Security grid */
+.security-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.security-layer {
+  background: var(--color-code-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.security-layer h3 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #4ade80;
+  margin-bottom: 0.5rem;
+}
+
+.security-layer p {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  text-align: left;
+  margin-bottom: 0;
+  line-height: 1.5;
+}
+
+@media (max-width: 700px) {
+  .security-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Client groups */
 .client-group {
   margin-top: 1.25rem;

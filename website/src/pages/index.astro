@@ -629,19 +629,33 @@ if (!skillsAvailable) {
     </div>
   </section>
 
-  <!-- Permissions -->
+  <!-- Security -->
   <section>
-    <h2>Fail-closed by default</h2>
+    <h2>Security-first by design</h2>
     <p>
-      Without a config file, only read-only tools are exposed. Mutating tools are
-      hidden from the MCP client entirely — it never sees them unless you allow them.
+      Giving an AI access to your phone demands defense in depth. mirroir-mcp is fail-closed at every layer.
     </p>
+
+    <div class="security-grid">
+      <div class="security-layer">
+        <h3>Tool permissions</h3>
+        <p>Without a config file, only read-only tools (<code>screenshot</code>, <code>describe_screen</code>) are exposed. Mutating tools are hidden from the MCP client entirely &mdash; it never sees them.</p>
+      </div>
+      <div class="security-layer">
+        <h3>App blocking</h3>
+        <p><code>blockedApps</code> in <code>permissions.json</code> prevents the AI from interacting with sensitive apps like Wallet or Banking &mdash; even if mutating tools are allowed.</p>
+      </div>
+      <div class="security-layer">
+        <h3>Socket hardening</h3>
+        <p>The helper daemon socket is owned by the console user with mode <code>0600</code>. Every connection is peer-authenticated via <code>getpeereid</code> &mdash; other users on the machine cannot send commands.</p>
+      </div>
+    </div>
 
     <Code code={permissionsCode} lang="json" theme="github-dark" />
 
     <p>
       Drop this in <code>~/.mirroir-mcp/permissions.json</code> to control
-      exactly which tools your AI agent can use.
+      exactly which tools your AI agent can use. Close iPhone Mirroring to kill all input instantly.
     </p>
   </section>
 
