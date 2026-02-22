@@ -497,34 +497,34 @@ if (!skillsAvailable) {
     </script>
   </section>
 
-  <!-- Test Runner + Compiled Skills + Agent Diagnosis -->
+  <!-- Write → Run → Test → Diagnose pipeline -->
   <section>
-    <h2>Test, compile, diagnose</h2>
+    <h2>Write, run, test, diagnose</h2>
     <p>
-      Run skills deterministically from the CLI &mdash; no AI in the loop. The AI auto-compiles on first execution, or use <code>mirroir compile</code> to cache coordinates for zero-OCR replay. When something breaks, <code>--agent</code> tells you why.
+      Write a SKILL.md, let the AI execute it via MCP tools, and it auto-compiles coordinates at the end. Replay deterministically from the CLI &mdash; no AI in the loop. When something breaks, <code>--agent</code> tells you why.
     </p>
 
     <div class="pipeline-grid">
       <div class="pipeline-step">
         <div class="pipeline-icon">1</div>
-        <h3>Record</h3>
-        <p>Interact with the phone while <code>mirroir record</code> captures your actions as a SKILL.md file.</p>
+        <h3>Write</h3>
+        <p>Author a SKILL.md with numbered steps. The AI interprets intents like <code>Tap "Email"</code> &mdash; no coordinates needed.</p>
         <div class="pipeline-cmd">
-          <code>mirroir record -o login.md</code>
+          <code>login.md</code>
         </div>
       </div>
       <div class="pipeline-step">
         <div class="pipeline-icon">2</div>
-        <h3>Compile</h3>
-        <p>The AI auto-compiles on first execution via MCP tools &mdash; or use <code>mirroir compile</code> from the CLI. Either way, coordinates, timing, and scroll counts are cached.</p>
+        <h3>Run</h3>
+        <p>The AI reads the skill via <code>get_skill</code>, executes each step with MCP tools, and auto-compiles coordinates at the end.</p>
         <div class="pipeline-cmd">
-          <code>mirroir compile login</code>
+          <code>get_skill &rarr; record_step &rarr; save_compiled</code>
         </div>
       </div>
       <div class="pipeline-step">
         <div class="pipeline-icon">3</div>
         <h3>Test</h3>
-        <p>Replay with zero OCR — pure input injection. A 10-step skill drops from 5+ seconds of OCR to under a second.</p>
+        <p>Replay with zero OCR &mdash; pure input injection. A 10-step skill drops from 5+ seconds of OCR to under a second.</p>
         <div class="pipeline-cmd">
           <code>mirroir test login</code>
         </div>
