@@ -85,4 +85,5 @@ struct NavigationHintDetectorTests {
         let hints = NavigationHintDetector.detect(elements: elements, windowHeight: windowHeight)
         #expect(hints.isEmpty, "\"< Back\" is not a bare chevron — OCR typically splits them")
     }
+
 }

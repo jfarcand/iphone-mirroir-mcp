@@ -227,32 +227,14 @@ final class StepExecutor {
                               durationSeconds: elapsed(startTime))
         }
 
-        let centerX = Double(windowInfo.size.width) / 2.0
-        let centerY = Double(windowInfo.size.height) / 2.0
-        let swipeDistance = Double(windowInfo.size.height) * EnvConfig.swipeDistanceFraction
-
-        let fromX: Double, fromY: Double, toX: Double, toY: Double
-        switch direction.lowercased() {
-        case "up":
-            fromX = centerX; fromY = centerY + swipeDistance / 2
-            toX = centerX; toY = centerY - swipeDistance / 2
-        case "down":
-            fromX = centerX; fromY = centerY - swipeDistance / 2
-            toX = centerX; toY = centerY + swipeDistance / 2
-        case "left":
-            fromX = centerX + swipeDistance / 2; fromY = centerY
-            toX = centerX - swipeDistance / 2; toY = centerY
-        case "right":
-            fromX = centerX - swipeDistance / 2; fromY = centerY
-            toX = centerX + swipeDistance / 2; toY = centerY
-        default:
+        guard let ep = swipeEndpoints(direction: direction, windowInfo: windowInfo) else {
             return StepResult(step: step, status: .failed,
                               message: "Unknown swipe direction: \(direction). Use up/down/left/right.",
                               durationSeconds: elapsed(startTime))
         }
 
-        if let error = input.swipe(fromX: fromX, fromY: fromY,
-                                    toX: toX, toY: toY, durationMs: EnvConfig.defaultSwipeDurationMs) {
+        if let error = input.swipe(fromX: ep.fromX, fromY: ep.fromY,
+                                    toX: ep.toX, toY: ep.toY, durationMs: EnvConfig.defaultSwipeDurationMs) {
             return StepResult(step: step, status: .failed, message: error,
                               durationSeconds: elapsed(startTime))
         }
@@ -331,32 +313,19 @@ final class StepExecutor {
                                    startTime: CFAbsoluteTime) -> StepResult {
         let step = SkillStep.screenshot(label: label)
 
-        guard let base64 = capture.captureBase64() else {
+        guard let data = captureScreenshotData() else {
             return StepResult(step: step, status: .failed,
                               message: "Failed to capture screenshot",
                               durationSeconds: elapsed(startTime))
         }
 
-        guard let data = Data(base64Encoded: base64) else {
-            return StepResult(step: step, status: .failed,
-                              message: "Failed to decode screenshot data",
-                              durationSeconds: elapsed(startTime))
-        }
-
-        let dir = config.screenshotDir
-        try? FileManager.default.createDirectory(
-            atPath: dir, withIntermediateDirectories: true)
-
         let safeName = skillName.replacingOccurrences(of: " ", with: "_")
         let safeLabel = label.replacingOccurrences(of: " ", with: "_")
         let filename = "\(safeName)_\(safeLabel).png"
-        let path = (dir as NSString).appendingPathComponent(filename)
 
-        do {
-            try data.write(to: URL(fileURLWithPath: path))
-        } catch {
+        guard let path = saveScreenshot(data, filename: filename) else {
             return StepResult(step: step, status: .failed,
-                              message: "Failed to save screenshot to \(path): \(error.localizedDescription)",
+                              message: "Failed to save screenshot",
                               durationSeconds: elapsed(startTime))
         }
 
@@ -425,36 +394,17 @@ final class StepExecutor {
                               durationSeconds: elapsed(startTime))
         }
 
-        let centerX = Double(windowInfo.size.width) / 2.0
-        let centerY = Double(windowInfo.size.height) / 2.0
-        let swipeDistance = Double(windowInfo.size.height) * EnvConfig.swipeDistanceFraction
+        guard let ep = swipeEndpoints(direction: direction, windowInfo: windowInfo) else {
+            return StepResult(step: step, status: .failed,
+                              message: "Unknown direction: \(direction)",
+                              durationSeconds: elapsed(startTime))
+        }
 
         var previousTexts: [String] = []
 
         for attempt in 0..<maxScrolls {
-            // Perform swipe
-            let fromX: Double, fromY: Double, toX: Double, toY: Double
-            switch direction.lowercased() {
-            case "up":
-                fromX = centerX; fromY = centerY + swipeDistance / 2
-                toX = centerX; toY = centerY - swipeDistance / 2
-            case "down":
-                fromX = centerX; fromY = centerY - swipeDistance / 2
-                toX = centerX; toY = centerY + swipeDistance / 2
-            case "left":
-                fromX = centerX + swipeDistance / 2; fromY = centerY
-                toX = centerX - swipeDistance / 2; toY = centerY
-            case "right":
-                fromX = centerX - swipeDistance / 2; fromY = centerY
-                toX = centerX + swipeDistance / 2; toY = centerY
-            default:
-                return StepResult(step: step, status: .failed,
-                                  message: "Unknown direction: \(direction)",
-                                  durationSeconds: elapsed(startTime))
-            }
-
-            if let error = input.swipe(fromX: fromX, fromY: fromY,
-                                        toX: toX, toY: toY, durationMs: EnvConfig.defaultSwipeDurationMs) {
+            if let error = input.swipe(fromX: ep.fromX, fromY: ep.fromY,
+                                        toX: ep.toX, toY: ep.toY, durationMs: EnvConfig.defaultSwipeDurationMs) {
                 return StepResult(step: step, status: .failed,
                                   message: "Swipe failed: \(error)",
                                   durationSeconds: elapsed(startTime))
@@ -701,18 +651,67 @@ final class StepExecutor {
         bridge as? (any MenuActionCapable)
     }
 
-    /// Save a screenshot for debugging when a step fails.
-    private func captureFailureScreenshot(stepIndex: Int, skillName: String) {
-        guard let base64 = capture.captureBase64(),
-              let data = Data(base64Encoded: base64) else { return }
+    /// Swipe endpoints computed from a direction string and window dimensions.
+    struct SwipeEndpoints {
+        let fromX: Double, fromY: Double, toX: Double, toY: Double
+    }
 
+    /// Compute swipe start/end coordinates from a direction and window info.
+    /// Returns nil for unknown directions.
+    private func swipeEndpoints(
+        direction: String, windowInfo: WindowInfo
+    ) -> SwipeEndpoints? {
+        let centerX = Double(windowInfo.size.width) / 2.0
+        let centerY = Double(windowInfo.size.height) / 2.0
+        let dist = Double(windowInfo.size.height) * EnvConfig.swipeDistanceFraction
+        let half = dist / 2
+
+        switch direction.lowercased() {
+        case "up":
+            return SwipeEndpoints(fromX: centerX, fromY: centerY + half,
+                                  toX: centerX, toY: centerY - half)
+        case "down":
+            return SwipeEndpoints(fromX: centerX, fromY: centerY - half,
+                                  toX: centerX, toY: centerY + half)
+        case "left":
+            return SwipeEndpoints(fromX: centerX + half, fromY: centerY,
+                                  toX: centerX - half, toY: centerY)
+        case "right":
+            return SwipeEndpoints(fromX: centerX - half, fromY: centerY,
+                                  toX: centerX + half, toY: centerY)
+        default:
+            return nil
+        }
+    }
+
+    /// Capture and decode a screenshot as raw PNG data.
+    /// Returns nil if capture or base64 decode fails.
+    private func captureScreenshotData() -> Data? {
+        guard let base64 = capture.captureBase64(),
+              let data = Data(base64Encoded: base64) else { return nil }
+        return data
+    }
+
+    /// Write PNG data to the screenshot directory, creating it if needed.
+    /// Returns the written file path, or nil on failure.
+    @discardableResult
+    private func saveScreenshot(_ data: Data, filename: String) -> String? {
         let dir = config.screenshotDir
         try? FileManager.default.createDirectory(
             atPath: dir, withIntermediateDirectories: true)
-
-        let safeName = skillName.replacingOccurrences(of: " ", with: "_")
-        let filename = "\(safeName)_failure_step\(stepIndex + 1).png"
         let path = (dir as NSString).appendingPathComponent(filename)
-        try? data.write(to: URL(fileURLWithPath: path))
+        do {
+            try data.write(to: URL(fileURLWithPath: path))
+            return path
+        } catch {
+            return nil
+        }
+    }
+
+    /// Save a screenshot for debugging when a step fails.
+    private func captureFailureScreenshot(stepIndex: Int, skillName: String) {
+        guard let data = captureScreenshotData() else { return }
+        let safeName = skillName.replacingOccurrences(of: " ", with: "_")
+        saveScreenshot(data, filename: "\(safeName)_failure_step\(stepIndex + 1).png")
     }
 }
