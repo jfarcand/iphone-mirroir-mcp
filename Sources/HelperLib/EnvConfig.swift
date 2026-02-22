@@ -275,6 +275,10 @@ public enum EnvConfig {
         readUInt32("settingsLoadUs", default: TimingConstants.settingsLoadUs)
     }
 
+    public static var appSwitcherCardOffset: Double {
+        readDouble("appSwitcherCardOffset", default: TimingConstants.appSwitcherCardOffset)
+    }
+
     public static var appSwitcherSwipeDistance: Double {
         readDouble("appSwitcherSwipeDistance", default: TimingConstants.appSwitcherSwipeDistance)
     }

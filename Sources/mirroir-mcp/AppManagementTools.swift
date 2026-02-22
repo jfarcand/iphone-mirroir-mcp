@@ -63,11 +63,14 @@ extension MirroirMCP {
                     return .text("'\(appName)' not in App Switcher (already quit)")
                 }
 
-                // Swipe up on the app card to force-quit
+                // Swipe up on the app card to force-quit.
+                // OCR finds the app name label above the card preview, so offset
+                // downward into the card body before swiping, and clamp toY >= 0.
                 let cardX = match.element.tapX
-                let cardY = match.element.tapY
+                let cardY = match.element.tapY + EnvConfig.appSwitcherCardOffset
+                let toY = max(0, cardY - EnvConfig.appSwitcherSwipeDistance)
                 if let error = input.swipe(fromX: cardX, fromY: cardY,
-                                            toX: cardX, toY: cardY - EnvConfig.appSwitcherSwipeDistance, durationMs: EnvConfig.appSwitcherSwipeDurationMs) {
+                                            toX: cardX, toY: toY, durationMs: EnvConfig.appSwitcherSwipeDurationMs) {
                     _ = menuBridge.triggerMenuAction(menu: "View", item: "Home Screen")
                     return .error("Failed to swipe app card: \(error)")
                 }

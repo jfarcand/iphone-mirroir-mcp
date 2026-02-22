@@ -193,6 +193,11 @@ public enum TimingConstants {
     /// Delay for Settings app to load (microseconds).
     public static let settingsLoadUs: UInt32 = 1_500_000
 
+    /// Vertical offset from the app name label to the card body center in the App Switcher (points).
+    /// OCR detects the label above the card preview; this offset moves the swipe start point
+    /// down into the card so the dismiss gesture registers reliably.
+    public static let appSwitcherCardOffset: Double = 250.0
+
     /// Swipe distance for dismissing app cards in the App Switcher (points).
     public static let appSwitcherSwipeDistance: Double = 300.0
 
