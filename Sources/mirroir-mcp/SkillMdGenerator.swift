@@ -50,7 +50,7 @@ enum SkillMdGenerator {
 
         // Step counter and landmark dedup tracker
         var stepNum = 1
-        var lastLandmark: String?
+        var emittedLandmarks = Set<String>()
 
         // Step 1: always launch the app
         lines.append("\(stepNum). Launch **\(appName)**")
@@ -58,13 +58,13 @@ enum SkillMdGenerator {
 
         // Steps for each captured screen
         for screen in screens {
-            // Pick a landmark element for wait_for, skipping consecutive duplicates
+            // Pick a landmark element for wait_for, skipping already-emitted landmarks
             if let landmark = LandmarkPicker.pickLandmark(from: screen.elements) {
-                if landmark != lastLandmark {
+                if !emittedLandmarks.contains(landmark) {
+                    emittedLandmarks.insert(landmark)
                     lines.append("\(stepNum). Wait for \"\(landmark)\" to appear")
                     stepNum += 1
                 }
-                lastLandmark = landmark
             }
 
             // Generate action step based on actionType

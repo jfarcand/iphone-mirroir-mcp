@@ -112,4 +112,98 @@ final class ScreenFingerprintTests: XCTestCase {
         XCTAssertTrue(ScreenFingerprint.areEqual(lhs, rhs),
             "Status bar time changes should not affect equality")
     }
+
+    // MARK: - Similarity Scoring
+
+    func testSimilarityIdenticalScreens() {
+        let elements = [
+            TapPoint(text: "Settings", tapX: 205, tapY: 120, confidence: 0.98),
+            TapPoint(text: "General", tapX: 205, tapY: 340, confidence: 0.95),
+        ]
+
+        let score = ScreenFingerprint.similarity(elements, elements)
+        XCTAssertEqual(score, 1.0, accuracy: 0.001,
+            "Identical screens should have similarity 1.0")
+    }
+
+    func testSimilarityCompletelyDifferent() {
+        let lhs = [
+            TapPoint(text: "Settings", tapX: 205, tapY: 120, confidence: 0.98),
+            TapPoint(text: "General", tapX: 205, tapY: 340, confidence: 0.95),
+        ]
+        let rhs = [
+            TapPoint(text: "Photos", tapX: 205, tapY: 120, confidence: 0.98),
+            TapPoint(text: "Albums", tapX: 205, tapY: 340, confidence: 0.95),
+        ]
+
+        let score = ScreenFingerprint.similarity(lhs, rhs)
+        XCTAssertEqual(score, 0.0, accuracy: 0.001,
+            "Completely different screens should have similarity 0.0")
+    }
+
+    func testSimilarityPartialOverlap() {
+        // 3 shared out of 5 unique: Jaccard = 3/5 = 0.6
+        let lhs = [
+            TapPoint(text: "Settings", tapX: 205, tapY: 120, confidence: 0.98),
+            TapPoint(text: "General", tapX: 205, tapY: 200, confidence: 0.95),
+            TapPoint(text: "Privacy", tapX: 205, tapY: 280, confidence: 0.93),
+            TapPoint(text: "About", tapX: 205, tapY: 360, confidence: 0.92),
+        ]
+        let rhs = [
+            TapPoint(text: "Settings", tapX: 205, tapY: 120, confidence: 0.98),
+            TapPoint(text: "General", tapX: 205, tapY: 200, confidence: 0.95),
+            TapPoint(text: "Privacy", tapX: 205, tapY: 280, confidence: 0.93),
+            TapPoint(text: "Notifications", tapX: 205, tapY: 360, confidence: 0.91),
+        ]
+
+        let score = ScreenFingerprint.similarity(lhs, rhs)
+        // Intersection: {Settings, General, Privacy} = 3
+        // Union: {Settings, General, Privacy, About, Notifications} = 5
+        XCTAssertEqual(score, 0.6, accuracy: 0.001,
+            "3 shared of 5 unique should give Jaccard 0.6")
+    }
+
+    func testSimilarityScrolledViewAboveThreshold() {
+        // Simulate a scrolled list: 9 shared + 1 unique each
+        // Jaccard = 9 / (9 + 1 + 1) = 9/11 ≈ 0.818 → above 0.8 threshold
+        let shared = (1...9).map {
+            TapPoint(text: "Item \($0)", tapX: 205, tapY: Double(100 + $0 * 50), confidence: 0.95)
+        }
+        let lhs = shared + [
+            TapPoint(text: "Top Only", tapX: 205, tapY: 90, confidence: 0.95),
+        ]
+        let rhs = shared + [
+            TapPoint(text: "Bottom New", tapX: 205, tapY: 600, confidence: 0.95),
+        ]
+
+        XCTAssertTrue(ScreenFingerprint.areEqual(lhs, rhs),
+            "80%+ overlap (scrolled view) should be treated as equal")
+    }
+
+    func testSimilarityDifferentScreensBelowThreshold() {
+        // 2 shared out of 4 unique: Jaccard = 2/4 = 0.5
+        let lhs = [
+            TapPoint(text: "Settings", tapX: 205, tapY: 120, confidence: 0.98),
+            TapPoint(text: "General", tapX: 205, tapY: 200, confidence: 0.95),
+            TapPoint(text: "Privacy", tapX: 205, tapY: 280, confidence: 0.93),
+        ]
+        let rhs = [
+            TapPoint(text: "Settings", tapX: 205, tapY: 120, confidence: 0.98),
+            TapPoint(text: "General", tapX: 205, tapY: 200, confidence: 0.95),
+            TapPoint(text: "About", tapX: 205, tapY: 280, confidence: 0.92),
+        ]
+
+        // Intersection: {Settings, General} = 2, Union: {Settings, General, Privacy, About} = 4
+        XCTAssertFalse(ScreenFingerprint.areEqual(lhs, rhs),
+            "50% overlap should be below threshold and treated as different")
+    }
+
+    func testSimilarityBothEmpty() {
+        let lhs: [TapPoint] = []
+        let rhs: [TapPoint] = []
+
+        let score = ScreenFingerprint.similarity(lhs, rhs)
+        XCTAssertEqual(score, 1.0, accuracy: 0.001,
+            "Two empty screens should have similarity 1.0")
+    }
 }

@@ -8,13 +8,13 @@ import HelperLib
 @testable import mirroir_mcp
 
 /// Integration tests that require the FakeMirroring app to be running.
+/// Auto-detects FakeMirroring and configures the bridge — no env vars needed locally.
 ///
-/// Run with:
-/// ```
-/// MIRROIR_BUNDLE_ID=com.jfarcand.FakeMirroring \
-/// MIRROIR_PROCESS_NAME=FakeMirroring \
-/// swift test --filter IntegrationTests
-/// ```
+/// Run with: `swift test --filter IntegrationTests`
+///
+/// FakeMirroring must be running:
+///   `swift build -c release --product FakeMirroring && ./scripts/package-fake-app.sh`
+///   `open .build/release/FakeMirroring.app`
 final class FakeMirroringIntegrationTests: XCTestCase {
 
     private var bridge: MirroringBridge!
@@ -22,25 +22,16 @@ final class FakeMirroringIntegrationTests: XCTestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
 
-        // These tests require FakeMirroring — skip when running against real iPhone Mirroring.
-        // This is environment gating: the tests can only pass when FakeMirroring is configured
-        // and running, which CI sets up explicitly.
-        let bundleID = EnvConfig.mirroringBundleID
-        try XCTSkipUnless(
-            bundleID == "com.jfarcand.FakeMirroring",
-            "Integration tests require MIRROIR_BUNDLE_ID=com.jfarcand.FakeMirroring"
-        )
-
-        bridge = MirroringBridge()
-
-        guard bridge.findProcess() != nil else {
+        // Auto-detect FakeMirroring by process lookup — no env vars needed.
+        guard IntegrationTestHelper.isFakeMirroringRunning else {
             XCTFail(
                 "FakeMirroring app is not running. "
-                + "Expected bundle ID: \(bundleID). "
                 + "Launch it with: open .build/release/FakeMirroring.app"
             )
             return
         }
+
+        bridge = MirroringBridge(bundleID: IntegrationTestHelper.fakeBundleID)
     }
 
     // MARK: - MirroringBridge Tests
@@ -48,7 +39,7 @@ final class FakeMirroringIntegrationTests: XCTestCase {
     func testFindProcess() {
         let process = bridge.findProcess()
         XCTAssertNotNil(process, "Should find FakeMirroring process by bundle ID")
-        XCTAssertEqual(process?.bundleIdentifier, EnvConfig.mirroringBundleID)
+        XCTAssertEqual(process?.bundleIdentifier, IntegrationTestHelper.fakeBundleID)
     }
 
     func testGetWindowInfo() {

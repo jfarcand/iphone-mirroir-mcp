@@ -205,4 +205,64 @@ final class ExplorationSessionTests: XCTestCase {
         XCTAssertFalse(duplicate, "B after B should be rejected")
         XCTAssertEqual(session.screenCount, 2, "Count should stay at 2")
     }
+
+    // MARK: - Scroll Overlap Detection
+
+    func testScrolledViewTreatedAsDuplicate() {
+        // 80%+ element overlap simulates a slight scroll — should be rejected
+        // Jaccard = 9 / (9 + 1 + 1) = 9/11 ≈ 0.818 → above 0.8 threshold
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "test scroll dedup")
+
+        let shared = (1...9).map {
+            TapPoint(text: "Row \($0)", tapX: 205, tapY: Double(100 + $0 * 50), confidence: 0.95)
+        }
+        let screenA = shared + [
+            TapPoint(text: "Top Only", tapX: 205, tapY: 90, confidence: 0.95),
+        ]
+        let screenB = shared + [
+            TapPoint(text: "Bottom New", tapX: 205, tapY: 600, confidence: 0.95),
+        ]
+
+        let first = session.capture(
+            elements: screenA, hints: [], actionType: nil,
+            arrivedVia: nil, screenshotBase64: "img1")
+        XCTAssertTrue(first, "First screen should be accepted")
+
+        let second = session.capture(
+            elements: screenB, hints: [], actionType: "swipe",
+            arrivedVia: "up", screenshotBase64: "img2")
+        XCTAssertFalse(second,
+            "Scrolled view with 80%+ overlap should be rejected as duplicate")
+        XCTAssertEqual(session.screenCount, 1)
+    }
+
+    func testPartialOverlapBelowThresholdAccepted() {
+        // <80% overlap simulates a real navigation change — should be accepted
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "test scroll accept")
+
+        let screenA = [
+            TapPoint(text: "Settings", tapX: 205, tapY: 120, confidence: 0.98),
+            TapPoint(text: "General", tapX: 205, tapY: 200, confidence: 0.95),
+            TapPoint(text: "Privacy", tapX: 205, tapY: 280, confidence: 0.93),
+        ]
+        let screenB = [
+            TapPoint(text: "Settings", tapX: 205, tapY: 120, confidence: 0.98),
+            TapPoint(text: "General", tapX: 205, tapY: 200, confidence: 0.95),
+            TapPoint(text: "About", tapX: 205, tapY: 280, confidence: 0.92),
+        ]
+
+        session.capture(
+            elements: screenA, hints: [], actionType: nil,
+            arrivedVia: nil, screenshotBase64: "img1")
+
+        // Jaccard = 2/4 = 0.5, below 0.8 threshold
+        let second = session.capture(
+            elements: screenB, hints: [], actionType: "tap",
+            arrivedVia: "About", screenshotBase64: "img2")
+        XCTAssertTrue(second,
+            "50% overlap should be below threshold and accepted as new screen")
+        XCTAssertEqual(session.screenCount, 2)
+    }
 }

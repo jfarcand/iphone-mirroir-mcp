@@ -255,8 +255,8 @@ final class SkillMdGeneratorTests: XCTestCase {
             "Consecutive duplicate landmark should produce only one wait step")
     }
 
-    func testNonConsecutiveDuplicateLandmarksAreKept() {
-        // Pattern: A, B, A — both A waits should appear
+    func testNonConsecutiveDuplicateLandmarksAreSkipped() {
+        // Pattern: A, B, A — second A wait should be skipped (Set-based dedup)
         let screens = [
             ExploredScreen(
                 index: 0,
@@ -295,8 +295,8 @@ final class SkillMdGeneratorTests: XCTestCase {
 
         let waitSettings = result.components(separatedBy: "\n")
             .filter { $0.contains("Wait for \"Settings\" to appear") }
-        XCTAssertEqual(waitSettings.count, 2,
-            "Non-consecutive duplicate landmarks should both be kept")
+        XCTAssertEqual(waitSettings.count, 1,
+            "Non-consecutive duplicate landmarks should be skipped by Set-based dedup")
     }
 
     func testStepNumberingWithSkippedLandmark() {
@@ -336,5 +336,105 @@ final class SkillMdGeneratorTests: XCTestCase {
             "Step numbering should be sequential after skipped duplicate landmark")
         XCTAssertFalse(result.contains("4."),
             "Should only have 3 steps total")
+    }
+
+    // MARK: - Set-Based Dedup
+
+    func testNonConsecutiveDifferentLandmarksAreKept() {
+        // Pattern: A, B, C — all three landmarks should produce wait steps
+        let screens = [
+            ExploredScreen(
+                index: 0,
+                elements: [
+                    TapPoint(text: "Settings", tapX: 205, tapY: 120, confidence: 0.98),
+                ],
+                hints: [],
+                actionType: nil,
+                arrivedVia: nil,
+                screenshotBase64: "img0"
+            ),
+            ExploredScreen(
+                index: 1,
+                elements: [
+                    TapPoint(text: "General", tapX: 205, tapY: 120, confidence: 0.97),
+                ],
+                hints: [],
+                actionType: "tap",
+                arrivedVia: "General",
+                screenshotBase64: "img1"
+            ),
+            ExploredScreen(
+                index: 2,
+                elements: [
+                    TapPoint(text: "About", tapX: 205, tapY: 120, confidence: 0.96),
+                ],
+                hints: [],
+                actionType: "tap",
+                arrivedVia: "About",
+                screenshotBase64: "img2"
+            ),
+        ]
+
+        let result = SkillMdGenerator.generate(
+            appName: "Settings", goal: "test distinct", screens: screens)
+
+        XCTAssertTrue(result.contains("Wait for \"Settings\" to appear"))
+        XCTAssertTrue(result.contains("Wait for \"General\" to appear"))
+        XCTAssertTrue(result.contains("Wait for \"About\" to appear"),
+            "All distinct landmarks should produce wait steps")
+    }
+
+    func testStepNumberingWithSetDedup() {
+        // Pattern: A, B, A with actions — step numbers stay sequential after skipped wait
+        let screens = [
+            ExploredScreen(
+                index: 0,
+                elements: [
+                    TapPoint(text: "Settings", tapX: 205, tapY: 120, confidence: 0.98),
+                ],
+                hints: [],
+                actionType: nil,
+                arrivedVia: nil,
+                screenshotBase64: "img0"
+            ),
+            ExploredScreen(
+                index: 1,
+                elements: [
+                    TapPoint(text: "General", tapX: 205, tapY: 120, confidence: 0.97),
+                ],
+                hints: [],
+                actionType: "tap",
+                arrivedVia: "General",
+                screenshotBase64: "img1"
+            ),
+            ExploredScreen(
+                index: 2,
+                elements: [
+                    TapPoint(text: "Settings", tapX: 205, tapY: 120, confidence: 0.98),
+                ],
+                hints: [],
+                actionType: "press_key",
+                arrivedVia: "[",
+                screenshotBase64: "img2"
+            ),
+        ]
+
+        let result = SkillMdGenerator.generate(
+            appName: "Settings", goal: "test numbering dedup", screens: screens)
+
+        // Expected steps:
+        // 1. Launch **Settings**
+        // 2. Wait for "Settings" to appear
+        // 3. Wait for "General" to appear
+        // 4. Tap "General"
+        // 5. Press **[**    ← "Settings" wait is skipped (Set-based dedup)
+        XCTAssertTrue(result.contains("1. Launch **Settings**"))
+        XCTAssertTrue(result.contains("2. Wait for \"Settings\" to appear"))
+        XCTAssertTrue(result.contains("3. Wait for \"General\" to appear"))
+        XCTAssertTrue(result.contains("4. Tap \"General\""))
+        XCTAssertTrue(result.contains("5. Press **[**"),
+            "Back navigation should be step 5, no gap from skipped duplicate wait")
+        XCTAssertFalse(result.contains("6."),
+            "Should only have 5 steps total")
     }
 }
