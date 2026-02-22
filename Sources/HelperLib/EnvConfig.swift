@@ -129,6 +129,10 @@ public enum EnvConfig {
         readInt("swipeInterpolationSteps", default: TimingConstants.swipeInterpolationSteps)
     }
 
+    public static var scrollPixelScale: Double {
+        readDouble("scrollPixelScale", default: TimingConstants.scrollPixelScale)
+    }
+
     public static var hidTypingChunkSize: Int {
         readInt("hidTypingChunkSize", default: TimingConstants.hidTypingChunkSize)
     }

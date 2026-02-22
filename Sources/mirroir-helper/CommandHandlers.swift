@@ -284,12 +284,10 @@ extension CommandServer {
         ])
     }
 
-    /// Swipe from one screen-absolute point to another using a quick click-drag.
-    /// iPhone Mirroring maps a fast button-down + movement + button-up to an iOS
-    /// swipe gesture. Unlike scroll wheel (which cannot trigger edge gestures like
-    /// Safari back), a quick click-drag without an initial hold is interpreted as
-    /// a finger swipe by iOS. The absence of an initial hold is critical: with a
-    /// hold, iOS enters drag/selection mode instead.
+    /// Swipe from one screen-absolute point to another using scroll wheel events.
+    /// iPhone Mirroring maps mouse scroll to iOS swipe/scroll gestures, while
+    /// click-drag maps to touch-and-drag (icon rearranging). Scroll wheel is
+    /// the correct input for page changes, list scrolling, and content swiping.
     func handleSwipe(_ json: [String: Any]) -> Data {
         guard let fromX = doubleParam(json, "from_x"),
               let fromY = doubleParam(json, "from_y"),
@@ -305,40 +303,46 @@ extension CommandServer {
             return makeErrorResponse("Karabiner pointing device not ready")
         }
 
-        CursorSync.withCursorSynced(at: CGPoint(x: fromX, y: fromY), karabiner: karabiner) {
-            // Button down at the start position — no hold, move immediately.
-            // A quick press-move-release simulates a finger swipe on iOS.
-            var down = PointingInput()
-            down.buttons = 0x01
-            karabiner.postPointingReport(down)
+        // Warp cursor to the midpoint of the swipe so scroll events target
+        // the correct area of the iPhone Mirroring window
+        let midX = (fromX + toX) / 2.0
+        let midY = (fromY + toY) / 2.0
 
-            let steps = EnvConfig.swipeInterpolationSteps
+        CursorSync.withCursorSynced(at: CGPoint(x: midX, y: midY), karabiner: karabiner) {
+            // Send scroll wheel events to simulate the swipe gesture.
+            // No button press — scroll wheel maps to iOS swipe/scroll, while
+            // click-drag maps to touch-and-drag (which triggers icon jiggle mode).
             let totalDx = toX - fromX
             let totalDy = toY - fromY
+            let steps = EnvConfig.swipeInterpolationSteps
             let stepDelayUs = UInt32(max(durationMs, 1) * 1000 / steps)
 
-            for i in 1...steps {
-                let progress = Double(i) / Double(steps)
-                let targetX = fromX + totalDx * progress
-                let targetY = fromY + totalDy * progress
+            // Scale pixel distance to scroll wheel units. Scroll wheel values are
+            // much coarser than pixels — each unit scrolls several pixels.
+            // Using a divisor to convert pixel distance to reasonable scroll ticks.
+            let scrollScale = EnvConfig.scrollPixelScale
+            var hAccum = 0.0
+            var vAccum = 0.0
+            let hPerStep = totalDx / scrollScale / Double(steps)
+            let vPerStep = totalDy / scrollScale / Double(steps)
 
-                CGWarpMouseCursorPosition(CGPoint(x: targetX, y: targetY))
+            for _ in 1...steps {
+                hAccum += hPerStep
+                vAccum += vPerStep
 
-                let dx = Int8(clamping: Int(totalDx / Double(steps)))
-                let dy = Int8(clamping: Int(totalDy / Double(steps)))
-                var move = PointingInput()
-                move.buttons = 0x01
-                move.x = dx
-                move.y = dy
-                karabiner.postPointingReport(move)
+                let hTick = Int8(clamping: Int(hAccum.rounded()))
+                let vTick = Int8(clamping: Int(vAccum.rounded()))
+
+                hAccum -= Double(hTick)
+                vAccum -= Double(vTick)
+
+                var scroll = PointingInput()
+                // Negate: scroll wheel convention is opposite to swipe direction
+                scroll.horizontalWheel = -hTick
+                scroll.verticalWheel = -vTick
+                karabiner.postPointingReport(scroll)
                 usleep(stepDelayUs)
             }
-
-            // Release button to complete the swipe
-            var up = PointingInput()
-            up.buttons = 0x00
-            karabiner.postPointingReport(up)
-            usleep(EnvConfig.cursorSettleUs)
         }
 
         return makeOkResponse()

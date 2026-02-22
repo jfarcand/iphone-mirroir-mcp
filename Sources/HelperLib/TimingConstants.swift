@@ -87,6 +87,11 @@ public enum TimingConstants {
     /// Number of interpolation steps for swipe scroll gestures.
     public static let swipeInterpolationSteps: Int = 20
 
+    /// Scroll wheel pixel-to-tick divisor. Each scroll tick moves approximately
+    /// this many pixels in the content. Used to convert pixel distances to scroll
+    /// wheel units for swipe gestures.
+    public static let scrollPixelScale: Double = 8.0
+
     /// Maximum characters per HID typing chunk (Karabiner buffer capacity).
     public static let hidTypingChunkSize: Int = 15
 
