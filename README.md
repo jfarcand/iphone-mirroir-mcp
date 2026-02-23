@@ -16,9 +16,9 @@ An MCP server that controls iPhones through macOS iPhone Mirroring — and any m
 
 ## What's Changed
 
-- **Icon detection** — `describe_screen` now detects unlabeled tab bar and toolbar icons via pixel clustering with Vision saliency fallback. Agents no longer guess icon positions — detected coordinates are reported alongside OCR text.
-- **`generate_skill` tool** — AI agents can now explore an app and produce a ready-to-run SKILL.md autonomously. Session-based: `start` → navigate with tap/swipe → `capture` each screen → `finish` to emit the skill file.
-- **`reset_app` carousel search** — `reset_app` now swipes through the App Switcher carousel to find off-screen app cards instead of giving up after one OCR scan.
+- **No more Karabiner or root privileges** — All input (tap, swipe, type, press_key, shake) now uses macOS CGEvent API directly. No helper daemon, no DriverKit extension, no sudo. Just grant Accessibility + Screen Recording permissions.
+- **Autonomous app explorer** — `generate_skill` with `action: "explore"` does DFS exploration of any app, producing SKILL.md files automatically.
+- **Icon detection** — `describe_screen` detects unlabeled tab bar and toolbar icons via pixel clustering with Vision saliency fallback.
 
 ## Requirements
 
