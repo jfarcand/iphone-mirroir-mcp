@@ -546,11 +546,13 @@ final class StepExecutorTests: XCTestCase {
         let capture2 = StubCapture()
 
         let iphoneCtx = TargetContext(
-            name: "iphone", bridge: bridge, input: input,
+            name: "iphone", targetType: "iphone-mirroring", bundleID: nil,
+            bridge: bridge, input: input,
             capture: capture, describer: describer, recorder: StubRecorder(),
             capabilities: [.menuActions])
         let androidCtx = TargetContext(
-            name: "android", bridge: bridge2, input: input2,
+            name: "android", targetType: "generic-window", bundleID: nil,
+            bridge: bridge2, input: input2,
             capture: capture2, describer: describer2, recorder: StubRecorder(),
             capabilities: [])
         let registry = TargetRegistry(
@@ -574,7 +576,8 @@ final class StepExecutorTests: XCTestCase {
 
     func testSwitchTargetUnknownFails() {
         let ctx = TargetContext(
-            name: "iphone", bridge: bridge, input: input,
+            name: "iphone", targetType: "iphone-mirroring", bundleID: nil,
+            bridge: bridge, input: input,
             capture: capture, describer: describer, recorder: StubRecorder(),
             capabilities: [.menuActions])
         let registry = TargetRegistry(targets: ["iphone": ctx], defaultName: "iphone")

@@ -21,6 +21,8 @@ enum TargetCapability: String, Sendable, Codable {
 /// All subsystems needed to interact with a single target.
 struct TargetContext: Sendable {
     let name: String
+    let targetType: String
+    let bundleID: String?
     let bridge: any WindowBridging
     let input: any InputProviding
     let capture: any ScreenCapturing

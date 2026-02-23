@@ -52,7 +52,13 @@ else
     echo "  ln -sf $MCP_FULL_PATH /usr/local/bin/mirroir"
 fi
 
-# --- Step 3: Install prompts and agent profiles ---
+# --- Step 3: Configure keyboard layout ---
+
+echo ""
+echo "=== Configuring ==="
+"$MCP_FULL_PATH" configure
+
+# --- Step 4: Install prompts and agent profiles ---
 
 echo ""
 echo "=== Installing prompts and agent profiles ==="
@@ -84,7 +90,7 @@ for f in agents/*.yaml; do
     fi
 done
 
-# --- Step 4: Verify setup ---
+# --- Step 5: Verify setup ---
 
 echo ""
 echo "=== Verifying setup ==="

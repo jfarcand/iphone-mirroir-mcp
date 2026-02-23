@@ -185,12 +185,16 @@ enum GraphPathFinder {
     }
 
     /// Derive a human-readable name from a path's edge labels.
-    private static func deriveName(
+    /// Short paths (≤2 labels) use full join; longer paths use "first to last" format.
+    static func deriveName(
         from path: [NavigationEdge],
         snapshot: GraphSnapshot
     ) -> String {
         let labels = path.map(\.elementText).filter { !$0.isEmpty }
         if labels.isEmpty { return "exploration" }
-        return labels.joined(separator: " > ").lowercased()
+        if labels.count <= 2 {
+            return labels.joined(separator: " > ").lowercased()
+        }
+        return "\(labels[0]) to \(labels[labels.count - 1])".lowercased()
     }
 }

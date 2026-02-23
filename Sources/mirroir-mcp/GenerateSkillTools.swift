@@ -86,6 +86,19 @@ extension MirroirMCP {
                         "description": .string(
                             "Maximum seconds for explore action (default: 300)."),
                     ]),
+                    "strategy": .object([
+                        "type": .string("string"),
+                        "description": .string(
+                            "Override exploration strategy: \"mobile\" (default), " +
+                            "\"social\" (Reddit, Instagram, TikTok), " +
+                            "\"desktop\" (generic macOS windows). " +
+                            "Auto-detected from target type and app name if omitted."),
+                        "enum": .array([
+                            .string("mobile"),
+                            .string("social"),
+                            .string("desktop"),
+                        ]),
+                    ]),
                 ]),
                 "required": .array([.string("action")]),
             ],
@@ -143,6 +156,16 @@ extension MirroirMCP {
         let goals = args["goals"]?.asStringArray() ?? []
         session.start(appName: appName, goal: goal, goals: goals)
 
+        // Detect and store strategy
+        let explicitStrategy = args["strategy"]?.asString()
+        let strategyChoice = StrategyDetector.detect(
+            targetType: ctx.targetType,
+            bundleID: ctx.bundleID,
+            appName: appName,
+            explicitStrategy: explicitStrategy
+        )
+        session.setStrategy(strategyChoice.rawValue)
+
         // OCR first screen
         guard let result = ctx.describer.describe(skipOCR: false) else {
             return .error(
@@ -167,7 +190,7 @@ extension MirroirMCP {
             preamble += " Manifest: \(goals.count) goals queued."
         }
 
-        let description = formatScreenDescription(
+        let description = ExplorationGuidanceHelper.formatScreenDescription(
             elements: result.elements,
             hints: result.hints,
             preamble: preamble
@@ -226,7 +249,7 @@ extension MirroirMCP {
 
         if !accepted {
             // Still provide guidance even on duplicate rejection — use strategy if graph available
-            let guidance = generateGuidance(
+            let guidance = ExplorationGuidanceHelper.generateGuidance(
                 session: session, elements: result.elements,
                 icons: result.icons, hints: result.hints
             )
@@ -241,14 +264,14 @@ extension MirroirMCP {
         let preamble = "Screen \(screenNum) captured" +
             (arrivedVia.map { " (arrived via \"\($0)\")" } ?? "") + "."
 
-        let description = formatScreenDescription(
+        let description = ExplorationGuidanceHelper.formatScreenDescription(
             elements: result.elements,
             hints: result.hints,
             preamble: preamble
         )
 
         // Generate guidance for the agent — prefer strategy-based when graph available
-        let guidance = generateGuidance(
+        let guidance = ExplorationGuidanceHelper.generateGuidance(
             session: session, elements: result.elements,
             icons: result.icons, hints: result.hints
         )
@@ -358,7 +381,15 @@ extension MirroirMCP {
         )
 
         let goal = args["goal"]?.asString() ?? ""
+        let explicitStrategy = args["strategy"]?.asString()
+        let strategyChoice = StrategyDetector.detect(
+            targetType: ctx.targetType,
+            bundleID: ctx.bundleID,
+            appName: appName,
+            explicitStrategy: explicitStrategy
+        )
         session.start(appName: appName, goal: goal)
+        session.setStrategy(strategyChoice.rawValue)
 
         // OCR first screen
         guard let firstResult = ctx.describer.describe(skipOCR: false) else {
@@ -381,13 +412,23 @@ extension MirroirMCP {
             "Budget: depth=\(maxDepth), screens=\(maxScreens), time=\(maxTime)s",
         ]
 
-        // Run DFS loop
+        // Run DFS loop using detected strategy
         while !explorer.completed {
-            let result = explorer.step(
-                describer: ctx.describer,
-                input: ctx.input,
-                strategy: MobileAppStrategy.self
-            )
+            let result: ExploreStepResult
+            switch strategyChoice {
+            case .social:
+                result = explorer.step(
+                    describer: ctx.describer, input: ctx.input,
+                    strategy: SocialAppStrategy.self)
+            case .desktop:
+                result = explorer.step(
+                    describer: ctx.describer, input: ctx.input,
+                    strategy: DesktopAppStrategy.self)
+            case .mobile:
+                result = explorer.step(
+                    describer: ctx.describer, input: ctx.input,
+                    strategy: MobileAppStrategy.self)
+            }
 
             switch result {
             case .continue(let desc):
@@ -432,62 +473,4 @@ extension MirroirMCP {
         return .text(stepResults.joined(separator: "\n"))
     }
 
-    // MARK: - Guidance
-
-    /// Generate exploration guidance, preferring strategy-based analysis when the graph is populated.
-    /// Falls back to the keyword-based ExplorationGuide.analyze() for backward compatibility.
-    private static func generateGuidance(
-        session: ExplorationSession,
-        elements: [TapPoint],
-        icons: [IconDetector.DetectedIcon],
-        hints: [String]
-    ) -> ExplorationGuide.Guidance {
-        let graph = session.currentGraph
-        if graph.started {
-            return ExplorationGuide.analyzeWithStrategy(
-                strategy: MobileAppStrategy.self,
-                graph: graph,
-                elements: elements,
-                icons: icons,
-                hints: hints,
-                budget: .default,
-                goal: session.currentGoal
-            )
-        }
-        return ExplorationGuide.analyze(
-            mode: session.currentMode,
-            goal: session.currentGoal,
-            elements: elements,
-            hints: hints,
-            startElements: session.startScreenElements,
-            actionLog: session.actions,
-            screenCount: session.screenCount
-        )
-    }
-
-    // MARK: - Formatting
-
-    /// Format OCR elements and hints into a text description.
-    /// Same pattern as describe_screen in ScreenTools.swift.
-    private static func formatScreenDescription(
-        elements: [TapPoint],
-        hints: [String],
-        preamble: String
-    ) -> String {
-        var lines = [preamble, "", "Screen elements (tap coordinates in points):"]
-        for el in elements.sorted(by: { $0.tapY < $1.tapY }) {
-            lines.append("- \"\(el.text)\" at (\(Int(el.tapX)), \(Int(el.tapY)))")
-        }
-        if elements.isEmpty {
-            lines.append("(no text detected)")
-        }
-        if !hints.isEmpty {
-            lines.append("")
-            lines.append("Hints:")
-            for hint in hints {
-                lines.append("- \(hint)")
-            }
-        }
-        return lines.joined(separator: "\n")
-    }
 }

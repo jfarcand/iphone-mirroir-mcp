@@ -44,6 +44,10 @@ struct MirroirMCP {
             let exitCode = DoctorCommand.run(arguments: Array(args.dropFirst(2)))
             Darwin.exit(exitCode)
         }
+        if args.count >= 2 && args[1] == "configure" {
+            let exitCode = ConfigureCommand.run(arguments: Array(args.dropFirst(2)))
+            Darwin.exit(exitCode)
+        }
         let skipPermissions = PermissionPolicy.parseSkipPermissions(from: args)
         DebugLog.enabled = args.contains("--debug")
         DebugLog.reset()
@@ -106,6 +110,8 @@ struct MirroirMCP {
         let capture = ScreenCapture(bridge: bridge)
         let ctx = TargetContext(
             name: "iphone",
+            targetType: "iphone-mirroring",
+            bundleID: nil,
             bridge: bridge,
             input: InputSimulation(bridge: bridge),
             capture: capture,
@@ -148,6 +154,8 @@ struct MirroirMCP {
             let capture = ScreenCapture(bridge: bridge)
             targets[name] = TargetContext(
                 name: name,
+                targetType: config.type,
+                bundleID: config.bundleID,
                 bridge: bridge,
                 input: InputSimulation(bridge: bridge, cursorMode: cursorMode),
                 capture: capture,

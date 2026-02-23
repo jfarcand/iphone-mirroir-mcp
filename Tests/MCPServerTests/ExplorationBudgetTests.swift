@@ -92,4 +92,24 @@ final class ExplorationBudgetTests: XCTestCase {
         XCTAssertFalse(budget.shouldSkipElement(text: "Privacy"))
         XCTAssertFalse(budget.shouldSkipElement(text: "Display & Brightness"))
     }
+
+    // MARK: - Ad/Sponsored Content
+
+    func testSkipsAdContent() {
+        let budget = ExplorationBudget.default
+
+        XCTAssertTrue(budget.shouldSkipElement(text: "Sponsored"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Promoted Post"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Advertisement"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "ORDER NOW"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Buy Now"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Install Now"))
+    }
+
+    func testSkipsAdContentCaseInsensitive() {
+        let budget = ExplorationBudget.default
+
+        XCTAssertTrue(budget.shouldSkipElement(text: "sponsored content"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "buy now button"))
+    }
 }

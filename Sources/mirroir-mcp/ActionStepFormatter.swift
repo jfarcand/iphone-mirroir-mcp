@@ -4,9 +4,34 @@
 // ABOUTME: Maps action type and arrivedVia pairs to markdown step text for SKILL.md.
 // ABOUTME: Pure formatting function with no side effects.
 
+import HelperLib
+
 /// Formats an exploration action into a markdown step string.
 /// Maps action types (tap, swipe, type, etc.) to their display format.
 enum ActionStepFormatter {
+
+    /// Resolve an arrivedVia label against screen elements.
+    /// Attempts exact match, case-insensitive match, then containment match.
+    /// Returns the best matching element's text for proper casing, or the original if no match.
+    static func resolveLabel(arrivedVia: String, elements: [TapPoint]) -> String {
+        // Exact match
+        if elements.contains(where: { $0.text == arrivedVia }) {
+            return arrivedVia
+        }
+        // Case-insensitive match
+        let lowered = arrivedVia.lowercased()
+        if let match = elements.first(where: { $0.text.lowercased() == lowered }) {
+            return match.text
+        }
+        // Containment match (arrivedVia is substring of element or vice versa)
+        if let match = elements.first(where: {
+            $0.text.lowercased().contains(lowered) || lowered.contains($0.text.lowercased())
+        }) {
+            return match.text
+        }
+        // Graceful degradation: return original
+        return arrivedVia
+    }
 
     /// Format an action step from actionType and arrivedVia.
     /// Returns nil if no action should be emitted (e.g. first screen with no arrivedVia).

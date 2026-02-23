@@ -134,6 +134,8 @@ func makeTestRegistry(
 ) -> TargetRegistry {
     let ctx = TargetContext(
         name: "iphone",
+        targetType: "iphone-mirroring",
+        bundleID: nil,
         bridge: bridge,
         input: input,
         capture: capture,

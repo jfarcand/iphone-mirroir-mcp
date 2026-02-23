@@ -67,8 +67,13 @@ enum SkillMdGenerator {
                 }
             }
 
+            // Resolve arrivedVia label against screen elements for proper casing
+            let resolvedVia: String? = screen.arrivedVia.map { via in
+                ActionStepFormatter.resolveLabel(arrivedVia: via, elements: screen.elements)
+            }
+
             // Generate action step based on actionType
-            if let step = ActionStepFormatter.format(actionType: screen.actionType, arrivedVia: screen.arrivedVia) {
+            if let step = ActionStepFormatter.format(actionType: screen.actionType, arrivedVia: resolvedVia) {
                 lines.append("\(stepNum). \(step)")
                 stepNum += 1
             }

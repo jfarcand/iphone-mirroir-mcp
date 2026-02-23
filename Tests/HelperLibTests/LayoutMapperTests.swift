@@ -146,59 +146,31 @@ struct LayoutMapperTests {
                 "/ should map to ` after ISO key swap")
     }
 
-    // MARK: - findNonUSLayout (env var gating)
+    // MARK: - findNonUSLayout
 
-    @Test("findNonUSLayout returns nil when env var is not set")
+    @Test("findNonUSLayout returns nil when layout is empty")
     func findNonUSLayoutDefaultReturnsNil() {
-        let saved = ProcessInfo.processInfo.environment["IPHONE_KEYBOARD_LAYOUT"]
-        unsetenv("IPHONE_KEYBOARD_LAYOUT")
-        defer {
-            if let saved { setenv("IPHONE_KEYBOARD_LAYOUT", saved, 1) }
-            else { unsetenv("IPHONE_KEYBOARD_LAYOUT") }
-        }
-
-        let result = LayoutMapper.findNonUSLayout()
-        #expect(result == nil, "Without env var, findNonUSLayout should return nil (US QWERTY default)")
+        let result = LayoutMapper.findNonUSLayout(layout: "")
+        #expect(result == nil, "Empty layout should return nil (US QWERTY default)")
     }
 
-    @Test("findNonUSLayout returns layout when env var is set to Canadian-CSA")
+    @Test("findNonUSLayout returns layout for Canadian-CSA")
     func findNonUSLayoutWithCanadianCSA() {
-        let saved = ProcessInfo.processInfo.environment["IPHONE_KEYBOARD_LAYOUT"]
-        setenv("IPHONE_KEYBOARD_LAYOUT", "Canadian-CSA", 1)
-        defer {
-            if let saved { setenv("IPHONE_KEYBOARD_LAYOUT", saved, 1) }
-            else { unsetenv("IPHONE_KEYBOARD_LAYOUT") }
-        }
-
-        let result = LayoutMapper.findNonUSLayout()
-        #expect(result != nil, "With IPHONE_KEYBOARD_LAYOUT=Canadian-CSA, should return layout data")
+        let result = LayoutMapper.findNonUSLayout(layout: "Canadian-CSA")
+        #expect(result != nil, "Canadian-CSA should return layout data")
         #expect(result?.sourceID == "com.apple.keylayout.Canadian-CSA")
     }
 
-    @Test("findNonUSLayout accepts full source ID in env var")
+    @Test("findNonUSLayout accepts full source ID")
     func findNonUSLayoutWithFullSourceID() {
-        let saved = ProcessInfo.processInfo.environment["IPHONE_KEYBOARD_LAYOUT"]
-        setenv("IPHONE_KEYBOARD_LAYOUT", "com.apple.keylayout.Canadian-CSA", 1)
-        defer {
-            if let saved { setenv("IPHONE_KEYBOARD_LAYOUT", saved, 1) }
-            else { unsetenv("IPHONE_KEYBOARD_LAYOUT") }
-        }
-
-        let result = LayoutMapper.findNonUSLayout()
+        let result = LayoutMapper.findNonUSLayout(layout: "com.apple.keylayout.Canadian-CSA")
         #expect(result != nil, "Full source ID should be accepted")
         #expect(result?.sourceID == "com.apple.keylayout.Canadian-CSA")
     }
 
     @Test("findNonUSLayout returns nil for unknown layout name")
     func findNonUSLayoutWithUnknownLayout() {
-        let saved = ProcessInfo.processInfo.environment["IPHONE_KEYBOARD_LAYOUT"]
-        setenv("IPHONE_KEYBOARD_LAYOUT", "Nonexistent-Layout-XYZ", 1)
-        defer {
-            if let saved { setenv("IPHONE_KEYBOARD_LAYOUT", saved, 1) }
-            else { unsetenv("IPHONE_KEYBOARD_LAYOUT") }
-        }
-
-        let result = LayoutMapper.findNonUSLayout()
+        let result = LayoutMapper.findNonUSLayout(layout: "Nonexistent-Layout-XYZ")
         #expect(result == nil, "Unknown layout should return nil")
     }
 

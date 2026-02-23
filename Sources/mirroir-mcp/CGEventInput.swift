@@ -179,21 +179,86 @@ enum CGEventInput {
     /// Microseconds to pause between dead-key trigger and base character.
     private static let deadKeyDelayUs: UInt32 = 30_000
 
+    /// Modifier flags that we explicitly press/release via flagsChanged events.
+    private static let allModifierFlags: CGEventFlags = [
+        .maskShift, .maskCommand, .maskAlternate, .maskControl,
+    ]
+
+    /// Modifier virtual keycodes (Carbon kVK_*). Order: press in this order,
+    /// release in reverse.
+    private static let modifierKeys: [(flag: CGEventFlags, keycode: UInt16)] = [
+        (.maskControl, 0x3B),   // kVK_Control
+        (.maskAlternate, 0x3A), // kVK_Option
+        (.maskShift, 0x38),     // kVK_Shift
+        (.maskCommand, 0x37),   // kVK_Command
+    ]
+
     /// Post a single key event (key-down + key-up) with modifier flags.
-    /// Returns true if the events were created and posted successfully.
+    ///
+    /// iPhone Mirroring tracks modifier state from explicit flagsChanged events
+    /// rather than reading flags from key events. This method sends
+    /// flagsChanged press/release events for each required modifier around
+    /// the actual keystroke, matching how a physical keyboard works.
     static func postKey(keycode: UInt16, flags: CGEventFlags = CGEventFlags()) -> Bool {
         guard let down = CGEvent(keyboardEventSource: nil, virtualKey: keycode, keyDown: true),
               let up = CGEvent(keyboardEventSource: nil, virtualKey: keycode, keyDown: false) else {
             return false
         }
 
+        let hasModifiers = !flags.intersection(allModifierFlags).isEmpty
+
+        // Press modifier keys explicitly so iPhone Mirroring sees the state change
+        if hasModifiers {
+            pressModifiers(flags)
+        }
+
         down.flags = flags
         up.flags = flags
-
         down.post(tap: .cghidEventTap)
         usleep(keystrokeDelayUs)
         up.post(tap: .cghidEventTap)
+
+        // Release modifiers after the keystroke
+        if hasModifiers {
+            usleep(keystrokeDelayUs)
+            releaseModifiers(flags)
+        }
+
         return true
+    }
+
+    /// Post flagsChanged events to press the specified modifier keys.
+    private static func pressModifiers(_ flags: CGEventFlags) {
+        var accumulated = CGEventFlags()
+        for (flag, keycode) in modifierKeys {
+            if flags.contains(flag) {
+                accumulated.insert(flag)
+                guard let event = CGEvent(keyboardEventSource: nil, virtualKey: keycode, keyDown: true) else {
+                    continue
+                }
+                event.type = .flagsChanged
+                event.flags = accumulated
+                event.post(tap: .cghidEventTap)
+                usleep(keystrokeDelayUs)
+            }
+        }
+    }
+
+    /// Post flagsChanged events to release the specified modifier keys (reverse order).
+    private static func releaseModifiers(_ flags: CGEventFlags) {
+        var remaining = flags.intersection(allModifierFlags)
+        for (flag, keycode) in modifierKeys.reversed() {
+            if remaining.contains(flag) {
+                remaining.remove(flag)
+                guard let event = CGEvent(keyboardEventSource: nil, virtualKey: keycode, keyDown: false) else {
+                    continue
+                }
+                event.type = .flagsChanged
+                event.flags = remaining
+                event.post(tap: .cghidEventTap)
+                usleep(keystrokeDelayUs)
+            }
+        }
     }
 
     /// Post a dead-key sequence (2+ key events with a longer delay between them).

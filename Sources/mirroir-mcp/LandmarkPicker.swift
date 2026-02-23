@@ -28,7 +28,7 @@ enum LandmarkPicker {
 
     /// Pick the most distinctive OCR element as a landmark, filtering out status bar noise.
     /// Skips elements in the status bar zone (tapY < 80), time patterns, and bare numbers.
-    /// Prefers elements in the header zone (100-250pt Y range) over others.
+    /// Uses a tiered selection: structural header > structural anywhere > any candidate.
     static func pickLandmark(from elements: [TapPoint]) -> String? {
         let candidates = elements.filter { el in
             el.text.count >= landmarkMinLength &&
@@ -39,14 +39,25 @@ enum LandmarkPicker {
             !isBareNumber(el.text)
         }
 
-        // Prefer elements in the header zone (100-250pt Y range)
-        let headerCandidates = candidates.filter { headerZoneRange.contains($0.tapY) }
-
-        if let best = headerCandidates.sorted(by: { $0.tapY < $1.tapY }).first {
+        // Tier 1: Structural candidates in header zone (100-250pt Y) — most stable
+        let structuralHeader = candidates.filter {
+            headerZoneRange.contains($0.tapY) && StructuralFingerprint.passesStructuralFilter($0)
+        }
+        if let best = structuralHeader.sorted(by: { $0.tapY < $1.tapY }).first {
             return best.text
         }
 
-        // Fall back to topmost qualifying element outside status bar
+        // Tier 2: Any structural candidate (topmost)
+        let structural = candidates.filter { StructuralFingerprint.passesStructuralFilter($0) }
+        if let best = structural.sorted(by: { $0.tapY < $1.tapY }).first {
+            return best.text
+        }
+
+        // Tier 3: Fallback to topmost qualifying element (original behavior)
+        let headerCandidates = candidates.filter { headerZoneRange.contains($0.tapY) }
+        if let best = headerCandidates.sorted(by: { $0.tapY < $1.tapY }).first {
+            return best.text
+        }
         return candidates.sorted(by: { $0.tapY < $1.tapY }).first?.text
     }
 

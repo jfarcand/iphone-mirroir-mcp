@@ -381,6 +381,15 @@ public enum EnvConfig {
         readDouble("defaultMeasureTimeoutSeconds", default: TimingConstants.defaultMeasureTimeoutSeconds)
     }
 
+    // MARK: - Keyboard Layout
+
+    /// iPhone keyboard layout name for character substitution.
+    /// Empty string means US QWERTY (no substitution needed).
+    /// Set via `mirroir-mcp configure` which saves to settings.json.
+    public static var keyboardLayout: String {
+        readString("keyboardLayout", envVar: "IPHONE_KEYBOARD_LAYOUT", default: "")
+    }
+
     // MARK: - App Identity
 
     public static var mirroringBundleID: String {

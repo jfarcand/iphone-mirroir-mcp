@@ -34,6 +34,15 @@ Read-only tools (`screenshot`, `describe_screen`, `start_recording`, `stop_recor
 
 When the iPhone uses a non-US keyboard layout (e.g., Canadian-CSA), the server translates characters through `UCKeyTranslate` to find the correct keycodes. Two characters on the ISO section key (`§` and `±` on Canadian-CSA) cannot be typed because macOS and iPhone Mirroring disagree on the key mapping for that physical key. These characters are silently skipped.
 
+## No On-Screen Keyboard
+
+iPhone Mirroring acts as an external hardware keyboard, so iOS hides the virtual on-screen keyboard. There is no iOS setting to override this — it is a hard platform limitation.
+
+### Impact on Testing
+
+- Screenshots and OCR will never show the iOS keyboard. Tests that need to verify keyboard appearance, custom input accessories, or keyboard-driven UI cannot be validated through iPhone Mirroring.
+- Text input itself works fine — `type_text` and `press_key` deliver keystrokes via CGEvent regardless of whether the virtual keyboard is visible.
+
 ## iOS Autocorrect
 
 iOS applies autocorrect to typed text the same way it does for physical keyboard input. Words may be silently changed after a space or punctuation is typed. Disable autocorrect in iPhone **Settings > General > Keyboard** if this causes issues.

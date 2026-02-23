@@ -36,7 +36,10 @@ struct ExplorationBudget: Sendable {
         maxTimeSeconds: 300,
         maxActionsPerScreen: 5,
         scrollLimit: 3,
-        skipPatterns: ["Delete", "Sign Out", "Log Out", "Reset", "Erase", "Remove All"]
+        skipPatterns: [
+            "Delete", "Sign Out", "Log Out", "Reset", "Erase", "Remove All",
+            "Sponsored", "Promoted", "Advertisement", "ORDER NOW", "Buy Now", "Install Now",
+        ]
     )
 
     /// Check if the exploration budget is exhausted based on current state.

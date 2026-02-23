@@ -5,6 +5,7 @@
 // ABOUTME: Covers all step types including tap, swipe, type, remember, screenshot, assert, and edge cases.
 
 import XCTest
+@testable import HelperLib
 @testable import mirroir_mcp
 
 final class ActionStepFormatterTests: XCTestCase {
@@ -118,5 +119,47 @@ final class ActionStepFormatterTests: XCTestCase {
     func testEmptyBothReturnsNil() {
         let step = ActionStepFormatter.format(actionType: "", arrivedVia: "")
         XCTAssertNil(step, "Both empty should produce no step")
+    }
+
+    // MARK: - resolveLabel
+
+    func testResolveLabelExactMatch() {
+        let elements = [
+            TapPoint(text: "General", tapX: 205, tapY: 200, confidence: 0.95),
+            TapPoint(text: "About", tapX: 205, tapY: 280, confidence: 0.95),
+        ]
+
+        let result = ActionStepFormatter.resolveLabel(arrivedVia: "General", elements: elements)
+        XCTAssertEqual(result, "General")
+    }
+
+    func testResolveLabelCaseInsensitive() {
+        let elements = [
+            TapPoint(text: "Privacy & Security", tapX: 205, tapY: 200, confidence: 0.95),
+        ]
+
+        let result = ActionStepFormatter.resolveLabel(arrivedVia: "privacy & security", elements: elements)
+        XCTAssertEqual(result, "Privacy & Security",
+            "Should return element's text with proper casing")
+    }
+
+    func testResolveLabelContainment() {
+        let elements = [
+            TapPoint(text: "Software Update", tapX: 205, tapY: 200, confidence: 0.95),
+        ]
+
+        let result = ActionStepFormatter.resolveLabel(arrivedVia: "software", elements: elements)
+        XCTAssertEqual(result, "Software Update",
+            "Should match when arrivedVia is substring of element text")
+    }
+
+    func testResolveLabelNoMatch() {
+        let elements = [
+            TapPoint(text: "General", tapX: 205, tapY: 200, confidence: 0.95),
+        ]
+
+        let result = ActionStepFormatter.resolveLabel(arrivedVia: "Unknown Button", elements: elements)
+        XCTAssertEqual(result, "Unknown Button",
+            "Should return original when no match found")
     }
 }

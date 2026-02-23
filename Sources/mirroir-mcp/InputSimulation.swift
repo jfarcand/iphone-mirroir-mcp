@@ -61,22 +61,14 @@ final class InputSimulation: Sendable {
             self.mirroringBundleID = bridge.findProcess()?.bundleIdentifier ?? ""
         }
 
-        // Build layout substitution table if a non-US layout is installed.
-        // The iPhone's hardware keyboard layout typically matches one of the
-        // Mac's installed layouts. When it differs from US QWERTY, characters
-        // need translation before mapping to CGEvent virtual keycodes.
-        if let usData = LayoutMapper.layoutData(forSourceID: "com.apple.keylayout.US"),
-           let (targetID, targetData) = LayoutMapper.findNonUSLayout()
-        {
-            self.layoutSubstitution = LayoutMapper.buildSubstitution(
-                usLayoutData: usData, targetLayoutData: targetData
-            )
-            if !self.layoutSubstitution.isEmpty {
-                fputs("LayoutMapper: \(self.layoutSubstitution.count) character substitutions for \(targetID)\n", stderr)
-            }
-        } else {
-            self.layoutSubstitution = [:]
-        }
+        // Layout substitution is NOT used with CGEvent input.
+        // iPhone Mirroring interprets CGEvent virtual keycodes as US QWERTY
+        // regardless of the iPhone's keyboard layout setting. Accented characters
+        // (é, è, ç, etc.) are handled by CGKeyMap's dead-key sequences.
+        // Layout substitution was only needed with the old Karabiner/DriverKit
+        // approach where a virtual HID device was interpreted through the
+        // iPhone's configured keyboard layout.
+        self.layoutSubstitution = [:]
     }
 
     /// Verify that the target window is connected and accepting input.

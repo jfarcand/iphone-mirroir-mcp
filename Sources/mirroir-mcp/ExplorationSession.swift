@@ -44,6 +44,7 @@ final class ExplorationSession: @unchecked Sendable {
     private var goalsQueue: [String] = []
     private var goalIndex: Int = 0
     private var graph: NavigationGraph = NavigationGraph()
+    private var strategyChoice: String = "mobile"
     private let lock = NSLock()
 
     /// Begin a new exploration session, resetting any prior state.
@@ -59,6 +60,7 @@ final class ExplorationSession: @unchecked Sendable {
         screens = []
         actionLog = []
         graph = NavigationGraph()
+        strategyChoice = "mobile"
         self.appName = appName
         self.startElements = nil
 
@@ -122,7 +124,7 @@ final class ExplorationSession: @unchecked Sendable {
         }
 
         // Populate NavigationGraph alongside flat screen list
-        let screenType = MobileAppStrategy.classifyScreen(elements: elements, hints: hints)
+        let screenType = classifyScreenWithStrategy(elements: elements, hints: hints)
         if !graph.started {
             graph.start(
                 rootElements: elements, icons: icons, hints: hints,
@@ -280,5 +282,34 @@ final class ExplorationSession: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return graph
+    }
+
+    /// Set the exploration strategy choice (e.g. "mobile", "social", "desktop").
+    func setStrategy(_ choice: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        strategyChoice = choice
+    }
+
+    /// The current exploration strategy choice.
+    var currentStrategy: String {
+        lock.lock()
+        defer { lock.unlock() }
+        return strategyChoice
+    }
+
+    // MARK: - Strategy Dispatch
+
+    /// Classify a screen using the current strategy choice.
+    /// Must be called under lock or from a lock-protected method.
+    private func classifyScreenWithStrategy(elements: [TapPoint], hints: [String]) -> ScreenType {
+        switch strategyChoice {
+        case "social":
+            return SocialAppStrategy.classifyScreen(elements: elements, hints: hints)
+        case "desktop":
+            return DesktopAppStrategy.classifyScreen(elements: elements, hints: hints)
+        default:
+            return MobileAppStrategy.classifyScreen(elements: elements, hints: hints)
+        }
     }
 }

@@ -36,27 +36,19 @@ public enum LayoutMapper {
 
     /// Find the iPhone's keyboard layout for character translation.
     ///
-    /// Returns a layout only when the `IPHONE_KEYBOARD_LAYOUT` environment variable
-    /// is set (e.g. "Canadian-CSA" or "com.apple.keylayout.Canadian-CSA").
+    /// Reads the layout name from `EnvConfig.keyboardLayout` which resolves
+    /// from settings.json (set by `mirroir-mcp configure`) or the
+    /// `IPHONE_KEYBOARD_LAYOUT` environment variable.
     ///
-    /// CGEvent virtual keycodes are physical keys interpreted as US QWERTY by
-    /// default. Auto-detecting from the Mac's installed layouts would apply the
-    /// wrong substitution table (the Mac and iPhone layouts are independent).
-    /// Users who explicitly configure their iPhone's hardware keyboard layout to
-    /// non-US can opt in by setting the environment variable.
-    public static func findNonUSLayout() -> (sourceID: String, layoutData: Data)? {
-        // Only apply layout substitution when explicitly configured.
-        // Accepts either full source ID ("com.apple.keylayout.Canadian-CSA")
-        // or short name ("Canadian-CSA").
-        guard let envLayout = ProcessInfo.processInfo.environment["IPHONE_KEYBOARD_LAYOUT"],
-              !envLayout.isEmpty
-        else {
-            return nil
-        }
+    /// Pass an explicit `layout` to override config lookup (used by tests).
+    /// Returns nil when the layout is empty or "US" (no substitution needed).
+    public static func findNonUSLayout(layout override: String? = nil) -> (sourceID: String, layoutData: Data)? {
+        let layout = override ?? EnvConfig.keyboardLayout
+        guard !layout.isEmpty else { return nil }
 
-        let fullID = envLayout.hasPrefix("com.apple.keylayout.")
-            ? envLayout
-            : "com.apple.keylayout.\(envLayout)"
+        let fullID = layout.hasPrefix("com.apple.keylayout.")
+            ? layout
+            : "com.apple.keylayout.\(layout)"
         return layoutData(forSourceID: fullID).map { (fullID, $0) }
     }
 

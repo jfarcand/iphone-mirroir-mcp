@@ -169,7 +169,7 @@ final class GraphPathFinderTests: XCTestCase {
 
     // MARK: - Path Naming
 
-    func testPathNameDerivedFromEdgeLabels() {
+    func testShortPathNameJoinsWithArrow() {
         let snapshot = buildLinearGraph()
         let paths = GraphPathFinder.findInterestingPaths(in: snapshot)
 
@@ -178,10 +178,40 @@ final class GraphPathFinderTests: XCTestCase {
             return
         }
 
-        XCTAssertTrue(path.name.contains("general"),
-            "Path name should include edge labels: got '\(path.name)'")
-        XCTAssertTrue(path.name.contains("about"),
-            "Path name should include edge labels: got '\(path.name)'")
+        // 2 edges → uses " > " join
+        XCTAssertEqual(path.name, "general > about",
+            "Short path (≤2 labels) should use ' > ' join")
+    }
+
+    func testLongPathUsesFirstAndLast() {
+        // Build a 3-edge linear graph: root -> A -> B -> C
+        let graph = NavigationGraph()
+        graph.start(
+            rootElements: makeElements(["Home", "Tab1"]),
+            icons: [], hints: [], screenshot: "root", screenType: .tabRoot)
+        _ = graph.recordTransition(
+            elements: makeElements(["Section A"]),
+            icons: [], hints: [], screenshot: "a",
+            actionType: "tap", elementText: "General", screenType: .list)
+        _ = graph.recordTransition(
+            elements: makeElements(["Detail X"]),
+            icons: [], hints: [], screenshot: "b",
+            actionType: "tap", elementText: "About", screenType: .list)
+        _ = graph.recordTransition(
+            elements: makeElements(["Deep Info"]),
+            icons: [], hints: [], screenshot: "c",
+            actionType: "tap", elementText: "Version", screenType: .detail)
+        let snapshot = graph.finalize()
+
+        let paths = GraphPathFinder.findInterestingPaths(in: snapshot)
+        guard let path = paths.first else {
+            XCTFail("Expected at least one path")
+            return
+        }
+
+        // 3 edges → uses "first to last" format
+        XCTAssertEqual(path.name, "general to version",
+            "Long path (3+ labels) should use 'first to last' format")
     }
 
     // MARK: - Single Node Graph

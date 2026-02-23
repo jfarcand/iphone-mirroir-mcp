@@ -504,16 +504,16 @@ if (!skillsAvailable) {
   <section>
     <h2>Generate, write, run, test, diagnose</h2>
     <p>
-      Tell the AI to explore an app and it produces a SKILL.md automatically. Edit it, run it, test it deterministically from the CLI &mdash; no AI in the loop. When something breaks, <code>--agent</code> tells you why.
+      Point mirroir at any app and it autonomously discovers every reachable screen using DFS graph traversal &mdash; screens are nodes, taps are edges. The output: a navigation graph and a bundle of ready-to-run SKILL.md files. Edit them, test them deterministically from the CLI, diagnose failures with <code>--agent</code>.
     </p>
 
     <div class="pipeline-grid">
       <div class="pipeline-step">
         <div class="pipeline-icon">1</div>
         <h3>Generate</h3>
-        <p>Tell the AI what to explore. It navigates the app, captures each screen, and produces a SKILL.md &mdash; no manual authoring needed.</p>
+        <p>A single <code>generate_skill(action: "explore")</code> call runs autonomous DFS traversal &mdash; tapping unvisited elements, backtracking when branches are exhausted, building a navigation graph of the entire app.</p>
         <div class="pipeline-cmd">
-          <code>generate_skill &rarr; tap/swipe &rarr; capture &rarr; finish</code>
+          <code>generate_skill(action: "explore", app: "Settings")</code>
         </div>
       </div>
       <div class="pipeline-step">
@@ -604,7 +604,7 @@ if (!skillsAvailable) {
           <li><code>reset_app</code> <span>Force-quit app via App Switcher</span></li>
           <li><code>set_network</code> <span>Toggle airplane, Wi-Fi, cellular</span></li>
           <li><code>measure</code> <span>Time screen transitions</span></li>
-          <li><code>generate_skill</code> <span>Explore app and produce a SKILL.md</span></li>
+          <li><code>generate_skill</code> <span>Autonomous DFS exploration &rarr; navigation graph &rarr; SKILL.md bundle</span></li>
           <li><code>list_skills</code> <span>List available skills</span></li>
           <li><code>get_skill</code> <span>Read skill with env substitution + compilation status</span></li>
           <li><code>record_step</code> <span>Record a compiled step during execution</span></li>

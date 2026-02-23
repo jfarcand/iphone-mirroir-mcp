@@ -24,11 +24,13 @@ final class TargetToolHandlerTests: XCTestCase {
         androidBridge.targetName = "android"
 
         let iphoneCtx = TargetContext(
-            name: "iphone", bridge: iphoneBridge, input: StubInput(),
+            name: "iphone", targetType: "iphone-mirroring", bundleID: nil,
+            bridge: iphoneBridge, input: StubInput(),
             capture: StubCapture(), describer: StubDescriber(), recorder: StubRecorder(),
             capabilities: [.menuActions, .spotlight, .home, .appSwitcher])
         let androidCtx = TargetContext(
-            name: "android", bridge: androidBridge, input: StubInput(),
+            name: "android", targetType: "generic-window", bundleID: nil,
+            bridge: androidBridge, input: StubInput(),
             capture: StubCapture(), describer: StubDescriber(), recorder: StubRecorder(),
             capabilities: [])
 

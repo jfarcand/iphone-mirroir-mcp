@@ -138,4 +138,36 @@ final class LandmarkPickerTests: XCTestCase {
         XCTAssertFalse(LandmarkPicker.isBareNumber("1234"))
         XCTAssertFalse(LandmarkPicker.isBareNumber("General"))
     }
+
+    // MARK: - Structural Stability Tiering
+
+    func testPrefersStructuralOverDynamic() {
+        // "Feb 23" is a date pattern → fails structural filter
+        // "Settings" passes structural filter and is in header zone
+        let elements = [
+            TapPoint(text: "Feb 23", tapX: 205, tapY: 120, confidence: 0.98),
+            TapPoint(text: "Settings", tapX: 205, tapY: 150, confidence: 0.95),
+            TapPoint(text: "Some dynamic text about today's weather forecast", tapX: 205, tapY: 300, confidence: 0.90),
+        ]
+
+        let landmark = LandmarkPicker.pickLandmark(from: elements)
+        XCTAssertEqual(landmark, "Settings",
+            "Should prefer structural element over date-pattern element in header zone")
+    }
+
+    func testFallsBackWhenNoStructural() {
+        // All elements fail structural filter (dates, long text) except one that's too short
+        // but still passes basic candidate filter
+        let elements = [
+            TapPoint(text: "Monday", tapX: 205, tapY: 120, confidence: 0.98),
+            TapPoint(text: "Feb 23", tapX: 205, tapY: 150, confidence: 0.95),
+            TapPoint(text: "Some content label", tapX: 205, tapY: 400, confidence: 0.90),
+        ]
+
+        let landmark = LandmarkPicker.pickLandmark(from: elements)
+        // "Some content label" passes structural filter (not a date, not a number, reasonable length)
+        // but "Monday" fails (date pattern), "Feb 23" fails (date pattern)
+        XCTAssertEqual(landmark, "Some content label",
+            "Should fall back to structural element outside header when no structural in header zone")
+    }
 }

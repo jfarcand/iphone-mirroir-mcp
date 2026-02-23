@@ -75,7 +75,7 @@ enum StructuralFingerprint {
     // MARK: - Filtering
 
     /// Determine if an element is structural (stable across captures).
-    private static func passesStructuralFilter(_ el: TapPoint) -> Bool {
+    static func passesStructuralFilter(_ el: TapPoint) -> Bool {
         // Exclude status bar elements
         guard el.tapY >= LandmarkPicker.statusBarMaxY else { return false }
 
