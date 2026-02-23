@@ -24,8 +24,8 @@ jobs:
       - name: Verify binaries built
         run: |
           test -x .build/release/mirroir-mcp
-          # Verify mirroir CLI symlink was created
-          test -L /usr/local/bin/mirroir
+          # Verify mirroir CLI symlink was created (Homebrew bin dir)
+          test -L /opt/homebrew/bin/mirroir || test -L /usr/local/bin/mirroir
           mirroir record --help 2>&1 | grep -q "Record user interactions"
 
       - name: Build and package FakeMirroring
