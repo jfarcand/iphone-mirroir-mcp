@@ -90,6 +90,45 @@ protocol ScreenDescribing: Sendable {
     func describe(skipOCR: Bool) -> ScreenDescriber.DescribeResult?
 }
 
+/// Strategy for customizing autonomous app exploration behavior.
+/// Different app types (mobile, social, desktop) can provide tailored
+/// element ranking, backtracking, and screen classification logic.
+/// All methods are static because strategies are stateless enum namespaces.
+protocol ExplorationStrategy: Sendable {
+    /// Classify a screen based on its elements and hints.
+    static func classifyScreen(elements: [TapPoint], hints: [String]) -> ScreenType
+
+    /// Rank elements for exploration priority.
+    /// Returns elements sorted by exploration value (most interesting first).
+    static func rankElements(
+        elements: [TapPoint],
+        icons: [IconDetector.DetectedIcon],
+        visitedElements: Set<String>,
+        depth: Int,
+        screenType: ScreenType
+    ) -> [TapPoint]
+
+    /// Determine how to backtrack from the current screen.
+    static func backtrackMethod(currentHints: [String], depth: Int) -> BacktrackAction
+
+    /// Check if an element should be skipped during exploration.
+    static func shouldSkip(elementText: String) -> Bool
+
+    /// Check if a screen is a terminal node (no further exploration needed).
+    static func isTerminal(
+        elements: [TapPoint],
+        depth: Int,
+        budget: ExplorationBudget,
+        screenType: ScreenType
+    ) -> Bool
+
+    /// Compute a structural fingerprint for screen identity.
+    static func extractFingerprint(
+        elements: [TapPoint],
+        icons: [IconDetector.DetectedIcon]
+    ) -> String
+}
+
 // MARK: - Conformances
 
 extension MirroringBridge: MenuActionCapable {}

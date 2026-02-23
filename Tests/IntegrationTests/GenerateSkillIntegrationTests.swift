@@ -1,7 +1,7 @@
 // Copyright 2026 jfarcand@apache.org
 // Licensed under the Apache License, Version 2.0
 // ABOUTME: Integration tests for the generate_skill pipeline against the FakeMirroring app.
-// ABOUTME: Exercises ExplorationSession, ScreenFingerprint, and SkillMdGenerator with real OCR data.
+// ABOUTME: Exercises ExplorationSession, StructuralFingerprint, and SkillMdGenerator with real OCR data.
 
 import XCTest
 @testable import HelperLib
@@ -9,7 +9,7 @@ import XCTest
 
 /// Integration tests for the generate_skill exploration pipeline.
 /// Verifies that real OCR output flows correctly through ExplorationSession's
-/// fingerprint-based dedup and SkillMdGenerator's SKILL.md assembly.
+/// StructuralFingerprint-based dedup and SkillMdGenerator's SKILL.md assembly.
 ///
 /// Run with: `swift test --filter IntegrationTests`
 ///
@@ -88,28 +88,30 @@ final class GenerateSkillIntegrationTests: XCTestCase {
             return
         }
 
-        let score = ScreenFingerprint.similarity(result.elements, result2.elements)
+        let set1 = StructuralFingerprint.extractStructural(from: result.elements)
+        let set2 = StructuralFingerprint.extractStructural(from: result2.elements)
+        let score = StructuralFingerprint.similarity(set1, set2)
         XCTAssertGreaterThanOrEqual(score, 0.9,
             "Two OCR passes of the same FakeMirroring screen should have similarity >= 0.9. Got \(score)")
     }
 
-    func testFingerprintExtractProducesStableElements() {
+    func testStructuralExtractProducesStableElements() {
         guard let result = describer.describe() else {
             XCTFail("describe() returned nil")
             return
         }
 
-        let fingerprint = ScreenFingerprint.extract(from: result.elements)
+        let structural = StructuralFingerprint.extractStructural(from: result.elements)
 
         // FakeMirroring renders: Settings, General, Display, Privacy, About, Software Update, Developer
         // (9:41 is filtered as a time pattern)
-        XCTAssertGreaterThanOrEqual(fingerprint.count, 5,
-            "Fingerprint should contain most of FakeMirroring's labels. Got: \(fingerprint)")
+        XCTAssertGreaterThanOrEqual(structural.count, 5,
+            "Structural set should contain most of FakeMirroring's labels. Got: \(structural)")
 
         // Verify time pattern is filtered
-        let hasTime = fingerprint.contains { $0.contains("9:41") || $0.contains("9:4") }
+        let hasTime = structural.contains { $0.contains("9:41") || $0.contains("9:4") }
         XCTAssertFalse(hasTime,
-            "Time pattern '9:41' should be filtered from fingerprint. Got: \(fingerprint)")
+            "Time pattern '9:41' should be filtered from structural set. Got: \(structural)")
     }
 
     // MARK: - End-to-End SKILL.md Generation

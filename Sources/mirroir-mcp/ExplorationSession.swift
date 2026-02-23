@@ -43,6 +43,7 @@ final class ExplorationSession: @unchecked Sendable {
     private var startElements: [TapPoint]?
     private var goalsQueue: [String] = []
     private var goalIndex: Int = 0
+    private var graph: NavigationGraph = NavigationGraph()
     private let lock = NSLock()
 
     /// Begin a new exploration session, resetting any prior state.
@@ -57,6 +58,7 @@ final class ExplorationSession: @unchecked Sendable {
         defer { lock.unlock() }
         screens = []
         actionLog = []
+        graph = NavigationGraph()
         self.appName = appName
         self.startElements = nil
 
@@ -85,12 +87,30 @@ final class ExplorationSession: @unchecked Sendable {
         arrivedVia: String?,
         screenshotBase64: String
     ) -> Bool {
+        capture(
+            elements: elements, hints: hints, icons: [],
+            actionType: actionType, arrivedVia: arrivedVia,
+            screenshotBase64: screenshotBase64
+        )
+    }
+
+    /// Extended capture that includes icon data for NavigationGraph population.
+    /// Returns `false` if the screen is a duplicate.
+    @discardableResult
+    func capture(
+        elements: [TapPoint],
+        hints: [String],
+        icons: [IconDetector.DetectedIcon],
+        actionType: String?,
+        arrivedVia: String?,
+        screenshotBase64: String
+    ) -> Bool {
         lock.lock()
         defer { lock.unlock() }
 
         // Reject duplicate: compare against last captured screen
         if let lastScreen = screens.last,
-           ScreenFingerprint.areEqual(lastScreen.elements, elements) {
+           StructuralFingerprint.areEquivalent(lastScreen.elements, elements) {
             actionLog.append(ExplorationAction(
                 actionType: actionType, arrivedVia: arrivedVia, wasDuplicate: true))
             return false
@@ -99,6 +119,21 @@ final class ExplorationSession: @unchecked Sendable {
         // Store start elements from first capture for flow boundary detection
         if screens.isEmpty {
             startElements = elements
+        }
+
+        // Populate NavigationGraph alongside flat screen list
+        let screenType = MobileAppStrategy.classifyScreen(elements: elements, hints: hints)
+        if !graph.started {
+            graph.start(
+                rootElements: elements, icons: icons, hints: hints,
+                screenshot: screenshotBase64, screenType: screenType
+            )
+        } else if let actionType, let arrivedVia {
+            _ = graph.recordTransition(
+                elements: elements, icons: icons, hints: hints,
+                screenshot: screenshotBase64, actionType: actionType,
+                elementText: arrivedVia, screenType: screenType
+            )
         }
 
         let screen = ExploredScreen(
@@ -122,11 +157,14 @@ final class ExplorationSession: @unchecked Sendable {
     /// Otherwise, the session is fully deactivated.
     ///
     /// Returns `nil` if the session was not active.
-    func finalize() -> (appName: String, goal: String, screens: [ExploredScreen])? {
+    func finalize() -> (
+        appName: String, goal: String, screens: [ExploredScreen], graphSnapshot: GraphSnapshot
+    )? {
         lock.lock()
         defer { lock.unlock() }
         guard isActive else { return nil }
-        let result = (appName: appName, goal: goal, screens: screens)
+        let snapshot = graph.finalize()
+        let result = (appName: appName, goal: goal, screens: screens, graphSnapshot: snapshot)
 
         // Check if there are more goals in the queue
         let nextIndex = goalIndex + 1
@@ -137,6 +175,7 @@ final class ExplorationSession: @unchecked Sendable {
             screens = []
             actionLog = []
             startElements = nil
+            graph = NavigationGraph()
             mode = .goalDriven
         } else {
             // No more goals: fully reset
@@ -147,6 +186,7 @@ final class ExplorationSession: @unchecked Sendable {
             goalsQueue = []
             goalIndex = 0
             startElements = nil
+            graph = NavigationGraph()
             isActive = false
         }
 
@@ -233,5 +273,12 @@ final class ExplorationSession: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return goalsQueue.count
+    }
+
+    /// The navigation graph for the current exploration session.
+    var currentGraph: NavigationGraph {
+        lock.lock()
+        defer { lock.unlock() }
+        return graph
     }
 }

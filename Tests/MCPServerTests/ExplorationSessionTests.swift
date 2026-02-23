@@ -442,4 +442,101 @@ final class ExplorationSessionTests: XCTestCase {
         XCTAssertTrue(session.actions.isEmpty,
             "Action log should reset when advancing to next goal")
     }
+
+    // MARK: - NavigationGraph Integration
+
+    func testGraphPopulatedOnCapture() {
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "test graph")
+
+        session.capture(
+            elements: [TapPoint(text: "General", tapX: 205, tapY: 340, confidence: 0.95)],
+            hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img1"
+        )
+
+        XCTAssertTrue(session.currentGraph.started,
+            "Graph should be started after first capture")
+        XCTAssertEqual(session.currentGraph.nodeCount, 1)
+    }
+
+    func testGraphRecordsTransitions() {
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "test graph")
+
+        session.capture(
+            elements: [TapPoint(text: "General", tapX: 205, tapY: 340, confidence: 0.95)],
+            hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img1"
+        )
+        session.capture(
+            elements: [TapPoint(text: "About", tapX: 205, tapY: 200, confidence: 0.92)],
+            hints: [], icons: [],
+            actionType: "tap", arrivedVia: "General", screenshotBase64: "img2"
+        )
+
+        XCTAssertEqual(session.currentGraph.nodeCount, 2)
+        XCTAssertEqual(session.currentGraph.edgeCount, 1)
+    }
+
+    func testFinalizeIncludesGraphSnapshot() {
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "test graph")
+
+        session.capture(
+            elements: [TapPoint(text: "General", tapX: 205, tapY: 340, confidence: 0.95)],
+            hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img1"
+        )
+        session.capture(
+            elements: [TapPoint(text: "About", tapX: 205, tapY: 200, confidence: 0.92)],
+            hints: [], icons: [],
+            actionType: "tap", arrivedVia: "General", screenshotBase64: "img2"
+        )
+
+        let data = session.finalize()
+        XCTAssertNotNil(data)
+        XCTAssertEqual(data?.graphSnapshot.nodes.count, 2)
+        XCTAssertEqual(data?.graphSnapshot.edges.count, 1)
+        XCTAssertFalse(data?.graphSnapshot.rootFingerprint.isEmpty ?? true)
+    }
+
+    func testGraphResetsOnManifestGoalAdvance() {
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "", goals: ["goal1", "goal2"])
+
+        session.capture(
+            elements: [TapPoint(text: "Screen1", tapX: 205, tapY: 250, confidence: 0.9)],
+            hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img1"
+        )
+
+        let data = session.finalize()
+        XCTAssertNotNil(data)
+        XCTAssertEqual(data?.graphSnapshot.nodes.count, 1)
+
+        // Graph should be reset for next goal
+        XCTAssertFalse(session.currentGraph.started,
+            "Graph should be reset when advancing to next goal")
+    }
+
+    func testGraphWithIcons() {
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "test icons")
+
+        let icons = [
+            IconDetector.DetectedIcon(tapX: 56, tapY: 850, estimatedSize: 24),
+            IconDetector.DetectedIcon(tapX: 158, tapY: 850, estimatedSize: 24),
+        ]
+        session.capture(
+            elements: [TapPoint(text: "Home", tapX: 205, tapY: 200, confidence: 0.95)],
+            hints: [], icons: icons,
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img1"
+        )
+
+        let fp = session.currentGraph.currentFingerprint
+        let node = session.currentGraph.node(for: fp)
+        XCTAssertEqual(node?.icons.count, 2,
+            "Icons should be stored in graph node")
+    }
 }

@@ -20,7 +20,8 @@ extension MirroirMCP {
                 Generate a SKILL.md by exploring an app. Session-based workflow: \
                 (1) action="start" \u{2014} launch app, OCR first screen, begin session. \
                 (2) Use tap/swipe/type_text to navigate, then action="capture" to OCR each screen. \
-                (3) action="finish" \u{2014} assemble captured screens into a SKILL.md and return it.
+                (3) action="finish" \u{2014} assemble captured screens into a SKILL.md and return it. \
+                Alternatively, use action="explore" for autonomous DFS exploration.
                 """,
             inputSchema: [
                 "type": .string("object"),
@@ -30,11 +31,13 @@ extension MirroirMCP {
                         "description": .string(
                             "Session action: \"start\" to launch app and begin, " +
                             "\"capture\" to OCR current screen and append, " +
-                            "\"finish\" to generate SKILL.md from all captures."),
+                            "\"finish\" to generate SKILL.md from all captures, " +
+                            "\"explore\" for autonomous DFS exploration."),
                         "enum": .array([
                             .string("start"),
                             .string("capture"),
                             .string("finish"),
+                            .string("explore"),
                         ]),
                     ]),
                     "app_name": .object([
@@ -68,6 +71,21 @@ extension MirroirMCP {
                             "\"long_press\", \"remember\", \"screenshot\", \"press_home\", " +
                             "\"open_url\" (for capture action)."),
                     ]),
+                    "max_depth": .object([
+                        "type": .string("integer"),
+                        "description": .string(
+                            "Maximum DFS depth for explore action (default: 6)."),
+                    ]),
+                    "max_screens": .object([
+                        "type": .string("integer"),
+                        "description": .string(
+                            "Maximum screens to visit for explore action (default: 30)."),
+                    ]),
+                    "max_time": .object([
+                        "type": .string("integer"),
+                        "description": .string(
+                            "Maximum seconds for explore action (default: 300)."),
+                    ]),
                 ]),
                 "required": .array([.string("action")]),
             ],
@@ -83,8 +101,10 @@ extension MirroirMCP {
                     return handleCapture(args: args, session: session, registry: registry)
                 case "finish":
                     return handleFinish(session: session)
+                case "explore":
+                    return handleExplore(args: args, session: session, registry: registry)
                 default:
-                    return .error("Unknown action '\(action)'. Use: start, capture, finish.")
+                    return .error("Unknown action '\(action)'. Use: start, capture, finish, explore.")
                 }
             }
         ))
@@ -134,6 +154,7 @@ extension MirroirMCP {
         session.capture(
             elements: result.elements,
             hints: result.hints,
+            icons: result.icons,
             actionType: nil,
             arrivedVia: nil,
             screenshotBase64: result.screenshotBase64
@@ -197,21 +218,17 @@ extension MirroirMCP {
         let accepted = session.capture(
             elements: result.elements,
             hints: result.hints,
+            icons: result.icons,
             actionType: actionType,
             arrivedVia: arrivedVia,
             screenshotBase64: result.screenshotBase64
         )
 
         if !accepted {
-            // Still provide guidance even on duplicate rejection
-            let guidance = ExplorationGuide.analyze(
-                mode: session.currentMode,
-                goal: session.currentGoal,
-                elements: result.elements,
-                hints: result.hints,
-                startElements: session.startScreenElements,
-                actionLog: session.actions,
-                screenCount: session.screenCount
+            // Still provide guidance even on duplicate rejection — use strategy if graph available
+            let guidance = generateGuidance(
+                session: session, elements: result.elements,
+                icons: result.icons, hints: result.hints
             )
             let guidanceText = ExplorationGuide.formatGuidance(guidance)
 
@@ -230,15 +247,10 @@ extension MirroirMCP {
             preamble: preamble
         )
 
-        // Generate guidance for the agent
-        let guidance = ExplorationGuide.analyze(
-            mode: session.currentMode,
-            goal: session.currentGoal,
-            elements: result.elements,
-            hints: result.hints,
-            startElements: session.startScreenElements,
-            actionLog: session.actions,
-            screenCount: screenNum
+        // Generate guidance for the agent — prefer strategy-based when graph available
+        let guidance = generateGuidance(
+            session: session, elements: result.elements,
+            icons: result.icons, hints: result.hints
         )
 
         let guidanceText = ExplorationGuide.formatGuidance(guidance)
@@ -270,14 +282,27 @@ extension MirroirMCP {
             return .error("Failed to finalize exploration session.")
         }
 
-        let skillMd = SkillMdGenerator.generate(
+        // Use SkillBundleGenerator for multi-path graphs, single skill otherwise
+        let bundle = SkillBundleGenerator.generate(
             appName: data.appName,
             goal: data.goal,
-            screens: data.screens
+            snapshot: data.graphSnapshot,
+            allScreens: data.screens
         )
 
-        // Build response with manifest progress if applicable
-        var responseText = skillMd
+        var responseText: String
+        if bundle.skills.count > 1 {
+            responseText = "Generated \(bundle.skills.count) skills from exploration:\n\n"
+            for (i, skill) in bundle.skills.enumerated() {
+                responseText += "--- Skill \(i + 1): \(skill.name) ---\n\n"
+                responseText += skill.content
+                if i < bundle.skills.count - 1 {
+                    responseText += "\n\n"
+                }
+            }
+        } else {
+            responseText = bundle.skills.first?.content ?? ""
+        }
         if !remaining.isEmpty {
             responseText += "\n\n---\n"
             responseText += "Goal \(goalNum)/\(totalGoals) complete. "
@@ -291,6 +316,153 @@ extension MirroirMCP {
         }
 
         return .text(responseText)
+    }
+
+    // MARK: - Explore Handler
+
+    private static func handleExplore(
+        args: [String: JSONValue],
+        session: ExplorationSession,
+        registry: TargetRegistry
+    ) -> MCPToolResult {
+        guard let appName = args["app_name"]?.asString(), !appName.isEmpty else {
+            return .error("Missing required parameter: app_name (for explore action)")
+        }
+
+        if session.active {
+            return .error(
+                "An exploration session is already active for '\(session.currentAppName)'. " +
+                "Call finish first.")
+        }
+
+        let (ctx, err) = registry.resolveForTool(args)
+        guard let ctx else { return err! }
+
+        // Launch the app
+        if let launchError = ctx.input.launchApp(name: appName) {
+            return .error("Failed to launch '\(appName)': \(launchError)")
+        }
+        usleep(EnvConfig.stepSettlingDelayMs * 1000)
+
+        // Parse budget overrides
+        let maxDepth = args["max_depth"]?.asInt() ?? ExplorationBudget.default.maxDepth
+        let maxScreens = args["max_screens"]?.asInt() ?? ExplorationBudget.default.maxScreens
+        let maxTime = args["max_time"]?.asInt() ?? ExplorationBudget.default.maxTimeSeconds
+        let budget = ExplorationBudget(
+            maxDepth: maxDepth,
+            maxScreens: maxScreens,
+            maxTimeSeconds: maxTime,
+            maxActionsPerScreen: ExplorationBudget.default.maxActionsPerScreen,
+            scrollLimit: ExplorationBudget.default.scrollLimit,
+            skipPatterns: ExplorationBudget.default.skipPatterns
+        )
+
+        let goal = args["goal"]?.asString() ?? ""
+        session.start(appName: appName, goal: goal)
+
+        // OCR first screen
+        guard let firstResult = ctx.describer.describe(skipOCR: false) else {
+            return .error("Failed to capture initial screen for '\(appName)'.")
+        }
+
+        // Capture first screen
+        session.capture(
+            elements: firstResult.elements, hints: firstResult.hints,
+            icons: firstResult.icons, actionType: nil, arrivedVia: nil,
+            screenshotBase64: firstResult.screenshotBase64
+        )
+
+        // Create DFS explorer and run exploration loop
+        let explorer = DFSExplorer(session: session, budget: budget)
+        explorer.markStarted()
+
+        var stepResults: [String] = [
+            "Autonomous exploration started for '\(appName)'.",
+            "Budget: depth=\(maxDepth), screens=\(maxScreens), time=\(maxTime)s",
+        ]
+
+        // Run DFS loop
+        while !explorer.completed {
+            let result = explorer.step(
+                describer: ctx.describer,
+                input: ctx.input,
+                strategy: MobileAppStrategy.self
+            )
+
+            switch result {
+            case .continue(let desc):
+                stepResults.append(desc)
+            case .backtracked(_, _):
+                stepResults.append("Backtracked to parent screen.")
+            case .paused(let reason):
+                stepResults.append("Paused: \(reason)")
+                // Return intermediate results so AI can handle the situation
+                let stats = explorer.stats
+                let summary = stepResults.joined(separator: "\n")
+                return .text(
+                    "\(summary)\n\nExploration paused after \(stats.actionCount) actions, " +
+                    "\(stats.nodeCount) screens in \(stats.elapsedSeconds)s.")
+            case .finished(let bundle):
+                let stats = explorer.stats
+                var responseText: String
+                if bundle.skills.count > 1 {
+                    responseText = "Exploration complete! Generated \(bundle.skills.count) skills "
+                    responseText += "(\(stats.nodeCount) screens, \(stats.actionCount) actions, "
+                    responseText += "\(stats.elapsedSeconds)s):\n\n"
+                    for (i, skill) in bundle.skills.enumerated() {
+                        responseText += "--- Skill \(i + 1): \(skill.name) ---\n\n"
+                        responseText += skill.content
+                        if i < bundle.skills.count - 1 {
+                            responseText += "\n\n"
+                        }
+                    }
+                } else if let skill = bundle.skills.first {
+                    responseText = "Exploration complete "
+                    responseText += "(\(stats.nodeCount) screens, \(stats.actionCount) actions, "
+                    responseText += "\(stats.elapsedSeconds)s):\n\n"
+                    responseText += skill.content
+                } else {
+                    responseText = "Exploration finished but no skills were generated."
+                }
+                return .text(responseText)
+            }
+        }
+
+        // Should not reach here, but just in case
+        return .text(stepResults.joined(separator: "\n"))
+    }
+
+    // MARK: - Guidance
+
+    /// Generate exploration guidance, preferring strategy-based analysis when the graph is populated.
+    /// Falls back to the keyword-based ExplorationGuide.analyze() for backward compatibility.
+    private static func generateGuidance(
+        session: ExplorationSession,
+        elements: [TapPoint],
+        icons: [IconDetector.DetectedIcon],
+        hints: [String]
+    ) -> ExplorationGuide.Guidance {
+        let graph = session.currentGraph
+        if graph.started {
+            return ExplorationGuide.analyzeWithStrategy(
+                strategy: MobileAppStrategy.self,
+                graph: graph,
+                elements: elements,
+                icons: icons,
+                hints: hints,
+                budget: .default,
+                goal: session.currentGoal
+            )
+        }
+        return ExplorationGuide.analyze(
+            mode: session.currentMode,
+            goal: session.currentGoal,
+            elements: elements,
+            hints: hints,
+            startElements: session.startScreenElements,
+            actionLog: session.actions,
+            screenCount: session.screenCount
+        )
     }
 
     // MARK: - Formatting

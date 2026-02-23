@@ -1,0 +1,296 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
+// ABOUTME: Directed graph of app screens (nodes) and navigation actions (edges) for DFS exploration.
+// ABOUTME: Thread-safe session accumulator tracking visited elements, screen types, and transitions.
+
+import Foundation
+import HelperLib
+
+/// Classification of a screen's role in the app navigation hierarchy.
+enum ScreenType: String, Sendable {
+    /// A screen with a tab bar (root-level navigation).
+    case tabRoot
+    /// A scrollable list of items.
+    case list
+    /// A detail/leaf screen showing specific content.
+    case detail
+    /// A modal overlay (has "Close", "Done", or "Cancel").
+    case modal
+    /// A settings-style screen with grouped rows.
+    case settings
+    /// Screen type could not be determined.
+    case unknown
+}
+
+/// The result of recording a navigation transition in the graph.
+enum TransitionResult: Sendable {
+    /// Arrived at a screen not previously seen.
+    case newScreen(fingerprint: String)
+    /// Returned to a previously visited screen.
+    case revisited(fingerprint: String)
+    /// Screen is structurally identical to the source (action had no effect).
+    case duplicate
+}
+
+/// An action that can be taken to backtrack in the navigation stack.
+enum BacktrackAction: Sendable {
+    /// Press the back button (Cmd+[).
+    case pressBack
+    /// Press the home button to return to app root.
+    case pressHome
+    /// Swipe from left edge to go back.
+    case swipeBack
+    /// No backtracking needed or possible.
+    case none
+}
+
+/// A node in the navigation graph representing a single screen state.
+struct ScreenNode: Sendable {
+    /// Structural fingerprint identifying this screen.
+    let fingerprint: String
+    /// OCR elements visible on the screen.
+    let elements: [TapPoint]
+    /// Detected icon positions (tab bar, toolbar).
+    let icons: [IconDetector.DetectedIcon]
+    /// Navigation hints (back button detected, etc.).
+    let hints: [String]
+    /// DFS depth at which this screen was first discovered.
+    let depth: Int
+    /// Classified screen type.
+    let screenType: ScreenType
+    /// Base64-encoded screenshot.
+    let screenshotBase64: String
+    /// Set of element texts that have been tapped/visited from this screen.
+    var visitedElements: Set<String>
+}
+
+/// A directed edge in the navigation graph representing a navigation action.
+struct NavigationEdge: Sendable {
+    /// Fingerprint of the source screen.
+    let fromFingerprint: String
+    /// Fingerprint of the destination screen.
+    let toFingerprint: String
+    /// Type of action that caused the transition (e.g. "tap", "swipe").
+    let actionType: String
+    /// The element text or value associated with the action.
+    let elementText: String
+}
+
+/// Immutable export of the navigation graph state for downstream consumers.
+struct GraphSnapshot: Sendable {
+    /// All screen nodes keyed by fingerprint.
+    let nodes: [String: ScreenNode]
+    /// All navigation edges in discovery order.
+    let edges: [NavigationEdge]
+    /// Fingerprint of the root (first) screen.
+    let rootFingerprint: String
+}
+
+/// Thread-safe directed graph tracking screen navigation during app exploration.
+/// Follows the Session Accumulator pattern: explicit lifecycle with NSLock protection.
+final class NavigationGraph: @unchecked Sendable {
+
+    private var nodes: [String: ScreenNode] = [:]
+    private var edges: [NavigationEdge] = []
+    private var currentFP: String = ""
+    private var rootFP: String = ""
+    private var isStarted: Bool = false
+    private let lock = NSLock()
+
+    // MARK: - Lifecycle
+
+    /// Initialize the graph with the root screen.
+    ///
+    /// - Parameters:
+    ///   - rootElements: OCR elements from the first screen.
+    ///   - icons: Detected icons from the first screen.
+    ///   - hints: Navigation hints from the first screen.
+    ///   - screenshot: Base64-encoded screenshot of the first screen.
+    ///   - screenType: Classified type of the root screen.
+    func start(
+        rootElements: [TapPoint],
+        icons: [IconDetector.DetectedIcon],
+        hints: [String],
+        screenshot: String,
+        screenType: ScreenType
+    ) {
+        lock.lock()
+        defer { lock.unlock() }
+
+        nodes = [:]
+        edges = []
+
+        let fp = StructuralFingerprint.compute(elements: rootElements, icons: icons)
+        let node = ScreenNode(
+            fingerprint: fp,
+            elements: rootElements,
+            icons: icons,
+            hints: hints,
+            depth: 0,
+            screenType: screenType,
+            screenshotBase64: screenshot,
+            visitedElements: []
+        )
+        nodes[fp] = node
+        currentFP = fp
+        rootFP = fp
+        isStarted = true
+    }
+
+    /// Record a navigation transition after performing an action.
+    /// Compares the new screen against all known nodes using structural similarity.
+    ///
+    /// - Parameters:
+    ///   - elements: OCR elements from the new screen.
+    ///   - icons: Detected icons from the new screen.
+    ///   - hints: Navigation hints from the new screen.
+    ///   - screenshot: Base64-encoded screenshot.
+    ///   - actionType: The action that caused navigation (e.g. "tap").
+    ///   - elementText: The element text associated with the action.
+    ///   - screenType: Classified type of the new screen.
+    /// - Returns: A `TransitionResult` indicating what happened.
+    func recordTransition(
+        elements: [TapPoint],
+        icons: [IconDetector.DetectedIcon],
+        hints: [String],
+        screenshot: String,
+        actionType: String,
+        elementText: String,
+        screenType: ScreenType
+    ) -> TransitionResult {
+        lock.lock()
+        defer { lock.unlock() }
+
+        let newFP = StructuralFingerprint.compute(elements: elements, icons: icons)
+
+        // Check if action had no effect (same screen)
+        if newFP == currentFP {
+            // Double-check with similarity in case hash collision or minor OCR variation
+            if let currentNode = nodes[currentFP] {
+                let sim = StructuralFingerprint.similarity(
+                    StructuralFingerprint.extractStructural(from: currentNode.elements),
+                    StructuralFingerprint.extractStructural(from: elements)
+                )
+                if sim >= StructuralFingerprint.similarityThreshold {
+                    return .duplicate
+                }
+            } else {
+                return .duplicate
+            }
+        }
+
+        // Check if this screen matches any known node (by similarity, not just hash)
+        let matchingFP = findMatchingNode(elements: elements)
+
+        let edge = NavigationEdge(
+            fromFingerprint: currentFP,
+            toFingerprint: matchingFP ?? newFP,
+            actionType: actionType,
+            elementText: elementText
+        )
+        edges.append(edge)
+
+        if let existingFP = matchingFP {
+            currentFP = existingFP
+            return .revisited(fingerprint: existingFP)
+        }
+
+        // New screen: add node
+        let currentDepth = nodes[currentFP]?.depth ?? 0
+        let node = ScreenNode(
+            fingerprint: newFP,
+            elements: elements,
+            icons: icons,
+            hints: hints,
+            depth: currentDepth + 1,
+            screenType: screenType,
+            screenshotBase64: screenshot,
+            visitedElements: []
+        )
+        nodes[newFP] = node
+        currentFP = newFP
+
+        return .newScreen(fingerprint: newFP)
+    }
+
+    /// Mark an element as visited on the specified screen.
+    func markElementVisited(fingerprint: String, elementText: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        nodes[fingerprint]?.visitedElements.insert(elementText)
+    }
+
+    /// Export an immutable snapshot of the current graph state.
+    func finalize() -> GraphSnapshot {
+        lock.lock()
+        defer { lock.unlock() }
+        return GraphSnapshot(
+            nodes: nodes,
+            edges: edges,
+            rootFingerprint: rootFP
+        )
+    }
+
+    // MARK: - Accessors
+
+    /// Number of distinct screens discovered.
+    var nodeCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return nodes.count
+    }
+
+    /// Number of navigation edges recorded.
+    var edgeCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return edges.count
+    }
+
+    /// Fingerprint of the current screen.
+    var currentFingerprint: String {
+        lock.lock()
+        defer { lock.unlock() }
+        return currentFP
+    }
+
+    /// Whether the graph has been initialized with a root screen.
+    var started: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isStarted
+    }
+
+    /// Get unvisited element texts for a given screen.
+    /// Returns elements that have not been marked as visited, sorted by Y position.
+    func unvisitedElements(for fingerprint: String) -> [TapPoint] {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let node = nodes[fingerprint] else { return [] }
+        return node.elements.filter { !node.visitedElements.contains($0.text) }
+    }
+
+    /// Get the node for a given fingerprint.
+    func node(for fingerprint: String) -> ScreenNode? {
+        lock.lock()
+        defer { lock.unlock() }
+        return nodes[fingerprint]
+    }
+
+    // MARK: - Private
+
+    /// Find an existing node whose structural elements are similar to the given elements.
+    /// Returns the fingerprint of the matching node, or nil if no match found.
+    private func findMatchingNode(elements: [TapPoint]) -> String? {
+        let newStructural = StructuralFingerprint.extractStructural(from: elements)
+        for (fp, node) in nodes {
+            let existingStructural = StructuralFingerprint.extractStructural(from: node.elements)
+            if StructuralFingerprint.similarity(newStructural, existingStructural)
+                >= StructuralFingerprint.similarityThreshold {
+                return fp
+            }
+        }
+        return nil
+    }
+}

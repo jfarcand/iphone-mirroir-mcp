@@ -1,0 +1,274 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
+// ABOUTME: Autonomous DFS explorer that systematically traverses app screens via graph-based backtracking.
+// ABOUTME: Each step() call performs one exploration action: tap an unvisited element or backtrack.
+
+import Foundation
+import HelperLib
+
+/// Result of a single DFS exploration step.
+enum ExploreStepResult: Sendable {
+    /// Exploration continues — an action was performed and a new/revisited screen was reached.
+    case `continue`(description: String)
+    /// Backtracked from one screen to another after exhausting elements.
+    case backtracked(from: String, to: String)
+    /// Exploration paused due to a budget constraint or external condition.
+    case paused(reason: String)
+    /// Exploration is complete — all reachable screens have been visited.
+    case finished(bundle: SkillBundle)
+}
+
+/// Autonomous DFS explorer that systematically traverses app screens.
+/// Each call to `step()` performs one exploration action: OCR the current screen,
+/// decide what to tap (or backtrack), execute the action, and record the result.
+/// Follows the Session Accumulator pattern with NSLock protection.
+final class DFSExplorer: @unchecked Sendable {
+
+    private let graph: NavigationGraph
+    private let session: ExplorationSession
+    private let budget: ExplorationBudget
+    private var backtrackStack: [String] = []
+    private var startTime: Date = Date()
+    private var actionCount: Int = 0
+    private var actionsOnCurrentScreen: Int = 0
+    private var isFinished: Bool = false
+    private let lock = NSLock()
+
+    /// Initialize the DFS explorer.
+    ///
+    /// - Parameters:
+    ///   - session: The exploration session tracking screens and graph state.
+    ///   - budget: Exploration budget limits.
+    init(session: ExplorationSession, budget: ExplorationBudget) {
+        self.session = session
+        self.graph = session.currentGraph
+        self.budget = budget
+    }
+
+    /// Record the exploration start time. Call once after the initial screen capture.
+    func markStarted() {
+        lock.lock()
+        defer { lock.unlock() }
+        startTime = Date()
+        if graph.started {
+            backtrackStack = [graph.currentFingerprint]
+        }
+    }
+
+    /// Perform one DFS exploration step.
+    /// OCRs the current screen, decides what to do, executes the action, and records the result.
+    ///
+    /// - Parameters:
+    ///   - describer: Screen describer for OCR.
+    ///   - input: Input provider for tap/press_key actions.
+    ///   - strategy: Exploration strategy for element ranking and classification.
+    /// - Returns: The result of this step.
+    func step<S: ExplorationStrategy>(
+        describer: ScreenDescribing,
+        input: InputProviding,
+        strategy: S.Type
+    ) -> ExploreStepResult {
+        lock.lock()
+        let finished = isFinished
+        let elapsed = Int(Date().timeIntervalSince(startTime))
+        let depth = backtrackStack.count - 1
+        let screenCount = graph.nodeCount
+        lock.unlock()
+
+        guard !finished else {
+            return .finished(bundle: generateBundle())
+        }
+
+        // Check budget
+        if budget.isExhausted(depth: depth, screenCount: screenCount, elapsedSeconds: elapsed) {
+            lock.lock()
+            isFinished = true
+            lock.unlock()
+            return .finished(bundle: generateBundle())
+        }
+
+        // OCR current screen
+        guard let result = describer.describe(skipOCR: false) else {
+            return .paused(reason: "Failed to capture screen")
+        }
+
+        let currentFP = graph.currentFingerprint
+
+        // Get unvisited elements for current screen
+        let unvisited = graph.unvisitedElements(for: currentFP)
+        let screenType = strategy.classifyScreen(elements: result.elements, hints: result.hints)
+        let ranked = strategy.rankElements(
+            elements: unvisited, icons: result.icons,
+            visitedElements: graph.node(for: currentFP)?.visitedElements ?? [],
+            depth: depth, screenType: screenType
+        )
+        let actionable = ranked.filter { !strategy.shouldSkip(elementText: $0.text) }
+
+        lock.lock()
+        let currentActions = actionsOnCurrentScreen
+        lock.unlock()
+
+        // Check if we should tap an element or backtrack
+        if let target = actionable.first, currentActions < budget.maxActionsPerScreen {
+            return performTap(
+                target: target, currentFP: currentFP,
+                input: input, describer: describer, strategy: strategy,
+                result: result
+            )
+        }
+
+        // No more elements or actions exhausted — backtrack
+        return performBacktrack(
+            currentFP: currentFP, input: input,
+            describer: describer, strategy: strategy, hints: result.hints
+        )
+    }
+
+    /// Whether the exploration has completed.
+    var completed: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isFinished
+    }
+
+    /// Current exploration statistics.
+    var stats: (nodeCount: Int, edgeCount: Int, actionCount: Int, elapsedSeconds: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (
+            nodeCount: graph.nodeCount,
+            edgeCount: graph.edgeCount,
+            actionCount: actionCount,
+            elapsedSeconds: Int(Date().timeIntervalSince(startTime))
+        )
+    }
+
+    // MARK: - Private Actions
+
+    private func performTap<S: ExplorationStrategy>(
+        target: TapPoint,
+        currentFP: String,
+        input: InputProviding,
+        describer: ScreenDescribing,
+        strategy: S.Type,
+        result: ScreenDescriber.DescribeResult
+    ) -> ExploreStepResult {
+        // Mark element as visited before tapping
+        graph.markElementVisited(fingerprint: currentFP, elementText: target.text)
+
+        // Tap the element
+        _ = input.tap(x: target.tapX, y: target.tapY)
+
+        // Wait for screen to settle
+        usleep(EnvConfig.stepSettlingDelayMs * 1000)
+
+        // OCR the new screen
+        guard let afterResult = describer.describe(skipOCR: false) else {
+            return .paused(reason: "Failed to capture screen after tap")
+        }
+
+        let screenType = strategy.classifyScreen(
+            elements: afterResult.elements, hints: afterResult.hints
+        )
+
+        // Record transition in graph
+        let transition = graph.recordTransition(
+            elements: afterResult.elements, icons: afterResult.icons,
+            hints: afterResult.hints, screenshot: afterResult.screenshotBase64,
+            actionType: "tap", elementText: target.text, screenType: screenType
+        )
+
+        // Also record in session for flat screen list
+        session.capture(
+            elements: afterResult.elements, hints: afterResult.hints,
+            icons: afterResult.icons, actionType: "tap",
+            arrivedVia: target.text, screenshotBase64: afterResult.screenshotBase64
+        )
+
+        lock.lock()
+        actionCount += 1
+        lock.unlock()
+
+        switch transition {
+        case .newScreen(let fp):
+            lock.lock()
+            backtrackStack.append(fp)
+            actionsOnCurrentScreen = 0
+            lock.unlock()
+            return .continue(description: "Tapped \"\(target.text)\" → new screen (\(graph.nodeCount) total)")
+
+        case .revisited:
+            lock.lock()
+            actionsOnCurrentScreen += 1
+            lock.unlock()
+            return .continue(description: "Tapped \"\(target.text)\" → revisited screen")
+
+        case .duplicate:
+            lock.lock()
+            actionsOnCurrentScreen += 1
+            lock.unlock()
+            return .continue(description: "Tapped \"\(target.text)\" → no screen change")
+        }
+    }
+
+    private func performBacktrack<S: ExplorationStrategy>(
+        currentFP: String,
+        input: InputProviding,
+        describer: ScreenDescribing,
+        strategy: S.Type,
+        hints: [String]
+    ) -> ExploreStepResult {
+        lock.lock()
+        let stackDepth = backtrackStack.count
+        lock.unlock()
+
+        // Can't backtrack past root
+        guard stackDepth > 1 else {
+            lock.lock()
+            isFinished = true
+            lock.unlock()
+            return .finished(bundle: generateBundle())
+        }
+
+        let backtrackAction = strategy.backtrackMethod(
+            currentHints: hints, depth: stackDepth - 1
+        )
+
+        // Execute backtrack action
+        switch backtrackAction {
+        case .pressBack:
+            _ = input.pressKey(keyName: "[", modifiers: ["command"])
+        case .swipeBack:
+            _ = input.swipe(fromX: 10, fromY: 400, toX: 300, toY: 400, durationMs: 300)
+        case .pressHome:
+            _ = input.pressKey(keyName: "h", modifiers: ["command", "shift"])
+        case .none:
+            lock.lock()
+            isFinished = true
+            lock.unlock()
+            return .finished(bundle: generateBundle())
+        }
+
+        // Wait for navigation to complete
+        usleep(EnvConfig.stepSettlingDelayMs * 1000)
+
+        lock.lock()
+        let fromFP = backtrackStack.removeLast()
+        actionsOnCurrentScreen = 0
+        lock.unlock()
+
+        let toFP = graph.currentFingerprint
+        return .backtracked(from: fromFP, to: toFP)
+    }
+
+    private func generateBundle() -> SkillBundle {
+        guard let data = session.finalize() else {
+            return SkillBundle(appName: "", skills: [])
+        }
+        return SkillBundleGenerator.generate(
+            appName: data.appName, goal: data.goal,
+            snapshot: data.graphSnapshot, allScreens: data.screens
+        )
+    }
+}

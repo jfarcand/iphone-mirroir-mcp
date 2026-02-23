@@ -36,6 +36,12 @@ enum ExplorationGuide {
 
     // MARK: - Main Entry Point
 
+    /// Minimum captures before flow boundary detection is active.
+    static let minScreensForFlowBoundary = 2
+
+    /// Number of consecutive duplicate captures that triggers a "stuck" warning.
+    static let stuckThreshold = 3
+
     /// Analyze the current screen and produce guidance for the agent.
     static func analyze(
         mode: Mode,
@@ -47,18 +53,16 @@ enum ExplorationGuide {
         screenCount: Int
     ) -> Guidance {
         let backAtStart: Bool
-        if let startElements {
-            backAtStart = FlowDetector.isBackAtStart(
-                currentElements: elements, startElements: startElements,
-                screenCount: screenCount)
+        if let startElements, screenCount >= minScreensForFlowBoundary {
+            backAtStart = StructuralFingerprint.areEquivalent(elements, startElements)
         } else {
             backAtStart = false
         }
 
-        let duplicateStreak = FlowDetector.consecutiveDuplicates(in: actionLog)
+        let duplicateStreak = consecutiveDuplicatesCount(in: actionLog)
 
         let warning: String?
-        if duplicateStreak >= FlowDetector.stuckThreshold {
+        if duplicateStreak >= stuckThreshold {
             warning = "Agent appears stuck \u{2014} last \(duplicateStreak) captures were duplicates. " +
                 "Try a different element or scroll to reveal new content."
         } else {
@@ -178,6 +182,21 @@ enum ExplorationGuide {
         )
     }
 
+    // MARK: - Flow Detection
+
+    /// Count consecutive duplicate capture rejections from the tail of the action log.
+    static func consecutiveDuplicatesCount(in actionLog: [ExplorationAction]) -> Int {
+        var count = 0
+        for action in actionLog.reversed() {
+            if action.wasDuplicate {
+                count += 1
+            } else {
+                break
+            }
+        }
+        return count
+    }
+
     // MARK: - Keyword Extraction
 
     /// Common stop words filtered from goal text before keyword matching.
@@ -228,6 +247,106 @@ enum ExplorationGuide {
         return scored
             .sorted { $0.1 > $1.1 }
             .map(\.0)
+    }
+
+    // MARK: - Strategy-Based Analysis
+
+    /// Analyze the current screen using a NavigationGraph and ExplorationStrategy.
+    /// Produces guidance from graph state + strategy instead of keyword matching.
+    static func analyzeWithStrategy<S: ExplorationStrategy>(
+        strategy: S.Type,
+        graph: NavigationGraph,
+        elements: [TapPoint],
+        icons: [IconDetector.DetectedIcon],
+        hints: [String],
+        budget: ExplorationBudget,
+        goal: String
+    ) -> Guidance {
+        let fingerprint = graph.currentFingerprint
+        guard let node = graph.node(for: fingerprint) else {
+            // Fallback: graph not populated yet
+            return Guidance(suggestions: ["Capture the current screen first."],
+                            goalProgress: nil, warning: nil, isFlowComplete: false)
+        }
+
+        let screenType = node.screenType
+        let depth = node.depth
+        let visitedElements = node.visitedElements
+
+        // Check if terminal
+        if strategy.isTerminal(elements: elements, depth: depth,
+                               budget: budget, screenType: screenType) {
+            let backtrack = strategy.backtrackMethod(currentHints: hints, depth: depth)
+            var suggestions = ["This screen is a terminal node."]
+            switch backtrack {
+            case .pressBack:
+                suggestions.append("Press Back (Cmd+[) to backtrack.")
+            case .pressHome:
+                suggestions.append("Press Home to return to app root.")
+            case .swipeBack:
+                suggestions.append("Swipe from left edge to go back.")
+            case .none:
+                suggestions.append("Consider finishing exploration.")
+            }
+            return Guidance(suggestions: suggestions, goalProgress: nil,
+                            warning: nil, isFlowComplete: false)
+        }
+
+        // Rank elements
+        let ranked = strategy.rankElements(
+            elements: elements, icons: icons,
+            visitedElements: visitedElements, depth: depth, screenType: screenType
+        )
+        let actionable = ranked.filter { !strategy.shouldSkip(elementText: $0.text) }
+
+        var suggestions: [String] = []
+        var goalProgress: String?
+
+        // Goal progress (if goal-driven)
+        if !goal.isEmpty {
+            let keywords = extractKeywords(from: goal)
+            let matches = actionable.filter { el in
+                keywords.contains { el.text.lowercased().contains($0) }
+            }
+            if !matches.isEmpty {
+                let matchTexts = matches.map { "\"\($0.text)\"" }.joined(separator: ", ")
+                goalProgress = "Goal-relevant content visible: \(matchTexts)."
+            } else {
+                goalProgress = "Goal \"\(goal)\" \u{2014} not yet visible."
+            }
+        }
+
+        // Suggest unvisited elements
+        let unvisited = actionable.filter { !visitedElements.contains($0.text) }
+        for el in unvisited.prefix(maxSuggestions) {
+            suggestions.append("Tap \"\(el.text)\"")
+        }
+
+        if unvisited.isEmpty {
+            let backtrack = strategy.backtrackMethod(currentHints: hints, depth: depth)
+            switch backtrack {
+            case .pressBack:
+                suggestions.append("All elements visited \u{2014} Press Back (Cmd+[)")
+            case .pressHome:
+                suggestions.append("All elements visited \u{2014} Press Home")
+            case .swipeBack:
+                suggestions.append("All elements visited \u{2014} Swipe back")
+            case .none:
+                suggestions.append("All elements visited \u{2014} consider finishing")
+            }
+        }
+
+        // Warning for stuck state
+        let warning: String? = (graph.nodeCount == 1 && graph.edgeCount > 3)
+            ? "Navigation appears stuck \u{2014} actions are not changing the screen."
+            : nil
+
+        return Guidance(
+            suggestions: suggestions,
+            goalProgress: goalProgress,
+            warning: warning,
+            isFlowComplete: unvisited.isEmpty && depth == 0
+        )
     }
 
     // MARK: - Formatting
