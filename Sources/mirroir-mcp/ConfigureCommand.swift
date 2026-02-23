@@ -44,10 +44,7 @@ enum ConfigureCommand {
         fputs("  \(layouts.count + 1)) Other (enter layout name)\n", stderr)
         fputs("\nEnter choice [1]: ", stderr)
 
-        guard let input = readLine()?.trimmingCharacters(in: .whitespaces) else {
-            fputs("No input received.\n", stderr)
-            return 1
-        }
+        let input = readLine()?.trimmingCharacters(in: .whitespaces) ?? ""
 
         let layoutName: String
         if input.isEmpty {
