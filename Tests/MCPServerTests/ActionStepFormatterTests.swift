@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 //
 // ABOUTME: Unit tests for ActionStepFormatter: action type to markdown step mapping.
-// ABOUTME: Covers tap, swipe, type, press_key, scroll_to, long_press, and edge cases.
+// ABOUTME: Covers all step types including tap, swipe, type, remember, screenshot, assert, and edge cases.
 
 import XCTest
 @testable import mirroir_mcp
@@ -59,5 +59,64 @@ final class ActionStepFormatterTests: XCTestCase {
         let step = ActionStepFormatter.format(actionType: "unknown_action", arrivedVia: "Button")
         XCTAssertEqual(step, "Tap \"Button\"",
             "Unknown actionType should default to tap")
+    }
+
+    // MARK: - New Step Types
+
+    func testRememberActionType() {
+        let step = ActionStepFormatter.format(actionType: "remember", arrivedVia: "Note the iOS version number")
+        XCTAssertEqual(step, "Remember: Note the iOS version number")
+    }
+
+    func testScreenshotActionType() {
+        let step = ActionStepFormatter.format(actionType: "screenshot", arrivedVia: "version_screen")
+        XCTAssertEqual(step, "Screenshot: \"version_screen\"")
+    }
+
+    func testAssertVisibleActionType() {
+        let step = ActionStepFormatter.format(actionType: "assert_visible", arrivedVia: "iOS Version")
+        XCTAssertEqual(step, "Verify \"iOS Version\" is visible")
+    }
+
+    func testAssertNotVisibleActionType() {
+        let step = ActionStepFormatter.format(actionType: "assert_not_visible", arrivedVia: "Error")
+        XCTAssertEqual(step, "Verify \"Error\" is not visible")
+    }
+
+    func testOpenURLActionType() {
+        let step = ActionStepFormatter.format(actionType: "open_url", arrivedVia: "https://example.com")
+        XCTAssertEqual(step, "Open URL: https://example.com")
+    }
+
+    // MARK: - Self-Sufficient Actions
+
+    func testPressHomeWithoutArrivedVia() {
+        let step = ActionStepFormatter.format(actionType: "press_home", arrivedVia: nil)
+        XCTAssertEqual(step, "Press Home",
+            "press_home should produce a step even without arrivedVia")
+    }
+
+    func testPressHomeWithEmptyArrivedVia() {
+        let step = ActionStepFormatter.format(actionType: "press_home", arrivedVia: "")
+        XCTAssertEqual(step, "Press Home",
+            "press_home should produce a step even with empty arrivedVia")
+    }
+
+    func testPressHomeWithArrivedVia() {
+        let step = ActionStepFormatter.format(actionType: "press_home", arrivedVia: "anything")
+        XCTAssertEqual(step, "Press Home",
+            "press_home should ignore arrivedVia")
+    }
+
+    // MARK: - Nil/Nil Edge Case
+
+    func testNilBothReturnsNil() {
+        let step = ActionStepFormatter.format(actionType: nil, arrivedVia: nil)
+        XCTAssertNil(step, "Both nil should produce no step")
+    }
+
+    func testEmptyBothReturnsNil() {
+        let step = ActionStepFormatter.format(actionType: "", arrivedVia: "")
+        XCTAssertNil(step, "Both empty should produce no step")
     }
 }

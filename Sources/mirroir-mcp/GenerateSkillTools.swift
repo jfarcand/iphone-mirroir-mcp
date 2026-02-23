@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 //
 // ABOUTME: Registers the generate_skill MCP tool for AI-driven app exploration.
-// ABOUTME: Session-based workflow: start (launch + OCR) → capture (OCR each screen) → finish (emit SKILL.md).
+// ABOUTME: Session-based workflow: start (launch + OCR) -> capture (OCR + guidance) -> finish (emit SKILL.md).
 
 import Foundation
 import HelperLib
@@ -18,9 +18,9 @@ extension MirroirMCP {
             name: "generate_skill",
             description: """
                 Generate a SKILL.md by exploring an app. Session-based workflow: \
-                (1) action="start" — launch app, OCR first screen, begin session. \
+                (1) action="start" \u{2014} launch app, OCR first screen, begin session. \
                 (2) Use tap/swipe/type_text to navigate, then action="capture" to OCR each screen. \
-                (3) action="finish" — assemble captured screens into a SKILL.md and return it.
+                (3) action="finish" \u{2014} assemble captured screens into a SKILL.md and return it.
                 """,
             inputSchema: [
                 "type": .string("object"),
@@ -45,7 +45,15 @@ extension MirroirMCP {
                     "goal": .object([
                         "type": .string("string"),
                         "description": .string(
-                            "Optional flow description, e.g. \"check software version\" (for start action)."),
+                            "Optional flow description, e.g. \"check software version\" (for start action). " +
+                            "Omit for discovery mode."),
+                    ]),
+                    "goals": .object([
+                        "type": .string("array"),
+                        "items": .object(["type": .string("string")]),
+                        "description": .string(
+                            "Optional array of goals for manifest mode. " +
+                            "Each goal is explored in sequence, producing one SKILL.md per goal."),
                     ]),
                     "arrived_via": .object([
                         "type": .string("string"),
@@ -57,7 +65,8 @@ extension MirroirMCP {
                         "description": .string(
                             "Action performed to reach current screen: " +
                             "\"tap\", \"swipe\", \"type\", \"press_key\", \"scroll_to\", " +
-                            "\"long_press\" (for capture action)."),
+                            "\"long_press\", \"remember\", \"screenshot\", \"press_home\", " +
+                            "\"open_url\" (for capture action)."),
                     ]),
                 ]),
                 "required": .array([.string("action")]),
@@ -109,9 +118,10 @@ extension MirroirMCP {
         // Wait for app to settle
         usleep(EnvConfig.stepSettlingDelayMs * 1000)
 
-        // Start session
+        // Parse goal(s) and start session
         let goal = args["goal"]?.asString() ?? ""
-        session.start(appName: appName, goal: goal)
+        let goals = args["goals"]?.asStringArray() ?? []
+        session.start(appName: appName, goal: goal, goals: goals)
 
         // OCR first screen
         guard let result = ctx.describer.describe(skipOCR: false) else {
@@ -129,15 +139,35 @@ extension MirroirMCP {
             screenshotBase64: result.screenshotBase64
         )
 
+        // Generate mode-specific preamble
+        let modeName = session.currentMode == .discovery ? "Discovery" : "Goal-driven"
+        var preamble = "Exploration started for '\(appName)' (\(modeName) mode). Screen 1 captured."
+        if !goals.isEmpty {
+            preamble += " Manifest: \(goals.count) goals queued."
+        }
+
         let description = formatScreenDescription(
             elements: result.elements,
             hints: result.hints,
-            preamble: "Exploration started for '\(appName)'. Screen 1 captured."
+            preamble: preamble
         )
+
+        // Generate initial guidance
+        let guidance = ExplorationGuide.analyze(
+            mode: session.currentMode,
+            goal: session.currentGoal,
+            elements: result.elements,
+            hints: result.hints,
+            startElements: nil,
+            actionLog: [],
+            screenCount: 1
+        )
+
+        let guidanceText = ExplorationGuide.formatGuidance(guidance)
 
         return MCPToolResult(
             content: [
-                .text(description),
+                .text(description + guidanceText),
                 .image(result.screenshotBase64, mimeType: "image/png"),
             ],
             isError: false
@@ -173,21 +203,49 @@ extension MirroirMCP {
         )
 
         if !accepted {
+            // Still provide guidance even on duplicate rejection
+            let guidance = ExplorationGuide.analyze(
+                mode: session.currentMode,
+                goal: session.currentGoal,
+                elements: result.elements,
+                hints: result.hints,
+                startElements: session.startScreenElements,
+                actionLog: session.actions,
+                screenCount: session.screenCount
+            )
+            let guidanceText = ExplorationGuide.formatGuidance(guidance)
+
             return .text(
-                "Screen unchanged — capture skipped (duplicate of previous screen). " +
-                "Try a different action before capturing again.")
+                "Screen unchanged \u{2014} capture skipped (duplicate of previous screen). " +
+                "Try a different action before capturing again." + guidanceText)
         }
 
         let screenNum = session.screenCount
+        let preamble = "Screen \(screenNum) captured" +
+            (arrivedVia.map { " (arrived via \"\($0)\")" } ?? "") + "."
+
         let description = formatScreenDescription(
             elements: result.elements,
             hints: result.hints,
-            preamble: "Screen \(screenNum) captured\(arrivedVia.map { " (arrived via \"\($0)\")" } ?? "")."
+            preamble: preamble
         )
+
+        // Generate guidance for the agent
+        let guidance = ExplorationGuide.analyze(
+            mode: session.currentMode,
+            goal: session.currentGoal,
+            elements: result.elements,
+            hints: result.hints,
+            startElements: session.startScreenElements,
+            actionLog: session.actions,
+            screenCount: screenNum
+        )
+
+        let guidanceText = ExplorationGuide.formatGuidance(guidance)
 
         return MCPToolResult(
             content: [
-                .text(description),
+                .text(description + guidanceText),
                 .image(result.screenshotBase64, mimeType: "image/png"),
             ],
             isError: false
@@ -203,6 +261,11 @@ extension MirroirMCP {
             return .error("No screens captured. Use capture action before finishing.")
         }
 
+        // Check for remaining goals before finalize (which advances the queue)
+        let remaining = session.remainingGoals
+        let goalNum = session.currentGoalIndex + 1
+        let totalGoals = session.totalGoals
+
         guard let data = session.finalize() else {
             return .error("Failed to finalize exploration session.")
         }
@@ -213,7 +276,21 @@ extension MirroirMCP {
             screens: data.screens
         )
 
-        return .text(skillMd)
+        // Build response with manifest progress if applicable
+        var responseText = skillMd
+        if !remaining.isEmpty {
+            responseText += "\n\n---\n"
+            responseText += "Goal \(goalNum)/\(totalGoals) complete. "
+            responseText += "Next goal: \"\(remaining[0])\". "
+            responseText += "Session auto-advanced \u{2014} call capture to continue, "
+            responseText += "or finish again when done."
+            if remaining.count > 1 {
+                let queued = remaining.dropFirst().map { "\"\($0)\"" }.joined(separator: ", ")
+                responseText += "\nRemaining after next: \(queued)"
+            }
+        }
+
+        return .text(responseText)
     }
 
     // MARK: - Formatting

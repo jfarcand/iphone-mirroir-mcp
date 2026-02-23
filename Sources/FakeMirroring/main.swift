@@ -1,24 +1,32 @@
 // Copyright 2026 jfarcand@apache.org
 // Licensed under the Apache License, Version 2.0
 // ABOUTME: Fake macOS app that mimics the iPhone Mirroring window for integration testing.
-// ABOUTME: Renders text labels on a dark background for OCR validation without a real iPhone.
+// ABOUTME: Renders a settings-like screen with header, rows, and tab bar for OCR and icon detection.
 
 import AppKit
 
-/// View that renders iOS-style text labels on a dark background for OCR testing.
-/// Draws white text at 16pt+ for reliable Vision OCR detection.
+/// View that renders an iOS Settings-style screen for OCR testing.
+/// Draws a large title, category rows, and a tab bar with icons.
 final class FakeScreenView: NSView {
-    private let labels: [(String, CGPoint)] = [
-        ("9:41", CGPoint(x: 175, y: 30)),
-        ("Settings", CGPoint(x: 60, y: 300)),
-        ("Safari", CGPoint(x: 160, y: 300)),
-        ("Photos", CGPoint(x: 260, y: 300)),
-        ("Camera", CGPoint(x: 360, y: 300)),
-        ("Messages", CGPoint(x: 60, y: 500)),
-        ("Mail", CGPoint(x: 160, y: 500)),
-        ("Clock", CGPoint(x: 260, y: 500)),
-        ("Maps", CGPoint(x: 360, y: 500)),
+
+    /// Status bar time display.
+    private let statusBarLabel = ("9:41", CGPoint(x: 175, y: 30))
+
+    /// Large title in the header zone.
+    private let headerLabel = ("Settings", CGPoint(x: 100, y: 120))
+
+    /// Category rows — simulate tappable list items like iOS Settings.
+    private let rowLabels: [(String, CGPoint)] = [
+        ("General", CGPoint(x: 100, y: 250)),
+        ("Display", CGPoint(x: 100, y: 310)),
+        ("Privacy", CGPoint(x: 100, y: 370)),
+        ("About", CGPoint(x: 100, y: 430)),
+        ("Software Update", CGPoint(x: 130, y: 490)),
+        ("Developer", CGPoint(x: 110, y: 550)),
     ]
+
+    /// Disclosure indicators for rows (simulating ">" chevrons).
+    private let chevronX: CGFloat = 370
 
     override var isFlipped: Bool { true }
 
@@ -28,24 +36,75 @@ final class FakeScreenView: NSView {
     private let iconSize: CGFloat = 24
     private let tabBarIconXPositions: [CGFloat] = [50, 130, 210, 290, 370]
 
+    /// Row height and separator styling.
+    private let rowHeight: CGFloat = 44
+    private let separatorInset: CGFloat = 20
+
     override func draw(_ dirtyRect: NSRect) {
         // Dark background for high OCR contrast
         NSColor(red: 0.1, green: 0.1, blue: 0.15, alpha: 1.0).setFill()
         dirtyRect.fill()
 
-        // Draw text labels
-        let font = NSFont.systemFont(ofSize: 18, weight: .medium)
-        let attributes: [NSAttributedString.Key: Any] = [
+        drawStatusBar()
+        drawHeader()
+        drawRows()
+        drawTabBar()
+    }
+
+    private func drawStatusBar() {
+        let font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        let attrs: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: NSColor.white,
         ]
+        let (text, origin) = statusBarLabel
+        let size = (text as NSString).size(withAttributes: attrs)
+        let centeredX = origin.x - size.width / 2
+        (text as NSString).draw(at: NSPoint(x: centeredX, y: origin.y), withAttributes: attrs)
+    }
 
-        for (text, origin) in labels {
-            let size = (text as NSString).size(withAttributes: attributes)
-            let centeredX = origin.x - size.width / 2
-            (text as NSString).draw(at: NSPoint(x: centeredX, y: origin.y), withAttributes: attributes)
+    private func drawHeader() {
+        let font = NSFont.systemFont(ofSize: 28, weight: .bold)
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white,
+        ]
+        let (text, origin) = headerLabel
+        (text as NSString).draw(at: NSPoint(x: origin.x, y: origin.y), withAttributes: attrs)
+    }
+
+    private func drawRows() {
+        let rowFont = NSFont.systemFont(ofSize: 18, weight: .regular)
+        let rowAttrs: [NSAttributedString.Key: Any] = [
+            .font: rowFont,
+            .foregroundColor: NSColor.white,
+        ]
+        let chevronFont = NSFont.systemFont(ofSize: 18, weight: .regular)
+        let chevronAttrs: [NSAttributedString.Key: Any] = [
+            .font: chevronFont,
+            .foregroundColor: NSColor(white: 0.5, alpha: 1.0),
+        ]
+
+        for (text, origin) in rowLabels {
+            // Draw row text
+            (text as NSString).draw(at: NSPoint(x: origin.x, y: origin.y), withAttributes: rowAttrs)
+
+            // Draw chevron indicator
+            (">" as NSString).draw(
+                at: NSPoint(x: chevronX, y: origin.y), withAttributes: chevronAttrs)
+
+            // Draw separator line below row
+            let separatorY = origin.y + rowHeight
+            NSColor(white: 0.3, alpha: 1.0).setStroke()
+            let path = NSBezierPath()
+            path.move(to: NSPoint(x: separatorInset, y: separatorY))
+            path.line(to: NSPoint(x: bounds.width - separatorInset, y: separatorY))
+            path.lineWidth = 0.5
+            path.stroke()
         }
+    }
 
+    private func drawTabBar() {
         // Draw white tab bar background at the bottom
         let barY = bounds.height - tabBarHeight
         NSColor.white.setFill()

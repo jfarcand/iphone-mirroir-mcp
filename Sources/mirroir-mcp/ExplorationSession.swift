@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 //
 // ABOUTME: Thread-safe session accumulator for the generate_skill exploration workflow.
-// ABOUTME: Tracks explored screens with OCR elements, screenshots, and navigation context.
+// ABOUTME: Tracks explored screens, action history, goal queue, and flow state.
 
 import Foundation
 import HelperLib
@@ -23,6 +23,14 @@ struct ExploredScreen: Sendable {
     let screenshotBase64: String
 }
 
+/// A single action attempted during exploration (including rejected duplicates).
+/// Used for cycle detection — even failed actions are tracked.
+struct ExplorationAction: Sendable {
+    let actionType: String?
+    let arrivedVia: String?
+    let wasDuplicate: Bool
+}
+
 /// Thread-safe accumulator for the generate_skill session-based workflow.
 /// Same pattern as `CompilationSession` in CompilationTools.swift.
 final class ExplorationSession: @unchecked Sendable {
@@ -30,20 +38,45 @@ final class ExplorationSession: @unchecked Sendable {
     private var appName: String = ""
     private var goal: String = ""
     private var isActive: Bool = false
+    private var mode: ExplorationGuide.Mode = .goalDriven
+    private var actionLog: [ExplorationAction] = []
+    private var startElements: [TapPoint]?
+    private var goalsQueue: [String] = []
+    private var goalIndex: Int = 0
     private let lock = NSLock()
 
     /// Begin a new exploration session, resetting any prior state.
-    func start(appName: String, goal: String) {
+    ///
+    /// - Parameters:
+    ///   - appName: The app being explored.
+    ///   - goal: A single goal description (empty for discovery mode).
+    ///   - goals: Optional array of goals for manifest mode. If non-empty,
+    ///     `goals[0]` is the initial goal and the rest are queued.
+    func start(appName: String, goal: String, goals: [String] = []) {
         lock.lock()
         defer { lock.unlock() }
         screens = []
+        actionLog = []
         self.appName = appName
-        self.goal = goal
+        self.startElements = nil
+
+        if !goals.isEmpty {
+            self.goalsQueue = goals
+            self.goalIndex = 0
+            self.goal = goals[0]
+        } else {
+            self.goalsQueue = []
+            self.goalIndex = 0
+            self.goal = goal
+        }
+
         isActive = true
+        mode = self.goal.isEmpty ? .discovery : .goalDriven
     }
 
     /// Append a captured screen to the session.
     /// Returns `false` if the screen is a duplicate of the last captured screen (unchanged).
+    /// Both accepted and rejected captures are logged for cycle detection.
     @discardableResult
     func capture(
         elements: [TapPoint],
@@ -58,7 +91,14 @@ final class ExplorationSession: @unchecked Sendable {
         // Reject duplicate: compare against last captured screen
         if let lastScreen = screens.last,
            ScreenFingerprint.areEqual(lastScreen.elements, elements) {
+            actionLog.append(ExplorationAction(
+                actionType: actionType, arrivedVia: arrivedVia, wasDuplicate: true))
             return false
+        }
+
+        // Store start elements from first capture for flow boundary detection
+        if screens.isEmpty {
+            startElements = elements
         }
 
         let screen = ExploredScreen(
@@ -70,22 +110,50 @@ final class ExplorationSession: @unchecked Sendable {
             screenshotBase64: screenshotBase64
         )
         screens.append(screen)
+        actionLog.append(ExplorationAction(
+            actionType: actionType, arrivedVia: arrivedVia, wasDuplicate: false))
         return true
     }
 
-    /// Finalize the session: return all captured data and reset state.
+    /// Finalize the current goal: return captured data and advance state.
+    ///
+    /// In manifest mode (goals queue has more entries), the session stays active
+    /// and advances to the next goal with cleared screens and action log.
+    /// Otherwise, the session is fully deactivated.
+    ///
     /// Returns `nil` if the session was not active.
     func finalize() -> (appName: String, goal: String, screens: [ExploredScreen])? {
         lock.lock()
         defer { lock.unlock() }
         guard isActive else { return nil }
         let result = (appName: appName, goal: goal, screens: screens)
-        screens = []
-        appName = ""
-        goal = ""
-        isActive = false
+
+        // Check if there are more goals in the queue
+        let nextIndex = goalIndex + 1
+        if nextIndex < goalsQueue.count {
+            // Advance to next goal: reset screens but keep session active
+            goalIndex = nextIndex
+            self.goal = goalsQueue[nextIndex]
+            screens = []
+            actionLog = []
+            startElements = nil
+            mode = .goalDriven
+        } else {
+            // No more goals: fully reset
+            screens = []
+            actionLog = []
+            appName = ""
+            goal = ""
+            goalsQueue = []
+            goalIndex = 0
+            startElements = nil
+            isActive = false
+        }
+
         return result
     }
+
+    // MARK: - Read-Only Accessors
 
     /// Whether an exploration session is currently active.
     var active: Bool {
@@ -113,5 +181,57 @@ final class ExplorationSession: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return goal
+    }
+
+    /// The current exploration mode.
+    var currentMode: ExplorationGuide.Mode {
+        lock.lock()
+        defer { lock.unlock() }
+        return mode
+    }
+
+    /// The complete action log (including rejected duplicates).
+    var actions: [ExplorationAction] {
+        lock.lock()
+        defer { lock.unlock() }
+        return actionLog
+    }
+
+    /// The elements from the first captured screen (flow starting point).
+    var startScreenElements: [TapPoint]? {
+        lock.lock()
+        defer { lock.unlock() }
+        return startElements
+    }
+
+    /// Whether there are more goals in the queue after the current one.
+    var hasMoreGoals: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return goalIndex + 1 < goalsQueue.count
+    }
+
+    /// The remaining goals in the queue (excluding current).
+    var remainingGoals: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        let nextIndex = goalIndex + 1
+        guard nextIndex < goalsQueue.count else { return [] }
+        return Array(goalsQueue[nextIndex...])
+    }
+
+    /// Zero-based index of the current goal in the manifest queue.
+    /// Returns 0 for single-goal and discovery modes.
+    var currentGoalIndex: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return goalIndex
+    }
+
+    /// Total number of goals in the manifest queue (0 for single-goal mode).
+    var totalGoals: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return goalsQueue.count
     }
 }

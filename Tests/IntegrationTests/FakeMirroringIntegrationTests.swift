@@ -101,8 +101,8 @@ final class FakeMirroringIntegrationTests: XCTestCase {
         let texts = result.elements.map { $0.text.lowercased() }
         let allText = texts.joined(separator: " ")
 
-        // These labels are rendered in FakeScreenView at 18pt white on dark background
-        let expectedLabels = ["settings", "safari", "9:41"]
+        // FakeMirroring renders settings-style labels at 18pt+ white on dark background
+        let expectedLabels = ["settings", "general", "9:41"]
         for label in expectedLabels {
             XCTAssertTrue(
                 allText.contains(label),

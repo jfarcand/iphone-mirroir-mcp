@@ -1,8 +1,8 @@
 // Copyright 2026 jfarcand@apache.org
 // Licensed under the Apache License, Version 2.0
 //
-// ABOUTME: Unit tests for ExplorationSession lifecycle: start, capture, finalize, and active flags.
-// ABOUTME: Verifies thread-safe accumulation and state transitions for the generate_skill workflow.
+// ABOUTME: Unit tests for ExplorationSession lifecycle: start, capture, finalize, modes, and goals.
+// ABOUTME: Verifies thread-safe accumulation, state transitions, and manifest-mode goal queue.
 
 import XCTest
 @testable import HelperLib
@@ -264,5 +264,182 @@ final class ExplorationSessionTests: XCTestCase {
         XCTAssertTrue(second,
             "50% overlap should be below threshold and accepted as new screen")
         XCTAssertEqual(session.screenCount, 2)
+    }
+
+    // MARK: - Mode Detection
+
+    func testGoalDrivenMode() {
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "check version")
+        XCTAssertEqual(session.currentMode, .goalDriven,
+            "Non-empty goal should set goal-driven mode")
+    }
+
+    func testDiscoveryMode() {
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "")
+        XCTAssertEqual(session.currentMode, .discovery,
+            "Empty goal should set discovery mode")
+    }
+
+    func testManifestModeIsGoalDriven() {
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "", goals: ["check version", "change brightness"])
+        XCTAssertEqual(session.currentMode, .goalDriven,
+            "Manifest mode with goals should be goal-driven")
+        XCTAssertEqual(session.currentGoal, "check version",
+            "First goal in manifest should be current")
+    }
+
+    // MARK: - Action History
+
+    func testActionLogTracksAcceptedCaptures() {
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "test")
+
+        session.capture(
+            elements: [TapPoint(text: "General", tapX: 205, tapY: 250, confidence: 0.95)],
+            hints: [], actionType: nil, arrivedVia: nil, screenshotBase64: "img1")
+
+        let actions = session.actions
+        XCTAssertEqual(actions.count, 1)
+        XCTAssertFalse(actions[0].wasDuplicate)
+    }
+
+    func testActionLogTracksDuplicateRejections() {
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "test")
+
+        let elements = [TapPoint(text: "General", tapX: 205, tapY: 250, confidence: 0.95)]
+
+        session.capture(elements: elements, hints: [], actionType: nil,
+            arrivedVia: nil, screenshotBase64: "img1")
+        session.capture(elements: elements, hints: [], actionType: "tap",
+            arrivedVia: "General", screenshotBase64: "img2")
+
+        let actions = session.actions
+        XCTAssertEqual(actions.count, 2)
+        XCTAssertFalse(actions[0].wasDuplicate, "First capture should not be duplicate")
+        XCTAssertTrue(actions[1].wasDuplicate, "Second capture of same screen should be duplicate")
+    }
+
+    // MARK: - Start Screen Elements
+
+    func testStartScreenElementsSetOnFirstCapture() {
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "test")
+
+        XCTAssertNil(session.startScreenElements, "No start elements before first capture")
+
+        let elements = [TapPoint(text: "Settings", tapX: 205, tapY: 120, confidence: 0.98)]
+        session.capture(elements: elements, hints: [], actionType: nil,
+            arrivedVia: nil, screenshotBase64: "img1")
+
+        XCTAssertNotNil(session.startScreenElements)
+        XCTAssertEqual(session.startScreenElements?.first?.text, "Settings")
+    }
+
+    func testStartScreenElementsNotOverwrittenOnSecondCapture() {
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "test")
+
+        session.capture(
+            elements: [TapPoint(text: "Settings", tapX: 205, tapY: 120, confidence: 0.98)],
+            hints: [], actionType: nil, arrivedVia: nil, screenshotBase64: "img1")
+        session.capture(
+            elements: [TapPoint(text: "About", tapX: 205, tapY: 120, confidence: 0.96)],
+            hints: [], actionType: "tap", arrivedVia: "About", screenshotBase64: "img2")
+
+        XCTAssertEqual(session.startScreenElements?.first?.text, "Settings",
+            "Start elements should remain from first capture")
+    }
+
+    // MARK: - Manifest Mode / Goals Queue
+
+    func testManifestFinalizeAdvancesToNextGoal() {
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "",
+            goals: ["check version", "change brightness", "enable dark mode"])
+
+        XCTAssertEqual(session.currentGoal, "check version")
+        XCTAssertEqual(session.totalGoals, 3)
+        XCTAssertTrue(session.hasMoreGoals)
+        XCTAssertEqual(session.remainingGoals, ["change brightness", "enable dark mode"])
+
+        // Capture a screen for goal 1
+        session.capture(
+            elements: [TapPoint(text: "Version", tapX: 205, tapY: 300, confidence: 0.9)],
+            hints: [], actionType: nil, arrivedVia: nil, screenshotBase64: "img1")
+
+        // Finalize goal 1 — should auto-advance
+        let data1 = session.finalize()
+        XCTAssertNotNil(data1)
+        XCTAssertEqual(data1?.goal, "check version")
+        XCTAssertTrue(session.active, "Session should still be active with more goals")
+        XCTAssertEqual(session.currentGoal, "change brightness")
+        XCTAssertEqual(session.screenCount, 0, "Screens should be reset for next goal")
+        XCTAssertTrue(session.hasMoreGoals)
+        XCTAssertEqual(session.remainingGoals, ["enable dark mode"])
+
+        // Capture for goal 2
+        session.capture(
+            elements: [TapPoint(text: "Brightness", tapX: 205, tapY: 300, confidence: 0.9)],
+            hints: [], actionType: nil, arrivedVia: nil, screenshotBase64: "img2")
+
+        // Finalize goal 2 — still one more
+        let data2 = session.finalize()
+        XCTAssertNotNil(data2)
+        XCTAssertEqual(data2?.goal, "change brightness")
+        XCTAssertTrue(session.active)
+        XCTAssertEqual(session.currentGoal, "enable dark mode")
+        XCTAssertFalse(session.hasMoreGoals)
+        XCTAssertTrue(session.remainingGoals.isEmpty)
+
+        // Capture for goal 3
+        session.capture(
+            elements: [TapPoint(text: "Dark Mode", tapX: 205, tapY: 300, confidence: 0.9)],
+            hints: [], actionType: nil, arrivedVia: nil, screenshotBase64: "img3")
+
+        // Finalize goal 3 — session should fully deactivate
+        let data3 = session.finalize()
+        XCTAssertNotNil(data3)
+        XCTAssertEqual(data3?.goal, "enable dark mode")
+        XCTAssertFalse(session.active, "Session should be inactive after last goal")
+        XCTAssertEqual(session.currentGoal, "")
+    }
+
+    func testSingleGoalFinalizeDeactivates() {
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "check version")
+
+        XCTAssertFalse(session.hasMoreGoals)
+        XCTAssertEqual(session.totalGoals, 0)
+
+        session.capture(
+            elements: [TapPoint(text: "Version", tapX: 205, tapY: 300, confidence: 0.9)],
+            hints: [], actionType: nil, arrivedVia: nil, screenshotBase64: "img")
+
+        let data = session.finalize()
+        XCTAssertNotNil(data)
+        XCTAssertFalse(session.active, "Single-goal session should deactivate on finalize")
+    }
+
+    func testManifestActionLogResetsPerGoal() {
+        let session = ExplorationSession()
+        session.start(appName: "Settings", goal: "",
+            goals: ["goal1", "goal2"])
+
+        session.capture(
+            elements: [TapPoint(text: "Screen1", tapX: 205, tapY: 250, confidence: 0.9)],
+            hints: [], actionType: nil, arrivedVia: nil, screenshotBase64: "img1")
+
+        XCTAssertEqual(session.actions.count, 1)
+
+        // Finalize goal 1
+        _ = session.finalize()
+
+        // Action log should be reset for goal 2
+        XCTAssertTrue(session.actions.isEmpty,
+            "Action log should reset when advancing to next goal")
     }
 }

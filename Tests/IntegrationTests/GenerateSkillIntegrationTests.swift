@@ -101,10 +101,10 @@ final class GenerateSkillIntegrationTests: XCTestCase {
 
         let fingerprint = ScreenFingerprint.extract(from: result.elements)
 
-        // FakeMirroring renders: Settings, Safari, Photos, Camera, Messages, Mail, Clock, Maps
+        // FakeMirroring renders: Settings, General, Display, Privacy, About, Software Update, Developer
         // (9:41 is filtered as a time pattern)
-        XCTAssertGreaterThanOrEqual(fingerprint.count, 6,
-            "Fingerprint should contain most of FakeMirroring's 8 labels. Got: \(fingerprint)")
+        XCTAssertGreaterThanOrEqual(fingerprint.count, 5,
+            "Fingerprint should contain most of FakeMirroring's labels. Got: \(fingerprint)")
 
         // Verify time pattern is filtered
         let hasTime = fingerprint.contains { $0.contains("9:41") || $0.contains("9:4") }
@@ -209,5 +209,52 @@ final class GenerateSkillIntegrationTests: XCTestCase {
             XCTAssertEqual(waitLines.count, 1,
                 "Landmark '\(landmark)' should appear only once despite A-B-A pattern. Got:\n\(skillMd)")
         }
+    }
+
+    // MARK: - Exploration Guide with Real OCR
+
+    func testExplorationGuideSuggestsFromRealElements() {
+        guard let result = describer.describe() else {
+            XCTFail("describe() returned nil")
+            return
+        }
+
+        // Goal-driven analysis with a version-related goal
+        let guidance = ExplorationGuide.analyze(
+            mode: .goalDriven,
+            goal: "check software version",
+            elements: result.elements,
+            hints: result.hints,
+            startElements: nil,
+            actionLog: [],
+            screenCount: 1
+        )
+
+        XCTAssertFalse(guidance.suggestions.isEmpty,
+            "ExplorationGuide should produce suggestions from real OCR data")
+        XCTAssertNotNil(guidance.goalProgress,
+            "Goal-driven mode should provide goal progress")
+    }
+
+    func testDiscoveryModeWithRealElements() {
+        guard let result = describer.describe() else {
+            XCTFail("describe() returned nil")
+            return
+        }
+
+        let guidance = ExplorationGuide.analyze(
+            mode: .discovery,
+            goal: "",
+            elements: result.elements,
+            hints: result.hints,
+            startElements: nil,
+            actionLog: [],
+            screenCount: 1
+        )
+
+        XCTAssertTrue(guidance.goalProgress?.contains("Discovery mode") ?? false,
+            "Discovery mode should be indicated")
+        XCTAssertTrue(guidance.suggestions.contains(where: { $0.contains("explore this flow") }),
+            "Discovery should suggest flows to explore")
     }
 }
