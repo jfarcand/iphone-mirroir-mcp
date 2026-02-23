@@ -137,9 +137,9 @@ Start recording, open Settings, scroll to General > About, stop recording.
 
 ## Skills
 
-Skills are multi-step automation flows. Steps like `tap: "Email"` use OCR — no hardcoded coordinates.
+Skills are SKILL.md files that describe what you want done — your AI agent reads them and drives the iPhone for you. Automate your morning routine, test a login flow, or let the AI explore an app on its own. Steps like `Tap "Email"` use OCR — no hardcoded coordinates.
 
-Two formats: **SKILL.md** (recommended) and **YAML**. Place files in `~/.mirroir-mcp/skills/` (global) or `<cwd>/.mirroir-mcp/skills/` (project-local).
+Place files in `~/.mirroir-mcp/skills/` (global) or `<cwd>/.mirroir-mcp/skills/` (project-local).
 
 ```markdown
 ---
@@ -171,48 +171,12 @@ tags: ["workflow", "cross-app"]
 
 `${VAR}` placeholders resolve from environment variables. `${VAR:-default}` for fallbacks.
 
-<details>
-<summary>Equivalent YAML format</summary>
-
-```yaml
-name: Commute ETA Notification
-app: Waze, Messages
-
-steps:
-  - launch: "Waze"
-  - wait_for: "Où va-t-on ?"
-  - tap: "Où va-t-on ?"
-  - wait_for: "${DESTINATION:-Travail}"
-  - tap: "${DESTINATION:-Travail}"
-  - wait_for: "Y aller"
-  - tap: "Y aller"
-  - wait_for: "min"
-  - remember: "Read the commute time and ETA."
-  - press_home: true
-  - launch: "Messages"
-  - tap: "New Message"
-  - type: "${RECIPIENT}"
-  - tap: "${RECIPIENT}"
-  - type: "On my way! ETA {eta}"
-  - press_key: "return"
-  - screenshot: "message_sent"
-```
-
-</details>
-
 ### Skill Marketplace
 
 Install ready-to-use skills from [jfarcand/mirroir-skills](https://github.com/jfarcand/mirroir-skills):
 
 ```bash
 git clone https://github.com/jfarcand/mirroir-skills ~/.mirroir-mcp/skills
-```
-
-### Migrate YAML to SKILL.md
-
-```bash
-mirroir migrate skill.yaml                    # single file
-mirroir migrate --dir ~/.mirroir-mcp/skills   # entire directory
 ```
 
 ## Test Runner
@@ -222,7 +186,7 @@ Run skills deterministically from the CLI — no AI in the loop. Designed for CI
 ```bash
 mirroir test apps/settings/check-about
 mirroir test --junit results.xml --verbose        # JUnit output
-mirroir test --dry-run apps/settings/*.yaml        # validate without executing
+mirroir test --dry-run apps/settings/check-about    # validate without executing
 ```
 
 | Option | Description |
@@ -235,7 +199,7 @@ mirroir test --dry-run apps/settings/*.yaml        # validate without executing
 | `--no-compiled` | Skip compiled skills, force full OCR |
 | `--agent [model]` | Diagnose failures (see [Agent Diagnosis](#agent-diagnosis)) |
 
-The test runner executes YAML skills only. Exit code `0` = all pass, `1` = any failure.
+Exit code `0` = all pass, `1` = any failure.
 
 ### Compiled Skills
 
@@ -254,38 +218,31 @@ AI agents auto-compile skills as a side-effect of the first MCP run. See [Compil
 When a compiled skill fails, `--agent` diagnoses *why* and suggests fixes.
 
 ```bash
-mirroir test --agent skill.yaml                    # deterministic OCR diagnosis
-mirroir test --agent claude-sonnet-4-6 skill.yaml  # + AI via Anthropic
-mirroir test --agent gpt-4o skill.yaml             # + AI via OpenAI
-mirroir test --agent ollama:llama3 skill.yaml      # + AI via local Ollama
+mirroir test --agent skill                          # deterministic OCR diagnosis
+mirroir test --agent claude-sonnet-4-6 skill        # + AI via Anthropic
+mirroir test --agent gpt-4o skill                   # + AI via OpenAI
+mirroir test --agent ollama:llama3 skill             # + AI via local Ollama
 ```
 
 Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` for cloud models. Custom agent profiles go in `~/.mirroir-mcp/agents/`. All AI errors are non-fatal.
 
 ## Recorder
 
-Record interactions with the mirrored iPhone as a skill YAML file.
+Record interactions as a skill file:
 
 ```bash
 mirroir record -o login-flow.yaml -n "Login Flow" --app "MyApp"
-mirroir record --no-ocr -o quick-capture.yaml      # skip OCR (faster)
 ```
-
-Press Ctrl+C to stop and save. Review the output and add `wait_for` steps where needed.
 
 ## Generate Skill
 
-Let an AI agent explore an app and write the skill for you. The `generate_skill` MCP tool uses a three-phase session:
-
-1. **Start** — launches the app, OCRs the first screen
-2. **Navigate + Capture** — the agent taps, swipes, types to explore; calls `capture` after each navigation to record the screen
-3. **Finish** — assembles all captured screens into a SKILL.md with steps, landmarks, and metadata
+Let an AI agent explore an app and produce SKILL.md files automatically:
 
 ```
 Explore the Settings app and generate a skill that checks the iOS version.
 ```
 
-The agent drives the exploration autonomously — duplicate screens are automatically skipped, and the generated skill uses OCR-based landmarks (no hardcoded coordinates).
+Uses DFS graph traversal — tapping unvisited elements, backtracking when branches are exhausted. Duplicate screens are automatically skipped.
 
 ## Doctor
 
@@ -294,6 +251,14 @@ Verify your setup:
 ```bash
 mirroir doctor
 mirroir doctor --json    # machine-readable output
+```
+
+## Configure
+
+Set up your keyboard layout for non-US keyboards:
+
+```bash
+mirroir configure
 ```
 
 ## Updating

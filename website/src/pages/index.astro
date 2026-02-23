@@ -210,18 +210,18 @@ if (!skillsAvailable) {
 ---
 
 <Layout
-  title="mirroir-mcp — Give your AI an iPhone"
-  description="MCP server that controls a real iPhone through macOS iPhone Mirroring. Screenshot, tap, swipe, type — from any MCP client."
+  title="mirroir-mcp — Skill your agent to use your iPhone"
+  description="MCP server that controls iPhones through macOS iPhone Mirroring. Screenshot, tap, swipe, type — from any MCP client."
 >
   <!-- Hero -->
   <header>
     <img src={`${import.meta.env.BASE_URL}mirroir-wordmark.svg`} alt="mirroir-mcp" class="logo" width="80" height="100" />
     <h1>mirroir-mcp</h1>
     <p class="tagline">
-      Give your AI an iPhone.
+      Skill your agent to use your iPhone.
     </p>
     <p class="subtitle">
-      An MCP server that gives AI agents full control of iPhones through macOS iPhone Mirroring &mdash; screenshot, tap, swipe, type &mdash; from any MCP client. Experimental support for macOS windows too.
+      An MCP server that controls iPhones through macOS iPhone Mirroring &mdash; screenshot, tap, swipe, type &mdash; from any MCP client. Automate your morning routine, test a login flow, or let the AI explore an app on its own.
     </p>
   </header>
 
@@ -414,10 +414,10 @@ if (!skillsAvailable) {
   <section>
     <h2>Skills: intents, not scripts</h2>
     <p>
-      Skills are SKILL.md files — YAML front matter plus numbered markdown steps — that describe automation flows as intents, not scripts.
-      Steps like <code>Tap "Email"</code> don't specify coordinates — the AI finds
-      the element by OCR matching and adapts to unexpected dialogs and layout changes.
-      Test an app or automate your morning routine. Share them on the <a href="https://github.com/jfarcand/mirroir-skills" rel="noopener noreferrer">community repository</a>.
+      Skills are SKILL.md files that describe what you want done &mdash; your AI agent reads them and drives the iPhone for you.
+      Steps like <code>Tap "Email"</code> use OCR, not coordinates &mdash; the AI finds
+      the element and adapts to unexpected dialogs and layout changes.
+      Automate your morning routine, test a login flow, or share them on the <a href="https://github.com/jfarcand/mirroir-skills" rel="noopener noreferrer">community repository</a>.
     </p>
 
     <div class="carousel skill-carousel">
