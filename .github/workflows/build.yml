@@ -61,9 +61,8 @@ jobs:
 
       - name: Binary info
         run: |
-          ls -lh .build/release/mirroir-mcp .build/release/mirroir-helper
+          ls -lh .build/release/mirroir-mcp
           file .build/release/mirroir-mcp
-          file .build/release/mirroir-helper
 
       - name: Test MCP initialize
         run: |
@@ -195,9 +194,8 @@ jobs:
 
       - name: Create release archive
         run: |
-          cp Resources/com.jfarcand.mirroir-helper.plist .build/release/
           cd .build/release
-          tar czf $GITHUB_WORKSPACE/mirroir-mcp-darwin-arm64.tar.gz mirroir-mcp mirroir-helper com.jfarcand.mirroir-helper.plist
+          tar czf $GITHUB_WORKSPACE/mirroir-mcp-darwin-arm64.tar.gz mirroir-mcp
 
       - name: Generate checksums
         run: shasum -a 256 mirroir-mcp-darwin-arm64.tar.gz > SHA256SUMS

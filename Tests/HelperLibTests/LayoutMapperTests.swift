@@ -233,13 +233,15 @@ struct LayoutMapperTests {
             usLayoutData: usData, targetLayoutData: csaData
         )
 
-        // After the ISO key swap, all substitutions should have HID mappings.
-        // The swap corrects the macOS/iOS disagreement on HID 0x64 and 0x35,
-        // so characters like / (which maps to ` → HID 0x35) and ù (which maps
-        // to § → HID 0x64) are both typeable via HID.
+        // After the ISO key swap, all substituted US characters should be
+        // in the typeable range (printable ASCII or known special characters).
+        // The swap corrects the macOS/iOS disagreement on virtual keycodes 0x64
+        // and 0x35, so characters like / and ù are both typeable.
         for (targetChar, usChar) in substitution {
-            #expect(HIDKeyMap.lookup(usChar) != nil,
-                    "'\(targetChar)' → '\(usChar)' should have HID mapping")
+            let scalar = usChar.unicodeScalars.first!.value
+            let isTypeable = (scalar >= 0x20 && scalar <= 0x7E) || scalar == 0xA7 || scalar == 0xB1
+            #expect(isTypeable,
+                    "'\(targetChar)' → '\(usChar)' (U+\(String(scalar, radix: 16))) should be typeable")
         }
     }
 }

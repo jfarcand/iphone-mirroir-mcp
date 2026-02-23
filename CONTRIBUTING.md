@@ -5,7 +5,7 @@ Thank you for your interest in contributing! By submitting a contribution, you a
 ## Getting Started
 
 1. Fork the repository and clone your fork
-2. Run the [installer](mirroir.sh) to set up dependencies (DriverKit virtual HID, helper daemon)
+2. Run the [installer](mirroir.sh) to build the server binary
 3. Read this guide and the [Architecture](docs/architecture.md) doc to understand the system
 4. Create a feature branch for your work
 
@@ -32,10 +32,11 @@ mirroir-mcp/
 │   │   ├── Protocols.swift           # DI protocol abstractions
 │   │   ├── MirroringBridge.swift     # AX window discovery + menu actions
 │   │   ├── InputSimulation.swift     # Coordinate mapping + focus management
+│   │   ├── CGEventInput.swift        # CGEvent posting for pointing + keyboard
+│   │   ├── CGKeyMap.swift            # Character → macOS virtual keycode mapping
 │   │   ├── ScreenCapture.swift       # screencapture -l wrapper
 │   │   ├── ScreenRecorder.swift      # Video recording state machine
 │   │   ├── ScreenDescriber.swift     # Vision OCR pipeline
-│   │   ├── HelperClient.swift        # Unix socket client to helper daemon
 │   │   ├── DebugLog.swift            # Debug logging to stderr + file
 │   │   ├── TestRunner.swift          # `mirroir test` orchestrator
 │   │   ├── SkillParser.swift         # YAML → structured SkillStep list (used by test runner)
@@ -47,39 +48,27 @@ mirroir-mcp/
 │   │   ├── YAMLGenerator.swift       # Recorded events → skill YAML
 │   │   └── RecordCommand.swift       # `mirroir record` CLI entry point
 │   │
-│   ├── mirroir-helper/  # Root LaunchDaemon
-│   │   ├── HelperDaemon.swift        # Entry point (root verification, signal handlers)
-│   │   ├── CommandServer.swift       # Unix stream socket listener
-│   │   ├── CommandHandlers.swift     # 10 action handlers (click, type, swipe, etc.)
-│   │   ├── CursorSync.swift          # Save/warp/nudge/restore cursor pattern
-│   │   ├── KarabinerClient.swift     # Karabiner DriverKit virtual HID protocol
-│   │   └── KarabinerProviding.swift  # Protocol abstraction for Karabiner client
-│   │
-│   └── HelperLib/              # Shared library (linked into both + tests)
+│   └── HelperLib/              # Shared library (linked into main executable + tests)
 │       ├── MCPProtocol.swift         # JSON-RPC + MCP types (JSONValue, tool defs)
 │       ├── PermissionPolicy.swift    # Fail-closed permission engine
-│       ├── HIDKeyMap.swift           # Character → USB HID keycode mapping
-│       ├── HIDSpecialKeyMap.swift    # Named key → HID keycode mapping
+│       ├── KeyName.swift             # Named key normalization
+│       ├── AppleScriptKeyMap.swift   # macOS virtual key codes
 │       ├── LayoutMapper.swift        # Non-US keyboard layout translation
-│       ├── PackedStructs.swift       # Binary HID report structs
 │       ├── TimingConstants.swift     # Default timing values
 │       ├── EnvConfig.swift           # Environment variable overrides
 │       ├── TapPointCalculator.swift  # Smart OCR tap coordinate offset
 │       ├── GridOverlay.swift         # Coordinate grid overlay on screenshots
 │       ├── ContentBoundsDetector.swift # Detects iPhone content bounds in screenshots
-│       ├── AppleScriptKeyMap.swift   # macOS virtual key codes
 │       └── ProcessExtensions.swift   # Timeout-aware Process.wait
 │
 ├── Tests/
 │   ├── MCPServerTests/         # XCTest — server routing + tool handlers
-│   ├── HelperDaemonTests/      # XCTest — command dispatch + Karabiner wire
 │   ├── HelperLibTests/         # Swift Testing — shared library utilities
 │   ├── TestRunnerTests/        # Swift Testing — test runner, recorder, skill parser
 │   ├── IntegrationTests/       # XCTest — FakeMirroring integration (requires running app)
 │   └── Fixtures/               # Test skill files (YAML + SKILL.md)
 │
-├── scripts/                    # Install/uninstall helper scripts
-├── Resources/                  # LaunchDaemon plist
+├── scripts/                    # Install/uninstall scripts
 └── docs/                       # Documentation
 ```
 
@@ -162,11 +151,11 @@ protocol InputProviding: Sendable {
 
 ### Step 3: Implement the Method
 
-Add the implementation to the real class (e.g., `InputSimulation`):
+Add the implementation to `InputSimulation`:
 
 ```swift
 func pinchZoom(x: Double, y: Double, scale: Double) -> String? {
-    // Coordinate mapping, helper client call, etc.
+    // Coordinate mapping, CGEvent posting, etc.
 }
 ```
 
@@ -193,87 +182,30 @@ server.registerTool(MCPToolDefinition(
 ))
 ```
 
-### Step 5: Helper Support (if needed)
+### Step 5: Update Test Doubles
 
-If the tool requires HID input through the helper daemon:
-
-1. Add a case to the `processCommand` switch in `CommandHandlers.swift`
-2. Implement the handler method using `CursorSync` pattern
-3. Add the corresponding method to `HelperClient.swift`
-
-### Step 6: Update Test Doubles
-
-Add stub methods in both test targets:
+Add stub methods in:
 
 - `Tests/MCPServerTests/TestDoubles.swift` — add to `StubInput`
-- `Tests/HelperDaemonTests/TestDoubles.swift` — add to `StubKarabiner` (if helper-side)
 
-### Step 7: Write Tests
+### Step 6: Write Tests
 
-Add tests in the appropriate test target:
+Add tests in `Tests/MCPServerTests/` for tool handler logic and `Tests/HelperLibTests/` for shared utilities.
 
-- Tool handler tests → `Tests/MCPServerTests/`
-- Helper command tests → `Tests/HelperDaemonTests/`
-- Shared utility tests → `Tests/HelperLibTests/`
-
-### Step 8: Update Documentation
+### Step 7: Update Documentation
 
 - Add the tool to `docs/tools.md`
 - Update `docs/architecture.md` if the tool introduces a new input path
 
-## How to Add a New Helper Command
-
-To add a new action handled by the root helper daemon:
-
-### Step 1: Add to processCommand
-
-In `Sources/mirroir-helper/CommandHandlers.swift`, add a case to the action switch:
-
-```swift
-case "my_action":
-    return handleMyAction(json)
-```
-
-### Step 2: Implement the Handler
-
-Write a handler method following the `CursorSync` pattern for touch operations:
-
-```swift
-private func handleMyAction(_ json: [String: Any]) -> Data {
-    guard let x = doubleParam(json, "x"),
-          let y = doubleParam(json, "y") else {
-        return makeErrorResponse("Missing x/y")
-    }
-    CursorSync.withCursorSynced(at: CGPoint(x: x, y: y), karabiner: karabiner) {
-        // Karabiner HID operations
-    }
-    return makeOkResponse()
-}
-```
-
-### Step 3: Add Client Method
-
-In `Sources/mirroir-mcp/HelperClient.swift`, add a convenience method:
-
-```swift
-func myAction(x: Double, y: Double) -> [String: Any]? {
-    send(["action": "my_action", "x": x, "y": y])
-}
-```
-
-### Step 4: Write Tests
-
-Add tests in `Tests/HelperDaemonTests/` using `StubKarabiner` to verify HID operations.
-
 ## Test Architecture
 
-### Three Test Targets
+### Test Targets
 
 | Target | Framework | Tests | Purpose |
 |--------|-----------|-------|---------|
 | `MCPServerTests` | XCTest | Server routing, tool handler logic | Verifies JSON-RPC dispatch, tool parameter validation, permission enforcement |
-| `HelperDaemonTests` | XCTest | Command dispatch, Karabiner wire protocol | Verifies action handlers, HID report generation, parameter validation |
 | `HelperLibTests` | Swift Testing | Shared utilities | Verifies key mapping, permissions, protocol types, OCR coordinates, layout translation |
+| `TestRunnerTests` | Swift Testing | Test runner, recorder, skill parser | Verifies skill parsing, step execution, element matching, event classification, reporters |
 
 ### Dependency Injection
 
@@ -286,15 +218,6 @@ All test targets use protocol-based DI. Real implementations are swapped with st
 - `StubRecorder` — returns configured recording start/stop results
 - `StubDescriber` — returns configured OCR describe results
 
-**HelperDaemonTests stubs** (`TestDoubles.swift`):
-- `StubKarabiner` — records all calls for verification:
-  - `postedPointingReports` — array of `PointingInput` sent
-  - `postedKeyboardReports` — array of `KeyboardInput` sent
-  - `typedKeys` — array of `(keycode, modifiers)` tuples
-  - `movedDeltas` — array of `(dx, dy)` tuples
-  - `clickedButtons` — array of button values
-  - `releasedCount` — counter for `releaseButtons()` calls
-
 ## Environment Variable Overrides
 
 All timing and numeric constants can be overridden via environment variables. The variable name follows the pattern `MIRROIR_<CONSTANT_NAME>`.
@@ -304,13 +227,13 @@ All timing and numeric constants can be overridden via environment variables. Th
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MIRROIR_CURSOR_SETTLE_US` | 10,000 (10ms) | Wait after cursor warp for macOS to register position |
-| `MIRROIR_NUDGE_SETTLE_US` | 5,000 (5ms) | Wait between nudge movements |
 | `MIRROIR_CLICK_HOLD_US` | 80,000 (80ms) | Button hold duration for single tap |
 | `MIRROIR_DOUBLE_TAP_HOLD_US` | 40,000 (40ms) | Button hold per tap in double-tap |
 | `MIRROIR_DOUBLE_TAP_GAP_US` | 50,000 (50ms) | Gap between taps in double-tap |
 | `MIRROIR_DRAG_MODE_HOLD_US` | 150,000 (150ms) | Hold before drag movement for iOS drag recognition |
 | `MIRROIR_FOCUS_SETTLE_US` | 200,000 (200ms) | Wait after keyboard focus click |
 | `MIRROIR_KEYSTROKE_DELAY_US` | 15,000 (15ms) | Delay between keystrokes |
+| `MIRROIR_DEAD_KEY_DELAY_US` | 30,000 (30ms) | Delay in dead-key compose sequences (accented characters) |
 
 ### App Switching & Navigation
 
@@ -330,15 +253,6 @@ All timing and numeric constants can be overridden via environment variables. Th
 | `MIRROIR_PROCESS_POLL_US` | 50,000 (50ms) | Polling interval for process completion |
 | `MIRROIR_EARLY_FAILURE_DETECT_US` | 500,000 (500ms) | Wait before checking for early process failure |
 | `MIRROIR_RESUME_FROM_PAUSED_US` | 2,000,000 (2.0s) | Wait after resuming paused mirroring |
-| `MIRROIR_POST_HEARTBEAT_SETTLE_US` | 100,000 (100ms) | Wait after initial Karabiner heartbeat |
-
-### Karabiner HID
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MIRROIR_KEY_HOLD_US` | 20,000 (20ms) | Key hold duration for virtual keyboard |
-| `MIRROIR_DEAD_KEY_DELAY_US` | 30,000 (30ms) | Delay in dead-key compose sequences (accented characters) |
-| `MIRROIR_RECV_TIMEOUT_US` | 200,000 (200ms) | Socket receive timeout |
 
 ### Non-Timing Constants
 
@@ -347,8 +261,6 @@ All timing and numeric constants can be overridden via environment variables. Th
 | `MIRROIR_DRAG_INTERPOLATION_STEPS` | 60 | Number of movement steps in drag |
 | `MIRROIR_SWIPE_INTERPOLATION_STEPS` | 20 | Number of scroll steps in swipe |
 | `MIRROIR_SCROLL_PIXEL_SCALE` | 8.0 | Divisor converting pixels to scroll ticks |
-| `MIRROIR_HID_TYPING_CHUNK_SIZE` | 15 | Characters per typing chunk |
-| `MIRROIR_STAFF_GROUP_ID` | 20 | Unix group ID for socket permissions |
 
 ### App Identity
 

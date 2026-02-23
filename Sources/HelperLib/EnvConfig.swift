@@ -33,10 +33,6 @@ public enum EnvConfig {
         readUInt32("cursorSettleUs", default: TimingConstants.cursorSettleUs)
     }
 
-    public static var nudgeSettleUs: UInt32 {
-        readUInt32("nudgeSettleUs", default: TimingConstants.nudgeSettleUs)
-    }
-
     public static var clickHoldUs: UInt32 {
         readUInt32("clickHoldUs", default: TimingConstants.clickHoldUs)
     }
@@ -105,18 +101,10 @@ public enum EnvConfig {
         readUInt32("postHeartbeatSettleUs", default: TimingConstants.postHeartbeatSettleUs)
     }
 
-    // MARK: - Karabiner HID
-
-    public static var keyHoldUs: UInt32 {
-        readUInt32("keyHoldUs", default: TimingConstants.keyHoldUs)
-    }
+    // MARK: - CGEvent Keyboard
 
     public static var deadKeyDelayUs: UInt32 {
         readUInt32("deadKeyDelayUs", default: TimingConstants.deadKeyDelayUs)
-    }
-
-    public static var recvTimeoutUs: Int32 {
-        readInt32("recvTimeoutUs", default: TimingConstants.recvTimeoutUs)
     }
 
     // MARK: - Non-Timing Constants
@@ -131,28 +119,6 @@ public enum EnvConfig {
 
     public static var scrollPixelScale: Double {
         readDouble("scrollPixelScale", default: TimingConstants.scrollPixelScale)
-    }
-
-    public static var hidTypingChunkSize: Int {
-        readInt("hidTypingChunkSize", default: TimingConstants.hidTypingChunkSize)
-    }
-
-    public static var staffGroupID: UInt32 {
-        readUInt32("staffGroupID", default: TimingConstants.staffGroupID)
-    }
-
-    // MARK: - Helper Daemon
-
-    /// Receive timeout (seconds) on client sockets. When recv() blocks longer than
-    /// this without data, it returns EAGAIN so the accept loop can detect dead clients.
-    public static var clientRecvTimeoutSec: Int {
-        readInt("clientRecvTimeoutSec", default: TimingConstants.clientRecvTimeoutSec)
-    }
-
-    /// Number of consecutive recv timeouts before dropping an idle client.
-    /// With `clientRecvTimeoutSec = 30`, the default of 4 gives ~120 seconds.
-    public static var clientIdleMaxTimeouts: Int {
-        readInt("clientIdleMaxTimeouts", default: TimingConstants.clientIdleMaxTimeouts)
     }
 
     // MARK: - Content Bounds Detection
@@ -233,28 +199,6 @@ public enum EnvConfig {
 
     public static var eventLabelMaxDistance: Double {
         readDouble("eventLabelMaxDistance", default: TimingConstants.eventLabelMaxDistance)
-    }
-
-    // MARK: - Karabiner Protocol
-
-    public static var karabinerHeartbeatDeadlineMs: UInt32 {
-        readUInt32("karabinerHeartbeatDeadlineMs", default: TimingConstants.karabinerHeartbeatDeadlineMs)
-    }
-
-    public static var karabinerHeartbeatIntervalSec: Double {
-        readDouble("karabinerHeartbeatIntervalSec", default: TimingConstants.karabinerHeartbeatIntervalSec)
-    }
-
-    public static var karabinerServerCheckIntervalSec: Double {
-        readDouble("karabinerServerCheckIntervalSec", default: TimingConstants.karabinerServerCheckIntervalSec)
-    }
-
-    public static var karabinerDeviceReadyTimeoutSec: Double {
-        readDouble("karabinerDeviceReadyTimeoutSec", default: TimingConstants.karabinerDeviceReadyTimeoutSec)
-    }
-
-    public static var karabinerSocketBufferSize: Int {
-        readInt("karabinerSocketBufferSize", default: TimingConstants.karabinerSocketBufferSize)
     }
 
     // MARK: - Step Execution
@@ -511,15 +455,6 @@ public enum EnvConfig {
             if let doubleVal = value as? Double, doubleVal >= 0 { return UInt32(doubleVal) }
         }
         if let str = env[envVarName(key)], let parsed = UInt32(str) { return parsed }
-        return fallback
-    }
-
-    private static func readInt32(_ key: String, default fallback: Int32) -> Int32 {
-        if let value = settings[key] {
-            if let intVal = value as? Int { return Int32(intVal) }
-            if let doubleVal = value as? Double { return Int32(doubleVal) }
-        }
-        if let str = env[envVarName(key)], let parsed = Int32(str) { return parsed }
         return fallback
     }
 

@@ -11,10 +11,7 @@ jobs:
   install-test:
     runs-on: macos-15
     env:
-      PLIST_NAME: com.jfarcand.mirroir-helper
-      HELPER_BIN: mirroir-helper
       MCP_BIN: mirroir-mcp
-      SOCKET_PATH: /var/run/mirroir-helper.sock
 
     steps:
       - uses: actions/checkout@v4
@@ -24,105 +21,13 @@ jobs:
       - name: Build release binaries
         run: swift build -c release
 
-      - name: Verify binaries exist and are executable
+      - name: Verify binary exists and is executable
         run: |
           test -x .build/release/$MCP_BIN || { echo "FAIL: $MCP_BIN not found or not executable"; exit 1; }
-          test -x .build/release/$HELPER_BIN || { echo "FAIL: $HELPER_BIN not found or not executable"; exit 1; }
           file .build/release/$MCP_BIN
-          file .build/release/$HELPER_BIN
-          echo "Both binaries built successfully."
+          echo "Binary built successfully."
 
-      # --- Standalone DriverKit ---
-
-      - name: Install standalone DriverKit package
-        run: |
-          DRIVERKIT_VERSION="6.10.0"
-          DRIVERKIT_PKG="Karabiner-DriverKit-VirtualHIDDevice-${DRIVERKIT_VERSION}.pkg"
-          curl -fSL -o "/tmp/${DRIVERKIT_PKG}" \
-            "https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice/releases/download/v${DRIVERKIT_VERSION}/${DRIVERKIT_PKG}"
-          sudo installer -pkg "/tmp/${DRIVERKIT_PKG}" -target /
-          rm -f "/tmp/${DRIVERKIT_PKG}"
-
-      - name: Verify standalone DriverKit Manager installed
-        run: |
-          test -f "/Applications/.Karabiner-VirtualHIDDevice-Manager.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Manager" \
-            || { echo "FAIL: DriverKit Manager not found"; exit 1; }
-          echo "Standalone DriverKit Manager installed."
-
-      # --- Helper daemon ---
-
-      - name: Install helper binary
-        run: |
-          sudo cp .build/release/$HELPER_BIN /usr/local/bin/
-          sudo chmod 755 /usr/local/bin/$HELPER_BIN
-          test -x /usr/local/bin/$HELPER_BIN
-          echo "Helper binary installed to /usr/local/bin/"
-
-      - name: Install and load helper daemon
-        run: |
-          sudo cp Resources/$PLIST_NAME.plist /Library/LaunchDaemons/
-          sudo chown root:wheel /Library/LaunchDaemons/$PLIST_NAME.plist
-          sudo chmod 644 /Library/LaunchDaemons/$PLIST_NAME.plist
-          sudo launchctl bootstrap system /Library/LaunchDaemons/$PLIST_NAME.plist
-          echo "Daemon loaded."
-
-      - name: Wait for helper daemon to start
-        run: |
-          # Give the daemon time to create its socket
-          for i in $(seq 1 15); do
-            if [ -S "$SOCKET_PATH" ]; then
-              echo "Socket appeared after ${i}s"
-              break
-            fi
-            sleep 1
-          done
-          test -S "$SOCKET_PATH" || { echo "FAIL: socket not found at $SOCKET_PATH after 15s"; exit 1; }
-
-      - name: Verify daemon is listed in launchctl
-        run: |
-          sudo launchctl list "$PLIST_NAME" || { echo "FAIL: daemon not in launchctl"; exit 1; }
-          echo "Daemon listed in launchctl: OK"
-
-      - name: Query helper daemon status
-        run: |
-          RESPONSE=$(echo '{"action":"status"}' | nc -U "$SOCKET_PATH" 2>/dev/null || echo "")
-          if [ -z "$RESPONSE" ]; then
-            echo "FAIL: no response from helper daemon"
-            echo "--- daemon log ---"
-            sudo cat /var/log/mirroir-helper.log 2>/dev/null || echo "(no log)"
-            exit 1
-          fi
-
-          echo "Raw response: $RESPONSE"
-
-          python3 -c "
-          import json, sys
-          data = json.loads('''$RESPONSE''')
-          # In CI, Karabiner DriverKit is not available so ok/keyboard/pointing are all false.
-          # The important thing is the daemon is running and responding with valid JSON.
-          assert 'ok' in data, f'Missing ok field in response: {data}'
-          assert 'keyboard_ready' in data, f'Missing keyboard_ready field: {data}'
-          assert 'pointing_ready' in data, f'Missing pointing_ready field: {data}'
-          print(f'Helper status: ok={data[\"ok\"]} keyboard={data[\"keyboard_ready\"]} pointing={data[\"pointing_ready\"]}')
-          "
-
-      # --- Reinstall test ---
-
-      - name: Test reinstall script
-        run: sudo ./scripts/reinstall-helper.sh
-
-      - name: Wait for socket after reinstall
-        run: |
-          for i in $(seq 1 15); do
-            if [ -S "$SOCKET_PATH" ]; then
-              echo "Socket reappeared after ${i}s"
-              break
-            fi
-            sleep 1
-          done
-          test -S "$SOCKET_PATH" || { echo "FAIL: socket not found after reinstall"; exit 1; }
-
-      # --- MCP binary from install path ---
+      # --- MCP binary from build path ---
 
       - name: Verify MCP binary responds to JSON-RPC initialize
         run: |
@@ -132,11 +37,5 @@ jobs:
           import sys, json
           obj = json.loads(sys.stdin.readline())
           assert obj['result']['serverInfo']['name'] == 'mirroir-mcp'
-          print('MCP initialize from install path: OK')
+          print('MCP initialize from build path: OK')
           "
-
-      # --- Cleanup ---
-
-      - name: Cleanup
-        if: always()
-        run: sudo ./scripts/uninstall-helper.sh || true

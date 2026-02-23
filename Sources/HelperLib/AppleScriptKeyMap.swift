@@ -8,7 +8,7 @@
 public enum AppleScriptKeyMap {
 
     /// macOS virtual key codes for special keys (same codes as CGEvent virtualKey).
-    /// Uses `KeyName` as key type to ensure exhaustive coverage with `HIDSpecialKeyMap`.
+    /// Uses `KeyName` as key type for compile-time exhaustive coverage.
     private static let keyMap: [KeyName: UInt16] = [
         .return: 36,
         .escape: 53,

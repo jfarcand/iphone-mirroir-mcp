@@ -2,18 +2,18 @@
 // Licensed under the Apache License, Version 2.0
 //
 // ABOUTME: Translates characters between keyboard layouts using macOS UCKeyTranslate.
-// ABOUTME: Builds substitution tables so US QWERTY HID keycodes produce correct characters on non-US layouts.
+// ABOUTME: Builds substitution tables so US QWERTY virtual keycodes produce correct characters on non-US layouts.
 
 import Carbon
 import Foundation
 
 /// Translates characters between keyboard layouts.
 ///
-/// When the iPhone's hardware keyboard layout differs from US QWERTY (which the
-/// Karabiner HID helper uses), the same HID keycode produces different characters.
-/// This mapper uses `UCKeyTranslate` to build a character substitution table: for
-/// each physical key, it compares what US QWERTY produces vs what the target layout
-/// produces, then maps target→US so the helper sends the right keycode.
+/// When the iPhone's hardware keyboard layout differs from US QWERTY, the same
+/// virtual keycode produces different characters. This mapper uses `UCKeyTranslate`
+/// to build a character substitution table: for each physical key, it compares what
+/// US QWERTY produces vs what the target layout produces, then maps target→US so
+/// CGEvent sends the right keycode.
 public enum LayoutMapper {
 
     /// Get the `UCKeyboardLayout` data for a keyboard input source by its TIS source ID.
@@ -39,10 +39,9 @@ public enum LayoutMapper {
     /// Returns a layout only when the `IPHONE_KEYBOARD_LAYOUT` environment variable
     /// is set (e.g. "Canadian-CSA" or "com.apple.keylayout.Canadian-CSA").
     ///
-    /// The Karabiner virtual HID device identifies as a US ANSI keyboard, so iOS
-    /// interprets all HID keycodes as US QWERTY regardless of the iPhone's software
-    /// keyboard language. Auto-detecting from the Mac's installed layouts would
-    /// apply the wrong substitution table (the Mac and iPhone layouts are independent).
+    /// CGEvent virtual keycodes are physical keys interpreted as US QWERTY by
+    /// default. Auto-detecting from the Mac's installed layouts would apply the
+    /// wrong substitution table (the Mac and iPhone layouts are independent).
     /// Users who explicitly configure their iPhone's hardware keyboard layout to
     /// non-US can opt in by setting the environment variable.
     public static func findNonUSLayout() -> (sourceID: String, layoutData: Data)? {
@@ -65,7 +64,7 @@ public enum LayoutMapper {
     ///
     /// For each virtual keycode and modifier state (unshifted / shifted), translates
     /// the keycode through both layouts. When the characters differ, records
-    /// `targetChar → usChar` so that sending `usChar` to the HID helper produces
+    /// `targetChar → usChar` so that sending `usChar` via CGEvent produces
     /// `targetChar` on the iPhone.
     public static func buildSubstitution(
         usLayoutData: Data, targetLayoutData: Data
@@ -73,7 +72,7 @@ public enum LayoutMapper {
         var map = [Character: Character]()
 
         // Modifier states: no modifier and shift.
-        // These match what HIDKeyMap supports (unshifted + leftShift).
+        // These match what CGKeyMap supports (unshifted + shifted).
         let modifierStates: [UInt32] = [
             0,  // no modifiers
             2,  // shift (Carbon shiftKey=0x200, shifted right 8 = 2)

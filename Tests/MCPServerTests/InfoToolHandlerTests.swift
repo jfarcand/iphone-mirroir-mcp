@@ -87,23 +87,19 @@ final class InfoToolHandlerTests: XCTestCase {
 
     func testStatusConnected() {
         bridge.state = .connected
-        input.statusDict = ["ok": true, "keyboard_ready": true, "pointing_ready": true]
         let response = callTool("status")
         XCTAssertFalse(isError(response))
         let text = extractText(response)
         XCTAssertTrue(text?.contains("Connected") ?? false)
         XCTAssertTrue(text?.contains("410x898") ?? false) // window size
-        XCTAssertTrue(text?.contains("Helper: connected") ?? false)
     }
 
     func testStatusNotRunning() {
         bridge.state = .notRunning
-        input.statusDict = nil
         let response = callTool("status")
         XCTAssertFalse(isError(response))
         let text = extractText(response)
         XCTAssertTrue(text?.contains("Not running") ?? false)
-        XCTAssertTrue(text?.contains("Helper: not running") ?? false)
     }
 
     func testStatusPaused() {
@@ -114,20 +110,10 @@ final class InfoToolHandlerTests: XCTestCase {
         XCTAssertTrue(text?.contains("Paused") ?? false)
     }
 
-    func testStatusHelperNotRunning() {
-        bridge.state = .connected
-        input.statusDict = nil
-        let response = callTool("status")
-        XCTAssertFalse(isError(response))
-        let text = extractText(response)
-        XCTAssertTrue(text?.contains("Helper: not running") ?? false)
-    }
-
     // MARK: - check_health
 
     func testCheckHealthAllOk() {
         bridge.state = .connected
-        input.statusDict = ["ok": true, "keyboard_ready": true, "pointing_ready": true]
         capture.captureResult = "base64data"
         let response = callTool("check_health")
         XCTAssertFalse(isError(response))
@@ -135,14 +121,12 @@ final class InfoToolHandlerTests: XCTestCase {
         XCTAssertTrue(text.contains("All checks passed"))
         XCTAssertTrue(text.contains("[ok] 'iphone' process is running"))
         XCTAssertTrue(text.contains("[ok] 'iphone' connected"))
-        XCTAssertTrue(text.contains("[ok] Helper daemon connected"))
         XCTAssertTrue(text.contains("[ok] Screen capture working"))
     }
 
     func testCheckHealthNotRunning() {
         bridge.processRunning = false
         bridge.state = .notRunning
-        input.statusDict = nil
         capture.captureResult = nil
         let response = callTool("check_health")
         let text = extractText(response)!
@@ -155,15 +139,6 @@ final class InfoToolHandlerTests: XCTestCase {
         let response = callTool("check_health")
         let text = extractText(response)!
         XCTAssertTrue(text.contains("[WARN] 'iphone' is paused"))
-    }
-
-    func testCheckHealthHelperDown() {
-        bridge.state = .connected
-        input.statusDict = nil
-        let response = callTool("check_health")
-        let text = extractText(response)!
-        XCTAssertTrue(text.contains("[WARN] Helper daemon not reachable"))
-        XCTAssertTrue(text.contains("type/press_key unavailable"))
     }
 
     func testCheckHealthCaptureFailed() {

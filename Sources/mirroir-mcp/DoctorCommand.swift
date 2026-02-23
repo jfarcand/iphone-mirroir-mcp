@@ -6,7 +6,6 @@
 
 import ApplicationServices
 import CoreGraphics
-import Darwin
 import Foundation
 import HelperLib
 
@@ -51,12 +50,6 @@ enum DoctorCommand {
 
         var checks = [DoctorCheck]()
         checks.append(checkMacOSVersion())
-        checks.append(checkKarabinerInstalled())
-        checks.append(checkDriverKitExtension())
-        checks.append(checkHelperDaemon())
-        checks.append(checkSocketSecurity())
-        checks.append(checkVirtualHIDDevices())
-        checks.append(checkKarabinerIgnoreRule())
         checks.append(checkMirroringRunning())
         checks.append(checkMirroringConnected())
         checks.append(checkScreenRecording())
@@ -101,7 +94,7 @@ enum DoctorCommand {
         Usage: mirroir-mcp doctor [options]
 
         Check every prerequisite for a working iPhone Mirroring MCP setup.
-        Runs 10 diagnostic checks and reports results with fix hints.
+        Runs diagnostic checks and reports results with fix hints.
 
         Options:
           --no-color    Disable colored output
@@ -137,259 +130,6 @@ enum DoctorCommand {
             status: .failed,
             detail: "macOS \(versionStr) (requires 15.0+)",
             fixHint: "iPhone Mirroring requires macOS 15 (Sequoia) or later. Update in System Settings > General > Software Update."
-        )
-    }
-
-    static func checkKarabinerInstalled() -> DoctorCheck {
-        let karabinerAppPath = "/Applications/Karabiner-Elements.app"
-        let standaloneManagerPath = "/Applications/.Karabiner-VirtualHIDDevice-Manager.app"
-        let fm = FileManager.default
-
-        // Check for full Karabiner-Elements
-        if fm.fileExists(atPath: karabinerAppPath) {
-            let plistPath = karabinerAppPath + "/Contents/Info.plist"
-            var versionStr = "unknown version"
-            if let plist = NSDictionary(contentsOfFile: plistPath),
-               let version = plist["CFBundleShortVersionString"] as? String {
-                versionStr = "v\(version)"
-            }
-            return DoctorCheck(
-                name: "DriverKit provider",
-                status: .passed,
-                detail: "Karabiner-Elements (\(versionStr))",
-                fixHint: nil
-            )
-        }
-
-        // Check for standalone DriverKit package
-        if fm.fileExists(atPath: standaloneManagerPath) {
-            return DoctorCheck(
-                name: "DriverKit provider",
-                status: .passed,
-                detail: "standalone Karabiner-DriverKit-VirtualHIDDevice",
-                fixHint: nil
-            )
-        }
-
-        return DoctorCheck(
-            name: "DriverKit provider",
-            status: .failed,
-            detail: "not installed",
-            fixHint: "Install the standalone DriverKit package from https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice/releases or run mirroir.sh"
-        )
-    }
-
-    static func checkDriverKitExtension() -> DoctorCheck {
-        let rootOnlyDir = "/Library/Application Support/org.pqrs/tmp/rootonly/"
-        let fm = FileManager.default
-
-        if fm.fileExists(atPath: rootOnlyDir) {
-            return DoctorCheck(
-                name: "DriverKit extension",
-                status: .passed,
-                detail: "active",
-                fixHint: nil
-            )
-        }
-
-        return DoctorCheck(
-            name: "DriverKit extension",
-            status: .failed,
-            detail: "not active",
-            fixHint: "Approve the DriverKit system extension in System Settings > General > Login Items & Extensions."
-        )
-    }
-
-    static func checkHelperDaemon() -> DoctorCheck {
-        let socketPath = "/var/run/mirroir-helper.sock"
-        let fm = FileManager.default
-
-        guard fm.fileExists(atPath: socketPath) else {
-            return DoctorCheck(
-                name: "Helper daemon",
-                status: .failed,
-                detail: "socket not found",
-                fixHint: "Run setup to install the helper daemon: npx mirroir-mcp setup"
-            )
-        }
-
-        // Try connecting and sending a status command
-        let client = HelperClient()
-        guard let status = client.status() else {
-            return DoctorCheck(
-                name: "Helper daemon",
-                status: .failed,
-                detail: "not responding",
-                fixHint: "The helper socket exists but the daemon is not responding. Try: sudo launchctl kickstart -k system/com.jfarcand.mirroir-helper"
-            )
-        }
-
-        let ok = status["ok"] as? Bool ?? false
-        if ok {
-            return DoctorCheck(
-                name: "Helper daemon",
-                status: .passed,
-                detail: "running",
-                fixHint: nil
-            )
-        }
-
-        return DoctorCheck(
-            name: "Helper daemon",
-            status: .warned,
-            detail: "running but devices not ready",
-            fixHint: "Helper is connected but Karabiner virtual HID devices are not ready yet. Try restarting Karabiner-Elements."
-        )
-    }
-
-    static func checkSocketSecurity() -> DoctorCheck {
-        let socketPath = "/var/run/mirroir-helper.sock"
-        let fm = FileManager.default
-
-        guard fm.fileExists(atPath: socketPath) else {
-            return DoctorCheck(
-                name: "Socket security",
-                status: .warned,
-                detail: "socket not found (checked by Helper daemon above)",
-                fixHint: nil
-            )
-        }
-
-        guard let attrs = try? fm.attributesOfItem(atPath: socketPath) else {
-            return DoctorCheck(
-                name: "Socket security",
-                status: .warned,
-                detail: "cannot read socket attributes",
-                fixHint: "Check permissions on \(socketPath)"
-            )
-        }
-
-        let posixPerms = (attrs[.posixPermissions] as? Int) ?? 0
-        let ownerUID = (attrs[.ownerAccountID] as? UInt) ?? 0
-        let currentUID = UInt(getuid())
-        let modeStr = String(posixPerms, radix: 8)
-
-        // Check for old group-accessible mode (0660)
-        if posixPerms == 0o660 {
-            return DoctorCheck(
-                name: "Socket security",
-                status: .warned,
-                detail: "mode=0\(modeStr) (group-accessible, expected 0600)",
-                fixHint: "Restart the helper daemon to apply console-user socket ownership: sudo launchctl kickstart -k system/com.jfarcand.mirroir-helper"
-            )
-        }
-
-        if posixPerms != 0o600 {
-            return DoctorCheck(
-                name: "Socket security",
-                status: .warned,
-                detail: "mode=0\(modeStr) (expected 0600)",
-                fixHint: "Restart the helper daemon to apply correct socket permissions: sudo launchctl kickstart -k system/com.jfarcand.mirroir-helper"
-            )
-        }
-
-        if ownerUID != currentUID {
-            return DoctorCheck(
-                name: "Socket security",
-                status: .warned,
-                detail: "owner uid=\(ownerUID) (expected \(currentUID))",
-                fixHint: "Socket is owned by a different user. Restart the helper daemon while logged in."
-            )
-        }
-
-        return DoctorCheck(
-            name: "Socket security",
-            status: .passed,
-            detail: "mode=0600, owner=uid \(ownerUID)",
-            fixHint: nil
-        )
-    }
-
-    static func checkVirtualHIDDevices() -> DoctorCheck {
-        let client = HelperClient()
-        guard let status = client.status() else {
-            return DoctorCheck(
-                name: "Virtual HID devices",
-                status: .failed,
-                detail: "cannot check (helper not available)",
-                fixHint: "Fix the helper daemon issue above first."
-            )
-        }
-
-        let keyboardReady = status["keyboard_ready"] as? Bool ?? false
-        let pointingReady = status["pointing_ready"] as? Bool ?? false
-
-        if keyboardReady && pointingReady {
-            return DoctorCheck(
-                name: "Virtual HID devices",
-                status: .passed,
-                detail: "keyboard: ready, pointing: ready",
-                fixHint: nil
-            )
-        }
-
-        var parts = [String]()
-        parts.append("keyboard: \(keyboardReady ? "ready" : "not ready")")
-        parts.append("pointing: \(pointingReady ? "ready" : "not ready")")
-
-        return DoctorCheck(
-            name: "Virtual HID devices",
-            status: .failed,
-            detail: parts.joined(separator: ", "),
-            fixHint: "Virtual HID devices are not ready. Approve the DriverKit extension in System Settings > General > Login Items & Extensions and wait a few seconds."
-        )
-    }
-
-    static func checkKarabinerIgnoreRule() -> DoctorCheck {
-        let fm = FileManager.default
-
-        // The ignore rule is only needed when Karabiner-Elements is installed (it has a
-        // keyboard grabber that would intercept our virtual keyboard). Standalone DriverKit
-        // has no grabber, so the rule is unnecessary.
-        guard fm.fileExists(atPath: "/Applications/Karabiner-Elements.app") else {
-            return DoctorCheck(
-                name: "Karabiner ignore rule",
-                status: .passed,
-                detail: "not needed (standalone DriverKit, no grabber)",
-                fixHint: nil
-            )
-        }
-
-        let configPath = NSHomeDirectory() + "/.config/karabiner/karabiner.json"
-
-        guard fm.fileExists(atPath: configPath) else {
-            return DoctorCheck(
-                name: "Karabiner ignore rule",
-                status: .warned,
-                detail: "config file not found",
-                fixHint: "Karabiner config not found at \(configPath). Open Karabiner-Elements to create it."
-            )
-        }
-
-        guard let data = fm.contents(atPath: configPath),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return DoctorCheck(
-                name: "Karabiner ignore rule",
-                status: .warned,
-                detail: "cannot parse config",
-                fixHint: "Could not parse \(configPath). Check for JSON syntax errors."
-            )
-        }
-
-        if hasIgnoreRule(in: json) {
-            return DoctorCheck(
-                name: "Karabiner ignore rule",
-                status: .passed,
-                detail: "configured",
-                fixHint: nil
-            )
-        }
-
-        return DoctorCheck(
-            name: "Karabiner ignore rule",
-            status: .warned,
-            detail: "not configured",
-            fixHint: "Add a device ignore rule for product_id 592 (0x0250) in Karabiner-Elements > Devices to prevent the virtual keyboard from triggering Karabiner modifications."
         )
     }
 
@@ -635,25 +375,6 @@ enum DoctorCommand {
             return ("\u{001B}[32m", "\u{001B}[31m", "\u{001B}[33m", "\u{001B}[0m")
         }
         return ("", "", "", "")
-    }
-
-    /// Check if a Karabiner config JSON contains an ignore rule for product_id 592.
-    /// This is the virtual keyboard's product ID (0x0250).
-    static func hasIgnoreRule(in json: [String: Any]) -> Bool {
-        guard let profiles = json["profiles"] as? [[String: Any]] else { return false }
-
-        for profile in profiles {
-            guard let devices = profile["devices"] as? [[String: Any]] else { continue }
-            for device in devices {
-                guard let identifiers = device["identifiers"] as? [String: Any] else { continue }
-                let productId = identifiers["product_id"] as? Int ?? 0
-                let ignore = device["ignore"] as? Bool ?? false
-                if productId == 592 && ignore {
-                    return true
-                }
-            }
-        }
-        return false
     }
 
     /// Map macOS major version to marketing codename.

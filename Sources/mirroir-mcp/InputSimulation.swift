@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 //
 // ABOUTME: Simulates user input (tap, swipe, keyboard) on the iPhone Mirroring window.
-// ABOUTME: Uses CGEvent for pointing (tap, swipe, drag) and the Karabiner helper daemon for keyboard input.
+// ABOUTME: Uses CGEvent for all input — pointing (tap, swipe, drag) and keyboard (type, press_key, shake).
 
 import AppKit
 import Carbon
@@ -34,18 +34,17 @@ enum CursorMode: Sendable {
 /// Simulates touch and keyboard input on a target window.
 /// All coordinates are relative to the target window's content area.
 ///
-/// Pointing operations (tap, swipe, drag, long press, double tap) use CGEvent
-/// mouse events posted directly into the macOS event pipeline — no helper daemon
-/// required. Keyboard operations (type, press_key, shake) use the Karabiner
-/// virtual HID via the privileged helper daemon.
+/// All operations use CGEvent posted directly into the macOS event pipeline.
+/// Pointing operations (tap, swipe, drag, long press, double tap) use mouse events.
+/// Keyboard operations (type, press_key, shake) use keyboard events.
 final class InputSimulation: Sendable {
     private let bridge: any WindowBridging
-    let helperClient = HelperClient()
     private let mirroringBundleID: String
     private let cursorMode: CursorMode
     /// Character substitution table for translating between the iPhone's hardware
-    /// keyboard layout and US QWERTY (used by the HID helper). Built once at init
-    /// from the first non-US keyboard layout found on the Mac.
+    /// keyboard layout and US QWERTY. Built once at init from the first non-US
+    /// keyboard layout found on the Mac. CGEvent keycodes are physical keys
+    /// (layout-independent), same as HID — substitution is still needed.
     private let layoutSubstitution: [Character: Character]
 
     init(bridge: any WindowBridging, cursorMode: CursorMode = .direct) {
@@ -65,7 +64,7 @@ final class InputSimulation: Sendable {
         // Build layout substitution table if a non-US layout is installed.
         // The iPhone's hardware keyboard layout typically matches one of the
         // Mac's installed layouts. When it differs from US QWERTY, characters
-        // need translation before sending through the HID helper.
+        // need translation before mapping to CGEvent virtual keycodes.
         if let usData = LayoutMapper.layoutData(forSourceID: "com.apple.keylayout.US"),
            let (targetID, targetData) = LayoutMapper.findNonUSLayout()
         {
@@ -101,7 +100,7 @@ final class InputSimulation: Sendable {
 
     /// Common preamble for pointing operations (tap, swipe, drag, long press, double tap).
     /// Validates that the target is connected, the window exists, and coordinates are in bounds.
-    /// Does NOT check helper daemon availability — pointing uses CGEvent.
+    /// All pointing operations use CGEvent — no external dependencies.
     /// Returns `(info, nil)` on success, or `(nil, errorMessage)` on failure.
     private func preparePointingInput(tag: String, x: Double, y: Double) -> (info: WindowInfo?, error: String?) {
         if let stateError = checkMirroringConnected(tag: tag) {
@@ -123,15 +122,10 @@ final class InputSimulation: Sendable {
     }
 
     /// Common preamble for keyboard operations (type, press_key, shake).
-    /// Validates that the target is connected AND the helper daemon is available.
+    /// Validates that the target is connected and ensures it's frontmost.
     private func prepareKeyboardInput(tag: String) -> String? {
         if let stateError = checkMirroringConnected(tag: tag) {
             return stateError
-        }
-
-        guard helperClient.isAvailable else {
-            DebugLog.log(tag, "ERROR: helper unavailable")
-            return helperClient.unavailableMessage
         }
         return nil
     }
@@ -289,21 +283,21 @@ final class InputSimulation: Sendable {
     }
 
     /// Trigger a shake gesture on the mirrored iPhone.
-    /// Sends Ctrl+Cmd+Z which triggers shake-to-undo in iOS apps.
+    /// Sends Ctrl+Cmd+Z via CGEvent which triggers shake-to-undo in iOS apps.
     func shake() -> TypeResult {
         if let keyboardError = prepareKeyboardInput(tag: "shake") {
             return TypeResult(success: false, warning: nil, error: keyboardError)
         }
 
-        DebugLog.log("shake", "sending shake gesture")
+        DebugLog.log("shake", "sending shake gesture via CGEvent")
         ensureTargetFrontmost()
 
-        let result = helperClient.shake()
-        DebugLog.log("shake", "helper=\(result ? "OK" : "FAILED")")
+        let result = CGEventInput.shake()
+        DebugLog.log("shake", "CGEvent=\(result ? "OK" : "FAILED")")
         if result {
             return TypeResult(success: true, warning: nil, error: nil)
         }
-        return TypeResult(success: false, warning: nil, error: "Helper shake command failed")
+        return TypeResult(success: false, warning: nil, error: "CGEvent shake failed")
     }
 
     /// Launch an app by name using Spotlight search.
@@ -434,16 +428,13 @@ final class InputSimulation: Sendable {
         DebugLog.log("focus", "after activation frontApp=\(afterApp?.bundleIdentifier ?? "nil")")
     }
 
-    /// Type text via Karabiner HID keycodes.
+    /// Type text via CGEvent keyboard events.
     ///
-    /// The Karabiner virtual HID presents as a US ANSI keyboard, so iOS
-    /// interprets keycodes as US QWERTY by default. When `IPHONE_KEYBOARD_LAYOUT`
-    /// is set to a non-US layout, characters are translated through a layout
-    /// substitution table before sending to the HID helper. Characters with no
-    /// HID mapping are skipped and reported in the warning field of the result.
-    ///
-    /// HID segments longer than 15 characters are sent in chunks to stay within
-    /// the Karabiner HID report buffer capacity.
+    /// CGEvent keycodes are layout-independent physical keys (same concept as
+    /// USB HID keycodes). When `IPHONE_KEYBOARD_LAYOUT` is set to a non-US
+    /// layout, characters are translated through a layout substitution table
+    /// before mapping to keycodes. Characters with no CGKeyMap mapping are
+    /// skipped and reported in the warning field of the result.
     func typeText(_ text: String) -> TypeResult {
         if let keyboardError = prepareKeyboardInput(tag: "typeText") {
             return TypeResult(success: false, warning: nil, error: keyboardError)
@@ -452,27 +443,27 @@ final class InputSimulation: Sendable {
         DebugLog.log("typeText", "typing \(text.count) char(s)")
         ensureTargetFrontmost()
 
-        // Split text into segments: HID-typeable (substituted) vs paste-needed (original).
+        // Split text into segments: typeable (substituted) vs skip (no mapping).
         let segments = buildTypeSegments(text)
         var skippedChars = ""
 
         for segment in segments {
             switch segment.method {
-            case .hid:
-                if let error = typeViaHID(segment.text) {
+            case .keyEvent:
+                if let error = typeViaCGEvent(segment.text) {
                     return error
                 }
-            case .paste:
+            case .skip:
                 // No working paste mechanism — collect skipped characters for the warning
                 skippedChars += segment.text
-                fputs("InputSimulation: skipping \(segment.text.count) char(s) with no HID mapping\n", stderr)
+                fputs("InputSimulation: skipping \(segment.text.count) char(s) with no key mapping\n", stderr)
             }
         }
 
         if !skippedChars.isEmpty {
             return TypeResult(
                 success: true,
-                warning: "Skipped \(skippedChars.count) character(s) with no HID mapping",
+                warning: "Skipped \(skippedChars.count) character(s) with no key mapping",
                 error: nil
             )
         }
@@ -480,25 +471,25 @@ final class InputSimulation: Sendable {
     }
 
     /// A segment of text to be typed, with the method to use.
-    enum TypeMethod { case hid, paste }
+    enum TypeMethod { case keyEvent, skip }
     struct TypeSegment {
         let text: String
         let method: TypeMethod
     }
 
-    /// Split text into segments based on whether each character can be typed via HID
-    /// (after layout substitution) or needs clipboard paste.
+    /// Split text into segments based on whether each character can be typed
+    /// via CGEvent key events (after layout substitution) or must be skipped.
     func buildTypeSegments(_ text: String) -> [TypeSegment] {
         var segments: [TypeSegment] = []
         var currentText = ""
-        var currentMethod: TypeMethod = .hid
+        var currentMethod: TypeMethod = .keyEvent
 
         for char in text {
             let substituted = layoutSubstitution[char] ?? char
-            let method: TypeMethod = HIDKeyMap.lookupSequence(substituted) != nil ? .hid : .paste
-            // For HID segments, use the substituted character (US QWERTY equivalent).
-            // For paste segments, use the original character (paste is layout-independent).
-            let outputChar = method == .hid ? substituted : char
+            let method: TypeMethod = CGKeyMap.lookupSequence(substituted) != nil ? .keyEvent : .skip
+            // For key-event segments, use the substituted character (US QWERTY equivalent).
+            // For skip segments, use the original character.
+            let outputChar = method == .keyEvent ? substituted : char
 
             if method == currentMethod {
                 currentText.append(outputChar)
@@ -517,32 +508,31 @@ final class InputSimulation: Sendable {
         return segments
     }
 
-    /// Type text via Karabiner HID in 15-character chunks.
-    private func typeViaHID(_ text: String) -> TypeResult? {
-        let chunkSize = EnvConfig.hidTypingChunkSize
-        var index = text.startIndex
-        while index < text.endIndex {
-            let end = text.index(index, offsetBy: chunkSize,
-                                 limitedBy: text.endIndex) ?? text.endIndex
-            let chunk = String(text[index..<end])
-
-            let response = helperClient.type(text: chunk)
-            guard response.ok else {
+    /// Type text by posting CGEvent keyboard events for each character.
+    private func typeViaCGEvent(_ text: String) -> TypeResult? {
+        for char in text {
+            guard let sequence = CGKeyMap.lookupSequence(char) else {
                 return TypeResult(
                     success: false,
-                    warning: response.warning,
-                    error: "Helper type command failed"
+                    warning: nil,
+                    error: "No key mapping for character '\(char)'"
                 )
             }
-
-            index = end
+            guard CGEventInput.postKeySequence(sequence) else {
+                return TypeResult(
+                    success: false,
+                    warning: nil,
+                    error: "CGEvent key post failed for '\(char)'"
+                )
+            }
+            usleep(EnvConfig.keystrokeDelayUs)
         }
         return nil // success
     }
 
     /// Send a special key press (Return, Escape, arrows, etc.) with optional modifiers
-    /// via Karabiner virtual keyboard through the helper daemon.
-    /// Activates iPhone Mirroring if needed (at most one Space switch).
+    /// via CGEvent keyboard events. Also handles single printable characters with modifiers
+    /// (e.g., Cmd+L for Safari address bar).
     func pressKey(keyName: String, modifiers: [String] = []) -> TypeResult {
         if let keyboardError = prepareKeyboardInput(tag: "pressKey") {
             return TypeResult(success: false, warning: nil, error: keyboardError)
@@ -552,11 +542,39 @@ final class InputSimulation: Sendable {
         DebugLog.log("pressKey", "key=\(keyName)\(modStr)")
         ensureTargetFrontmost()
 
-        let result = helperClient.pressKey(key: keyName, modifiers: modifiers)
-        DebugLog.log("pressKey", "helper=\(result ? "OK" : "FAILED")")
+        // Resolve the virtual keycode: try special key names first, then single characters
+        let keycode: UInt16
+        if let specialCode = AppleScriptKeyMap.keyCode(for: keyName) {
+            keycode = specialCode
+        } else if keyName.count == 1, let char = keyName.first,
+                  let mapping = CGKeyMap.lookup(Character(String(char).lowercased())) {
+            keycode = mapping.keycode
+        } else {
+            return TypeResult(
+                success: false, warning: nil,
+                error: "Unknown key '\(keyName)'. Supported: \(AppleScriptKeyMap.supportedKeys.joined(separator: ", ")), or a single character.")
+        }
+
+        // Map modifier strings to CGEventFlags
+        var flags = CGEventFlags()
+        for mod in modifiers {
+            switch mod.lowercased() {
+            case "shift": flags.insert(.maskShift)
+            case "command": flags.insert(.maskCommand)
+            case "option": flags.insert(.maskAlternate)
+            case "control": flags.insert(.maskControl)
+            default:
+                return TypeResult(
+                    success: false, warning: nil,
+                    error: "Unknown modifier '\(mod)'. Supported: shift, command, option, control.")
+            }
+        }
+
+        let result = CGEventInput.postKey(keycode: keycode, flags: flags)
+        DebugLog.log("pressKey", "CGEvent=\(result ? "OK" : "FAILED")")
         if result {
             return TypeResult(success: true, warning: nil, error: nil)
         }
-        return TypeResult(success: false, warning: nil, error: "Helper press_key command failed")
+        return TypeResult(success: false, warning: nil, error: "CGEvent press_key failed")
     }
 }

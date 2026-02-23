@@ -1,19 +1,15 @@
 // Copyright 2026 jfarcand@apache.org
 // Licensed under the Apache License, Version 2.0
 //
-// ABOUTME: CGEvent-based pointing input (click, scroll, drag) for target windows.
-// ABOUTME: Bypasses the Karabiner helper daemon by posting mouse events directly via macOS CGEvent.
+// ABOUTME: CGEvent-based input (click, scroll, drag, keyboard) for target windows.
+// ABOUTME: Posts mouse and keyboard events directly via macOS CGEvent API.
 
 import CoreGraphics
 import Foundation
 
-/// CGEvent-based pointing operations that bypass the Karabiner helper daemon.
-/// iPhone Mirroring accepts physical mouse input (clicks, scrolls, drags);
-/// CGEvent posts into the same macOS event pipeline, eliminating the need
-/// for a privileged root daemon for pointing operations.
-///
-/// Keyboard input still requires the helper daemon because CGEvent key events
-/// are blocked by iPhone Mirroring's Secure Input handling.
+/// CGEvent-based input operations for pointing and keyboard.
+/// iPhone Mirroring accepts physical mouse and keyboard input;
+/// CGEvent posts into the same macOS event pipeline as physical devices.
 enum CGEventInput {
 
     /// Milliseconds to pause between mouse-down and mouse-up for a click.
@@ -173,6 +169,54 @@ enum CGEventInput {
 
         up.post(tap: .cghidEventTap)
         return true
+    }
+
+    // MARK: - Keyboard
+
+    /// Microseconds to pause between consecutive keystrokes.
+    private static let keystrokeDelayUs: UInt32 = 8_000
+
+    /// Microseconds to pause between dead-key trigger and base character.
+    private static let deadKeyDelayUs: UInt32 = 30_000
+
+    /// Post a single key event (key-down + key-up) with modifier flags.
+    /// Returns true if the events were created and posted successfully.
+    static func postKey(keycode: UInt16, flags: CGEventFlags = CGEventFlags()) -> Bool {
+        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: keycode, keyDown: true),
+              let up = CGEvent(keyboardEventSource: nil, virtualKey: keycode, keyDown: false) else {
+            return false
+        }
+
+        down.flags = flags
+        up.flags = flags
+
+        down.post(tap: .cghidEventTap)
+        usleep(keystrokeDelayUs)
+        up.post(tap: .cghidEventTap)
+        return true
+    }
+
+    /// Post a dead-key sequence (2+ key events with a longer delay between them).
+    /// Used for accented characters like é (Option+e, then e).
+    static func postKeySequence(_ sequence: CGKeySequence) -> Bool {
+        for (index, step) in sequence.steps.enumerated() {
+            guard postKey(keycode: step.keycode, flags: step.flags) else {
+                return false
+            }
+            // Use longer delay after the dead-key trigger (first step),
+            // shorter delay after subsequent steps.
+            if index < sequence.steps.count - 1 {
+                usleep(deadKeyDelayUs)
+            }
+        }
+        return true
+    }
+
+    /// Trigger a shake gesture by posting Ctrl+Cmd+Z via CGEvent.
+    static func shake() -> Bool {
+        let flags: CGEventFlags = [.maskControl, .maskCommand]
+        // Z key = kVK_ANSI_Z = 0x06
+        return postKey(keycode: 0x06, flags: flags)
     }
 
     // MARK: - Private

@@ -29,7 +29,7 @@ All 31 tools exposed by the MCP server. Mutating tools require [permission](perm
 | `set_network` | `mode` | Toggle network settings (airplane, Wi-Fi, cellular) via Settings |
 | `get_orientation` | — | Report portrait/landscape and window dimensions |
 | `status` | — | Connection state, window geometry, and device readiness |
-| `check_health` | — | Comprehensive setup diagnostic: mirroring, helper, DriverKit, screen capture |
+| `check_health` | — | Comprehensive setup diagnostic: mirroring, accessibility, screen capture |
 | `list_skills` | — | List available skills (SKILL.md and YAML) from project-local and global config dirs |
 | `get_skill` | `name` | Read a skill file (SKILL.md or YAML) with ${VAR} env substitution. Appends compilation status. |
 | `generate_skill` | `action`, `app_name`?, `goal`?, `arrived_via`?, `action_type`? | Generate a SKILL.md by exploring an app. Session-based: start → capture → finish |
@@ -48,9 +48,9 @@ Set `skip_ocr: true` to skip Vision OCR and return only the grid-overlaid screen
 
 ## Typing Workflow
 
-`type_text` and `press_key` route keyboard input through the Karabiner virtual HID keyboard via the helper daemon. If iPhone Mirroring isn't already frontmost, the MCP server activates it once (which may trigger a macOS Space switch) and stays there. Subsequent keyboard tool calls reuse the active window without switching again.
+`type_text` and `press_key` route keyboard input through the CGEvent keyboard interface. If iPhone Mirroring isn't already frontmost, the MCP server activates it once (which may trigger a macOS Space switch) and stays there. Subsequent keyboard tool calls reuse the active window without switching again.
 
-- Characters are mapped to USB HID keycodes with automatic keyboard layout translation — non-US layouts (French AZERTY, German QWERTZ, etc.) are supported via UCKeyTranslate
+- Characters are mapped to macOS virtual keycodes with automatic keyboard layout translation — non-US layouts (French AZERTY, German QWERTZ, etc.) are supported via UCKeyTranslate
 - iOS autocorrect applies — type carefully or disable it on the iPhone
 
 ## Key Press Workflow

@@ -655,8 +655,8 @@ if (!skillsAvailable) {
         <p><code>blockedApps</code> in <code>permissions.json</code> prevents the AI from interacting with sensitive apps like Wallet or Banking &mdash; even if mutating tools are allowed.</p>
       </div>
       <div class="security-layer">
-        <h3>Socket hardening</h3>
-        <p>The helper daemon socket is owned by the console user with mode <code>0600</code>. Every connection is peer-authenticated via <code>getpeereid</code> &mdash; other users on the machine cannot send commands.</p>
+        <h3>No root required</h3>
+        <p>Runs as a regular user process using the macOS CGEvent API. No daemons, no kernel extensions, no root privileges &mdash; just Accessibility permissions.</p>
       </div>
     </div>
 
@@ -685,8 +685,8 @@ if (!skillsAvailable) {
         <p>Yes. It operates at the screen level through iPhone Mirroring — no source code, SDK, or jailbreak required. If you can see it on screen, the AI can interact with it.</p>
       </details>
       <details>
-        <summary>Why does it need a DriverKit virtual HID?</summary>
-        <p>iPhone Mirroring ignores programmatic <code>CGEvent</code> injection — it only responds to the system HID path. The installer uses the <a href="https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice" rel="noopener noreferrer">standalone Karabiner DriverKit package</a> (just the virtual HID, no keyboard grabber). Existing Karabiner-Elements installs are detected and reused.</p>
+        <summary>Does it need any kernel extensions or root access?</summary>
+        <p>No. All input (touch and keyboard) is delivered via the macOS CGEvent API, which only requires Accessibility permissions. No kernel extensions, no root privileges, no helper daemons.</p>
       </details>
       <details>
         <summary>Can it control macOS apps too, not just iPhone?</summary>

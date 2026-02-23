@@ -76,10 +76,10 @@ final class DoctorCommandTests: XCTestCase {
 
     func testFormatCheckWarned() {
         let check = DoctorCheck(
-            name: "Karabiner ignore rule",
+            name: "Screen recording",
             status: .warned,
             detail: "not configured",
-            fixHint: "Add a device ignore rule"
+            fixHint: "Grant screen recording permission"
         )
         let output = DoctorCommand.formatCheck(check, useColor: false)
         XCTAssertTrue(output.contains("!"))
@@ -119,66 +119,6 @@ final class DoctorCommandTests: XCTestCase {
         )
         let output = DoctorCommand.formatCheck(check, useColor: true)
         XCTAssertTrue(output.contains("\u{001B}[31m"))  // red
-    }
-
-    // MARK: - Karabiner Config Parsing
-
-    func testHasIgnoreRulePresent() {
-        let json: [String: Any] = [
-            "profiles": [[
-                "name": "Default",
-                "devices": [[
-                    "identifiers": [
-                        "vendor_id": 1452,
-                        "product_id": 592,
-                    ],
-                    "ignore": true,
-                ]],
-            ]],
-        ]
-        XCTAssertTrue(DoctorCommand.hasIgnoreRule(in: json))
-    }
-
-    func testHasIgnoreRuleAbsent() {
-        let json: [String: Any] = [
-            "profiles": [[
-                "name": "Default",
-                "devices": [[
-                    "identifiers": [
-                        "vendor_id": 1452,
-                        "product_id": 123,
-                    ],
-                    "ignore": true,
-                ]],
-            ]],
-        ]
-        XCTAssertFalse(DoctorCommand.hasIgnoreRule(in: json))
-    }
-
-    func testHasIgnoreRuleNotIgnored() {
-        let json: [String: Any] = [
-            "profiles": [[
-                "name": "Default",
-                "devices": [[
-                    "identifiers": [
-                        "vendor_id": 1452,
-                        "product_id": 592,
-                    ],
-                    "ignore": false,
-                ]],
-            ]],
-        ]
-        XCTAssertFalse(DoctorCommand.hasIgnoreRule(in: json))
-    }
-
-    func testHasIgnoreRuleEmptyProfiles() {
-        let json: [String: Any] = ["profiles": [[String: Any]]()]
-        XCTAssertFalse(DoctorCommand.hasIgnoreRule(in: json))
-    }
-
-    func testHasIgnoreRuleNoProfiles() {
-        let json: [String: Any] = ["global": ["check_for_updates_on_startup": true]]
-        XCTAssertFalse(DoctorCommand.hasIgnoreRule(in: json))
     }
 
     // MARK: - Summary Formatting

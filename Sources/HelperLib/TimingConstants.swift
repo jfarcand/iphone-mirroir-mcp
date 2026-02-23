@@ -12,9 +12,6 @@ public enum TimingConstants {
     /// Delay after CGWarpMouseCursorPosition for cursor to settle (microseconds).
     public static let cursorSettleUs: UInt32 = 10_000
 
-    /// Delay after Karabiner nudge for virtual device sync (microseconds).
-    public static let nudgeSettleUs: UInt32 = 5_000
-
     /// Hold duration for a standard click (microseconds).
     public static let clickHoldUs: UInt32 = 80_000
 
@@ -67,17 +64,11 @@ public enum TimingConstants {
     /// Delay after heartbeat for server to process and settle (microseconds).
     public static let postHeartbeatSettleUs: UInt32 = 100_000
 
-    // MARK: - Karabiner HID
-
-    /// Hold duration for a single key press via Karabiner HID (microseconds).
-    public static let keyHoldUs: UInt32 = 20_000
+    // MARK: - CGEvent Keyboard
 
     /// Delay between dead-key trigger and base character for compose sequences (microseconds).
     /// Dead-key input requires the compose state to settle before the base character arrives.
     public static let deadKeyDelayUs: UInt32 = 30_000
-
-    /// Receive timeout for Karabiner socket responses (microseconds).
-    public static let recvTimeoutUs: Int32 = 200_000
 
     // MARK: - Non-Timing Constants
 
@@ -91,22 +82,6 @@ public enum TimingConstants {
     /// this many pixels in the content. Used to convert pixel distances to scroll
     /// wheel units for swipe gestures.
     public static let scrollPixelScale: Double = 8.0
-
-    /// Maximum characters per HID typing chunk (Karabiner buffer capacity).
-    public static let hidTypingChunkSize: Int = 15
-
-    /// macOS built-in staff group ID for socket permissions.
-    public static let staffGroupID: UInt32 = 20
-
-    // MARK: - Helper Daemon
-
-    /// Receive timeout (seconds) on client sockets. Prevents the accept loop from
-    /// getting stuck when a client disconnects uncleanly.
-    public static let clientRecvTimeoutSec: Int = 30
-
-    /// Number of consecutive recv timeouts before dropping an idle client.
-    /// With `clientRecvTimeoutSec = 30`, this gives ~120 seconds before disconnect.
-    public static let clientIdleMaxTimeouts: Int = 4
 
     // MARK: - Content Bounds Detection
 
@@ -165,23 +140,6 @@ public enum TimingConstants {
 
     /// Maximum distance in points for nearest-label lookup during event recording.
     public static let eventLabelMaxDistance: Double = 30.0
-
-    // MARK: - Karabiner Protocol
-
-    /// Heartbeat deadline in milliseconds for the vhidd server.
-    public static let karabinerHeartbeatDeadlineMs: UInt32 = 5000
-
-    /// Heartbeat interval in seconds.
-    public static let karabinerHeartbeatIntervalSec: Double = 3.0
-
-    /// Server liveness check interval in seconds.
-    public static let karabinerServerCheckIntervalSec: Double = 3.0
-
-    /// Timeout for waiting for virtual devices to become ready (seconds).
-    public static let karabinerDeviceReadyTimeoutSec: Double = 10.0
-
-    /// Buffer size for socket reads.
-    public static let karabinerSocketBufferSize: Int = 1024
 
     // MARK: - Step Execution
 

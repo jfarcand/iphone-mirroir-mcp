@@ -69,7 +69,7 @@ Apply the pattern whose trigger condition matches your situation:
 | Two input formats producing same output type | **Separate Parsers, Shared Model**: one parser per format, both emit same type | `SkillParser` (YAML) + `SkillMdParser` (Markdown) → `SkillStep` |
 | Generator building structured output from data | **Pipeline with Composable Stages**: generator delegates filtering/formatting to enum-namespace helpers | `SkillMdGenerator` uses `LandmarkPicker` + `ActionStepFormatter` |
 | CLI subcommand | **Command Enum**: `enum XxxCommand` with `static func run(arguments:) -> Int32` | `DoctorCommand`, `MigrateCommand`, `CompileCommand` |
-| Types shared by both `mirroir-mcp` and `mirroir-helper` | **HelperLib target**: value types, enums, utilities in `Sources/HelperLib/` | `TapPoint`, `EnvConfig`, `MCPProtocol` |
+| Types shared across `mirroir-mcp` and test targets | **HelperLib target**: value types, enums, utilities in `Sources/HelperLib/` | `EnvConfig`, `MCPProtocol`, `PermissionPolicy` |
 
 ### Decision Sequence for New Code
 

@@ -30,7 +30,7 @@ protocol MenuActionCapable: WindowBridging {
 /// Backward-compatible alias for code that references the old protocol name.
 typealias MirroringBridging = MenuActionCapable
 
-/// Abstracts user input simulation (tap, swipe, type, etc.) via the Karabiner helper.
+/// Abstracts user input simulation (tap, swipe, type, etc.) via CGEvent.
 protocol InputProviding: Sendable {
     func tap(x: Double, y: Double, cursorMode: CursorMode?) -> String?
     func swipe(fromX: Double, fromY: Double, toX: Double, toY: Double,
@@ -44,8 +44,6 @@ protocol InputProviding: Sendable {
     func pressKey(keyName: String, modifiers: [String]) -> TypeResult
     func launchApp(name: String) -> String?
     func openURL(_ url: String) -> String?
-    func helperStatus() -> [String: Any]?
-    var isHelperAvailable: Bool { get }
 }
 
 /// Default nil cursorMode for backward compatibility.
@@ -133,15 +131,7 @@ protocol ExplorationStrategy: Sendable {
 
 extension MirroringBridge: MenuActionCapable {}
 
-extension InputSimulation: InputProviding {
-    func helperStatus() -> [String: Any]? {
-        helperClient.status()
-    }
-
-    var isHelperAvailable: Bool {
-        helperClient.isAvailable
-    }
-}
+extension InputSimulation: InputProviding {}
 
 extension ScreenCapture: ScreenCapturing {}
 

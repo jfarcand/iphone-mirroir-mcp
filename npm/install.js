@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-// Downloads the pre-built mirroir-mcp and mirroir-helper binaries
-// plus the LaunchDaemon plist from GitHub releases.
+// Downloads the pre-built mirroir-mcp binary from GitHub releases.
 // Only supports macOS (darwin) since iPhone Mirroring is a macOS feature.
 
 const https = require("https");
@@ -48,7 +47,7 @@ function main() {
 
   download(url, tmpFile, () => {
     verifyChecksum(tarball, tmpFile, () => {
-    // Extract all files: mirroir-mcp, mirroir-helper, plist
+    // Extract mirroir-mcp binary
     execSync(`tar xzf "${tmpFile}" -C "${binDir}"`, { stdio: "inherit" });
 
     // Rename native binary to -native to avoid conflicting with the JS wrapper
@@ -60,12 +59,6 @@ function main() {
       fs.copyFileSync(jsWrapperBackup, jsWrapper);
       fs.chmodSync(jsWrapper, 0o755);
       fs.unlinkSync(jsWrapperBackup);
-    }
-
-    // Make helper executable
-    const helperBin = path.join(binDir, "mirroir-helper");
-    if (fs.existsSync(helperBin)) {
-      fs.chmodSync(helperBin, 0o755);
     }
 
     fs.unlinkSync(tmpFile);

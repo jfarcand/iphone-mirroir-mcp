@@ -29,15 +29,6 @@ let package = Package(
             ]
         ),
         .executableTarget(
-            name: "mirroir-helper",
-            dependencies: ["HelperLib"],
-            linkerSettings: [
-                .linkedFramework("CoreGraphics"),
-                .linkedFramework("CoreFoundation"),
-                .linkedFramework("SystemConfiguration"),
-            ]
-        ),
-        .executableTarget(
             name: "FakeMirroring",
             path: "Sources/FakeMirroring",
             linkerSettings: [
@@ -51,10 +42,6 @@ let package = Package(
         .testTarget(
             name: "MCPServerTests",
             dependencies: ["mirroir-mcp", "HelperLib"]
-        ),
-        .testTarget(
-            name: "HelperDaemonTests",
-            dependencies: ["mirroir-helper", "HelperLib"]
         ),
         .testTarget(
             name: "IntegrationTests",

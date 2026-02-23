@@ -17,7 +17,7 @@ See [Security](security.md) for the full threat model and recommendations.
 
 ## Why does my cursor jump when the AI is working?
 
-Every input tool (`tap`, `type_text`, `swipe`, etc.) must make iPhone Mirroring the frontmost app before sending HID events. macOS routes HID input to the frontmost application — there is no API to direct input to a background window.
+Every input tool (`tap`, `type_text`, `swipe`, etc.) must make iPhone Mirroring the frontmost app before sending input. macOS routes CGEvent input to the frontmost application — there is no API to direct input to a background window.
 
 **Mitigations:**
 
@@ -37,19 +37,17 @@ Yes. The MCP server operates at the screen level through macOS iPhone Mirroring 
 
 No. iPhone Mirroring does not bridge the Mac clipboard when paste is triggered programmatically. This was tested extensively with HID keystrokes (`Cmd+V`), AppleScript, `CGEvent`, and Accessibility API actions — none work. The clipboard bridge relies on the Continuity/Handoff stack which only responds to physical user input.
 
-Text is typed character-by-character through Karabiner's virtual HID keyboard instead.
+Text is typed character-by-character through CGEvent key events instead.
 
-## Why does it need a DriverKit virtual HID?
+## How does input reach the iPhone?
 
-iPhone Mirroring's compositor ignores programmatic `CGEvent` injection — it only responds to events from the system HID path. A DriverKit virtual HID keyboard and pointing device that appears as real hardware to macOS is the only way to deliver touch and keyboard input to the mirrored iPhone.
-
-The installer uses the [standalone Karabiner DriverKit package](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice) by default — just the virtual HID device, no keyboard grabber, no modifier corruption. If you already have Karabiner-Elements installed, the installer detects it and reuses the existing DriverKit extension instead.
+All input (touch and keyboard) is delivered via the macOS CGEvent API. CGEvent posts go through the system HID path, which iPhone Mirroring's Continuity compositor picks up and forwards to the physical iPhone over AirPlay + Bluetooth LE. No kernel extensions, no root privileges, no helper daemons.
 
 See [Architecture](architecture.md) for the full input path diagram.
 
 ## Does it work with non-US keyboard layouts?
 
-Yes, with opt-in configuration. Set the `IPHONE_KEYBOARD_LAYOUT` environment variable to your iPhone's hardware keyboard layout, and the server uses `UCKeyTranslate` to map characters to the correct HID keycodes:
+Yes, with opt-in configuration. Set the `IPHONE_KEYBOARD_LAYOUT` environment variable to your iPhone's hardware keyboard layout, and the server uses `UCKeyTranslate` to map characters to the correct keycodes:
 
 ```bash
 export IPHONE_KEYBOARD_LAYOUT="Canadian-CSA"
@@ -81,10 +79,10 @@ See [Permissions](permissions.md) for all options.
 
 ## Does iOS autocorrect interfere with typed text?
 
-Yes. iOS applies autocorrect to HID-typed text the same way it does for physical keyboard input. Words may be silently changed after a space or punctuation is typed.
+Yes. iOS applies autocorrect to typed text the same way it does for physical keyboard input. Words may be silently changed after a space or punctuation is typed.
 
 To disable: **iPhone Settings > General > Keyboard > Auto-Correction > Off**.
 
-## Can multiple users or agents control the phone at once?
+## Can multiple agents control the phone at once?
 
-No. The helper daemon accepts one client connection at a time on a single Unix socket. If a second MCP server connects, the first is disconnected. There is no multiplexing or concurrent access.
+No. The MCP server communicates via stdin/stdout, so each MCP client session connects to one server instance. Multiple server instances posting CGEvent input simultaneously would cause unpredictable behavior — macOS routes events to the frontmost window, not to specific processes. Use one MCP session at a time.

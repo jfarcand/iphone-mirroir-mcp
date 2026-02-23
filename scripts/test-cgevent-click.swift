@@ -1,6 +1,8 @@
-#!/usr/bin/env swift
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+//
 // ABOUTME: Standalone test script to verify CGEvent mouse input works with iPhone Mirroring.
-// ABOUTME: Posts click and scroll events via CGEvent to determine if the helper daemon can be bypassed for pointing.
+// ABOUTME: Posts click and scroll events via CGEvent to verify pointing works with iPhone Mirroring.
 
 import AppKit
 import ApplicationServices
@@ -211,5 +213,5 @@ print("  Click:  \(clickOK ? "POSTED" : "FAILED")")
 print("  Scroll: \(scrollOK ? "POSTED" : "FAILED")")
 print("  Drag:   \(dragOK ? "POSTED" : "FAILED")")
 print("\nIf iPhone Mirroring responded to these events, CGEvent pointing works!")
-print("If nothing happened, CGEvent does not reach iPhone Mirroring and the")
-print("helper daemon is still required for pointing operations.")
+print("If nothing happened, CGEvent does not reach iPhone Mirroring.")
+print("Check that Accessibility permissions are granted.")

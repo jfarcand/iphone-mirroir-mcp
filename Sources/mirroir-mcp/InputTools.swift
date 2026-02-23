@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 //
 // ABOUTME: Registers input-related MCP tools: tap, swipe, drag, type_text, press_key, long_press, double_tap, shake.
-// ABOUTME: Each tool maps MCP JSON-RPC calls to the InputSimulation subsystem via Karabiner HID.
+// ABOUTME: Each tool maps MCP JSON-RPC calls to the InputSimulation subsystem via CGEvent.
 
 import Foundation
 import HelperLib
@@ -242,14 +242,14 @@ extension MirroirMCP {
             }
         ))
 
-        // type_text — type text via Karabiner HID with layout translation
+        // type_text — type text via CGEvent key events with layout translation
         server.registerTool(MCPToolDefinition(
             name: "type_text",
             description: """
                 Type text on the mirrored iPhone. Automatically activates the \
                 iPhone Mirroring window if needed (one-time Space switch). \
                 A text field must be active on the iPhone. \
-                Sends keystrokes through the Karabiner virtual HID keyboard \
+                Sends keystrokes through the CGEvent keyboard interface \
                 with automatic keyboard layout translation for non-US layouts.
                 """,
             inputSchema: [

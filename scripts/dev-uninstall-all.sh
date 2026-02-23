@@ -1,5 +1,5 @@
 #!/bin/bash
-# ABOUTME: Development script that removes ALL mirroir and Karabiner components for clean-slate testing.
+# ABOUTME: Development script that removes ALL mirroir components for clean-slate testing.
 # ABOUTME: Logs every step so output can be shared for debugging. Requires sudo.
 
 set -e
@@ -24,17 +24,25 @@ run() {
 echo "Full uninstall log: $LOG_FILE"
 echo ""
 
-# --- Phase 1: Helper daemon ---
+# --- Phase 1: MCP binary + symlinks ---
 
-log "=== Phase 1: Helper daemon + MCP binary ==="
+log "=== Phase 1: MCP binary + symlinks ==="
+
+run "sudo rm -f /usr/local/bin/mirroir-mcp"
+run "sudo rm -f /usr/local/bin/mirroir"
+
+log "MCP binary removed."
+
+# --- Phase 2: Legacy helper daemon (from pre-CGEvent versions) ---
+
+log ""
+log "=== Phase 2: Legacy helper daemon cleanup ==="
 
 run "sudo launchctl bootout system/com.jfarcand.mirroir-helper 2>/dev/null || true"
 run "sudo launchctl bootout system/com.jfarcand.iphone-mirroir-helper 2>/dev/null || true"
 sleep 1
 
-run "sudo rm -f /usr/local/bin/mirroir-mcp"
 run "sudo rm -f /usr/local/bin/mirroir-helper"
-run "sudo rm -f /usr/local/bin/mirroir"
 run "sudo rm -f /Library/LaunchDaemons/com.jfarcand.mirroir-helper.plist"
 run "sudo rm -f /var/run/mirroir-helper.sock"
 run "sudo rm -f /var/log/mirroir-helper.log"
@@ -48,12 +56,12 @@ run "sudo rm -f /var/run/iphone-mirroir-helper.sock"
 run "sudo rm -f /var/log/iphone-mirroir-helper.log"
 run "rm -rf '$HOME/.iphone-mirroir-mcp'"
 
-log "Helper daemon + MCP binary removed."
+log "Legacy helper daemon removed."
 
-# --- Phase 2: Karabiner-Elements ---
+# --- Phase 3: Legacy Karabiner cleanup ---
 
 log ""
-log "=== Phase 2: Karabiner-Elements ==="
+log "=== Phase 3: Legacy Karabiner cleanup ==="
 
 run 'osascript -e "quit app \"Karabiner-Elements\"" 2>/dev/null || true'
 sleep 1
@@ -107,10 +115,10 @@ run "rm -rf '$HOME/.config/karabiner'"
 
 log "Karabiner-Elements removed."
 
-# --- Phase 3: Standalone DriverKit ---
+# --- Phase 4: Legacy standalone DriverKit ---
 
 log ""
-log "=== Phase 3: Standalone DriverKit ==="
+log "=== Phase 4: Legacy standalone DriverKit ==="
 
 DRIVERKIT_MANAGER="/Applications/.Karabiner-VirtualHIDDevice-Manager.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Manager"
 if [ -f "$DRIVERKIT_MANAGER" ]; then
@@ -122,13 +130,10 @@ else
     log "No standalone DriverKit found."
 fi
 
-# --- Phase 3b: Final cleanup of org.pqrs support files ---
-# Must happen AFTER DriverKit deactivation. The DriverKit kernel extension
-# recreates directories while running, so we kill remaining processes, wait
-# briefly for the extension to wind down, then remove.
+# --- Phase 4b: Final cleanup of org.pqrs support files ---
 
 log ""
-log "=== Phase 3b: Final org.pqrs cleanup ==="
+log "=== Phase 4b: Final org.pqrs cleanup ==="
 
 run "sudo killall Karabiner-VirtualHIDDevice-Daemon 2>/dev/null || true"
 log "Waiting 3s for DriverKit extension to wind down..."
@@ -142,10 +147,10 @@ if [ -d "/Library/Application Support/org.pqrs" ]; then
     run "sudo rm -rf '/Library/Application Support/org.pqrs'"
 fi
 
-# --- Phase 4: Verify clean state ---
+# --- Phase 5: Verify clean state ---
 
 log ""
-log "=== Phase 4: Verify clean state ==="
+log "=== Phase 5: Verify clean state ==="
 
 PASS=0
 FAIL=0

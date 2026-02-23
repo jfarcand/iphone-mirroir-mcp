@@ -1,0 +1,271 @@
+# mirroir-mcp
+
+> MCP server that controls iPhones through macOS iPhone Mirroring — and any macOS window. Provides 31 tools for screenshot, tap, swipe, type, scroll, measure, and skill automation from any MCP client (Claude Code, Cursor, Copilot, ChatGPT, Codex). Written in Swift. Apache 2.0 licensed.
+
+## Overview
+
+mirroir-mcp bridges AI agents to real iPhones via the macOS iPhone Mirroring feature (macOS 15+). It exposes a JSON-RPC 2.0 MCP server over stdio. AI agents can screenshot the phone, read the screen via OCR, tap buttons, type text, swipe, scroll, launch apps, and run multi-step automation "skills" — all on a physical iPhone without jailbreaking or simulators.
+
+The name is the old French spelling of *miroir* (mirror).
+
+- Repository: https://github.com/jfarcand/mirroir-mcp
+- Website: https://mirroir.dev
+- NPM: https://www.npmjs.com/package/mirroir-mcp
+- Homebrew tap: https://tap.mirroir.dev
+- Skills marketplace: https://github.com/jfarcand/mirroir-skills
+- License: Apache-2.0
+
+## Architecture
+
+Single-process design using the macOS CGEvent API for all input:
+
+1. **mirroir-mcp** (user process) — MCP server, window discovery via AXUIElement, screen capture, Vision OCR, coordinate mapping, CGEvent input (pointing + keyboard), skill system. Communicates with MCP clients over stdin/stdout JSON-RPC 2.0.
+
+2. **HelperLib** (shared Swift library) — Types, keyboard maps, timing constants, and protocol definitions shared across the main executable and test targets.
+
+The input path: MCP client -> mirroir-mcp -> CGEvent API -> macOS HID -> iPhone Mirroring -> iPhone.
+
+- [Architecture diagram and details](docs/architecture.md)
+
+## Installation
+
+Three methods: curl installer, npx, or Homebrew.
+
+```bash
+# curl installer
+/bin/bash -c "$(curl -fsSL https://mirroir.dev/get-mirroir.sh)"
+
+# npx
+npx -y mirroir-mcp install
+
+# Homebrew
+brew tap jfarcand/tap && brew install mirroir-mcp
+```
+
+Requires macOS 15+ and an iPhone connected via iPhone Mirroring.
+
+## MCP Tools (31 total)
+
+### Screen (read-only, always available)
+- `screenshot` — Capture iPhone screen as base64 PNG
+- `describe_screen` — OCR via Apple Vision returning text elements with tap coordinates plus grid-overlaid screenshot. `skip_ocr: true` returns only the screenshot for client-side vision models. Detects unlabeled icons via pixel clustering.
+- `start_recording` / `stop_recording` — Video recording of the mirrored screen
+
+### Input (mutating, requires permission)
+- `tap` — Tap at (x, y) coordinates relative to mirroring window
+- `double_tap` — Two rapid taps for zoom/text selection
+- `long_press` — Hold tap for context menus (default 500ms)
+- `swipe` — Swipe between two points (scroll wheel events = iOS scroll)
+- `drag` — Slow sustained drag for icons, sliders (touch events, not scroll)
+- `type_text` — Type text via CGEvent key events. Supports non-US layouts via UCKeyTranslate. Accented characters via dead-key sequences.
+- `press_key` — Special keys (return, escape, tab, delete, arrows) with optional modifiers (command, shift, option, control)
+- `shake` — Trigger shake gesture (Ctrl+Cmd+Z) for undo/dev menus
+
+### Navigation (mutating, requires permission)
+- `launch_app` — Open app by name via Spotlight search
+- `open_url` — Open URL in Safari
+- `press_home` — Go to home screen
+- `press_app_switcher` — Open app switcher
+- `spotlight` — Open Spotlight search
+- `scroll_to` — Scroll until a text element becomes visible via OCR. Detects scroll exhaustion.
+- `reset_app` — Force-quit app via App Switcher (swipes through carousel to find off-screen cards)
+
+### Measurement & Network
+- `measure` — Time screen transitions: perform action, poll OCR until target appears
+- `set_network` — Toggle airplane/Wi-Fi/cellular via Settings app navigation
+
+### Info (read-only, always available)
+- `status` — Connection state, window geometry, device readiness
+- `get_orientation` — Portrait/landscape and window dimensions
+- `check_health` — Comprehensive setup diagnostic
+
+### Skills (read-only)
+- `list_skills` — List available skills from project-local and global config dirs
+- `get_skill` — Read skill file with ${VAR} env substitution
+
+### Skill Generation & Compilation
+- `generate_skill` — AI explores an app and produces SKILL.md. Session-based: start -> capture -> finish. Also supports autonomous DFS exploration.
+- `record_step` / `save_compiled` — Record compiled steps during AI-driven skill execution for zero-OCR replay
+
+### Multi-Target
+- `list_targets` / `switch_target` — Support for multiple windows (iPhone Mirroring + generic macOS windows like emulators, VNC)
+
+Coordinates are in points relative to the mirroring window top-left. Use `describe_screen` for exact tap coordinates.
+
+- [Full tools reference](docs/tools.md)
+
+## Skill System
+
+Skills are multi-step automation flows. Steps use OCR-based landmarks (no hardcoded coordinates).
+
+### SKILL.md Format (recommended)
+YAML front matter + numbered markdown steps. AI interprets steps as intents and calls MCP tools to execute them adaptively.
+
+```markdown
+---
+version: 1
+name: Check iOS Version
+app: Settings
+tags: ["settings"]
+---
+
+## Steps
+
+1. Launch **Settings**
+2. Wait for "General" to appear
+3. Tap "General"
+4. Wait for "About" to appear
+5. Tap "About"
+6. Screenshot: "about_screen"
+```
+
+### YAML Format (legacy)
+Structured step definitions for the deterministic test runner.
+
+`${VAR}` placeholders resolve from environment variables. `${VAR:-default}` for fallbacks.
+
+Skills are placed in `~/.mirroir-mcp/skills/` (global) or `<cwd>/.mirroir-mcp/skills/` (project-local).
+
+### Compiled Skills
+Compile once to capture coordinates and timing. Replay with zero OCR for fast, deterministic execution.
+
+```bash
+mirroir compile apps/settings/check-about
+mirroir test apps/settings/check-about   # auto-detects .compiled.json
+```
+
+- [Skills marketplace docs](docs/skills-marketplace.md)
+- [Compiled skills docs](docs/compiled-skills.md)
+
+## CLI Subcommands
+
+- `mirroir test <skill>` — Run skills deterministically (no AI). Supports `--junit`, `--verbose`, `--dry-run`, `--agent` for AI diagnosis.
+- `mirroir compile <skill>` — Compile a skill to .compiled.json
+- `mirroir record -o <file>` — Record interactions as skill YAML via CGEvent monitoring
+- `mirroir migrate <file>` — Convert YAML skills to SKILL.md format
+- `mirroir doctor` — Verify setup (accessibility, mirroring, permissions, etc.)
+
+## Security & Permissions
+
+**Fail-closed by default.** Without configuration, only read-only tools are exposed. Mutating tools are hidden entirely from the MCP client.
+
+Opt-in via `~/.mirroir-mcp/permissions.json`:
+```json
+{
+  "allow": ["tap", "swipe", "type_text", "press_key", "launch_app"],
+  "deny": [],
+  "blockedApps": ["Wallet", "PayPal"]
+}
+```
+
+Kill switch: closing iPhone Mirroring or locking the phone kills all input immediately. The MCP server communicates exclusively via stdin/stdout — no network ports, no sockets, no daemons.
+
+- [Security model](docs/security.md)
+- [Permissions reference](docs/permissions.md)
+
+## Building from Source
+
+Swift Package Manager (Swift 6.0+, macOS 14+ SDK):
+
+```bash
+git clone https://github.com/jfarcand/mirroir-mcp.git
+cd mirroir-mcp
+swift build              # debug build
+swift build -c release   # release build
+swift test               # run all tests
+./mirroir.sh             # full install (build + configure MCP client)
+```
+
+### SPM Targets
+- **mirroir-mcp** — MCP server executable
+- **HelperLib** — Shared library
+- **FakeMirroring** — Test stub app for CI
+
+### Test Targets
+- **MCPServerTests** — Server routing, tool handlers, exploration, graph algorithms
+- **HelperLibTests** — Keyboard maps, timing, permissions, coordinate calculation
+- **TestRunnerTests** — Skill parsing, step execution, reporting
+- **IntegrationTests** — Full workflows with FakeMirroring app
+
+## Key Source Files
+
+### Entry Points
+- `Sources/mirroir-mcp/mirroir_mcp.swift` — Main entry point, CLI dispatch, target registry init
+
+### Core Infrastructure
+- `Sources/mirroir-mcp/MCPServer.swift` — JSON-RPC 2.0 server implementation
+- `Sources/mirroir-mcp/ToolHandlers.swift` — Tool registration orchestrator
+- `Sources/mirroir-mcp/Protocols.swift` — All protocol abstractions (WindowBridging, InputProviding, ScreenCapturing, ScreenDescribing, ExplorationStrategy)
+
+### Window & Input
+- `Sources/mirroir-mcp/MirroringBridge.swift` — iPhone Mirroring window discovery via AXUIElement
+- `Sources/mirroir-mcp/GenericWindowBridge.swift` — Non-iPhone window bridge
+- `Sources/mirroir-mcp/InputSimulation.swift` — Coordinate mapping, focus management
+- `Sources/mirroir-mcp/CGEventInput.swift` — CGEvent posting for pointing + keyboard
+- `Sources/mirroir-mcp/CGKeyMap.swift` — Character → macOS virtual keycode mapping
+
+### Screen Operations
+- `Sources/mirroir-mcp/ScreenDescriber.swift` — Apple Vision OCR pipeline
+- `Sources/mirroir-mcp/ScreenCapture.swift` — screencapture CLI wrapper
+- `Sources/mirroir-mcp/IconDetector.swift` — Unlabeled icon detection via pixel clustering + Vision saliency
+
+### Skill System
+- `Sources/mirroir-mcp/SkillMdParser.swift` — SKILL.md front matter + body parser
+- `Sources/mirroir-mcp/SkillParser.swift` — YAML skill parser
+- `Sources/mirroir-mcp/SkillMdGenerator.swift` — Generate SKILL.md from explored screens
+- `Sources/mirroir-mcp/CompiledSkill.swift` — Compiled skill data model
+- `Sources/mirroir-mcp/CompiledStepExecutor.swift` — Zero-OCR replay engine
+
+### Autonomous Exploration
+- `Sources/mirroir-mcp/DFSExplorer.swift` — Graph-based DFS with backtracking
+- `Sources/mirroir-mcp/NavigationGraph.swift` — Directed screen graph (nodes=screens, edges=transitions)
+- `Sources/mirroir-mcp/ExplorationSession.swift` — Thread-safe session accumulator
+- `Sources/mirroir-mcp/MobileAppStrategy.swift` — iOS app exploration heuristics
+
+### Shared Library
+- `Sources/HelperLib/MCPProtocol.swift` — JSON-RPC 2.0 types and MCP tool definitions
+- `Sources/HelperLib/AppleScriptKeyMap.swift` — macOS virtual key codes
+- `Sources/HelperLib/TimingConstants.swift` — Named timing delays and configuration
+- `Sources/HelperLib/PermissionPolicy.swift` — Fail-closed permission engine
+
+## Configuration
+
+Timing defaults can be overridden via `settings.json` or environment variables:
+
+```json
+// .mirroir-mcp/settings.json
+{
+  "keystrokeDelayUs": 20000,
+  "clickHoldUs": 100000
+}
+```
+
+Environment variable form: `MIRROIR_KEYSTROKE_DELAY_US`.
+
+Multi-target configuration via `targets.json` for controlling multiple windows simultaneously.
+
+## Known Limitations
+
+- **Focus stealing**: Input tools must make iPhone Mirroring frontmost. No API exists to direct CGEvent input to background windows. Mitigate with a separate macOS Space.
+- **Clipboard paste**: iPhone Mirroring does not bridge Mac clipboard when paste is triggered programmatically. No workaround exists.
+- **Keyboard layout edge cases**: Two characters on the ISO section key cannot be typed due to macOS/iOS key mapping disagreement.
+- **iOS autocorrect**: Applied to typed text. Disable in iPhone Settings if problematic.
+
+- [Full limitations](docs/limitations.md)
+- [FAQ](docs/faq.md)
+- [Troubleshooting](docs/troubleshooting.md)
+
+## Documentation Index
+
+- [README](README.md) — Installation, examples, quick start
+- [Tools Reference](docs/tools.md) — All 31 tools with parameters
+- [Architecture](docs/architecture.md) — System diagram, CGEvent input design
+- [Security](docs/security.md) — Threat model, kill switch, recommendations
+- [Permissions](docs/permissions.md) — Fail-closed permission model
+- [Compiled Skills](docs/compiled-skills.md) — Zero-OCR skill replay
+- [Skills Marketplace](docs/skills-marketplace.md) — Skill format and authoring
+- [Testing](docs/testing.md) — FakeMirroring, CI strategy
+- [Known Limitations](docs/limitations.md) — Focus stealing, keyboard gaps
+- [FAQ](docs/faq.md) — Common questions
+- [Troubleshooting](docs/troubleshooting.md) — Debug mode, common issues
+- [Contributing](CONTRIBUTING.md) — How to add tools, commands, tests

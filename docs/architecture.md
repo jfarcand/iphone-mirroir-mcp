@@ -27,49 +27,17 @@ MCP Client (Claude Code, Cursor, Copilot, etc.)
 │           │           └──────────────────────────┘    │
 │  ┌────────┴────────┐  ┌──────────────────────────┐    │
 │  │ InputSimulation │  │ ScreenDescriber          │    │
-│  │ coordinate map  │  │ Vision OCR pipeline      │    │
-│  │ focus mgmt      │  │ TapPointCalculator       │    │
+│  │ CGEvent posting │  │ Vision OCR pipeline      │    │
+│  │ cursor mgmt     │  │ TapPointCalculator       │    │
 │  │ layout xlate    │  │ GridOverlay              │    │
 │  └────────┬────────┘  └──────────────────────────┘    │
 │           │                                           │
 │  ┌────────┴────────┐                                  │
-│  │ HelperClient    │                                  │
-│  │ Unix socket IPC │                                  │
+│  │ CGEventInput    │                                  │
+│  │ pointing + keys │                                  │
 │  └────────┬────────┘                                  │
 └───────────┼───────────────────────────────────────────┘
-            │  /var/run/mirroir-helper.sock
-            │  newline-delimited JSON
-            ▼
-┌───────────────────────────────────────────────────────┐
-│  mirroir-helper  (root LaunchDaemon)                  │
-│                                                       │
-│  ┌─────────────────┐  ┌──────────────────────────┐    │
-│  │ CommandServer   │  │ CommandHandlers          │    │
-│  │ Unix stream     │──│ click, type, swipe,      │    │
-│  │ socket listener │  │ drag, press_key, move,   │    │
-│  └─────────────────┘  │ shake, long_press,       │    │
-│                       │ double_tap, status        │    │
-│                       └──────────┬───────────────┘    │
-│  ┌─────────────────┐             │                    │
-│  │ CursorSync      │◄────────────┘                    │
-│  │ save/warp/nudge │                                  │
-│  │ /restore cycle  │                                  │
-│  └────────┬────────┘                                  │
-│           │                                           │
-│  ┌────────┴────────┐                                  │
-│  │ KarabinerClient │                                  │
-│  │ DriverKit vHID  │                                  │
-│  │ wire protocol   │                                  │
-│  └────────┬────────┘                                  │
-└───────────┼───────────────────────────────────────────┘
-            │  Unix DGRAM socket
-            │  binary framed protocol
-            ▼
-┌───────────────────────────────────────────────────────┐
-│  Karabiner DriverKit Extension (vhidd_server)         │
-│  /Library/Application Support/org.pqrs/tmp/rootonly/  │
-└───────────┬───────────────────────────────────────────┘
-            │
+            │  CGEvent API
             ▼
 ┌───────────────────────────────────────────────────────┐
 │  macOS HID System                                     │
@@ -82,14 +50,11 @@ MCP Client (Claude Code, Cursor, Copilot, etc.)
 └───────────────────────────────────────────────────────┘
 ```
 
-## Why Two Processes?
+## Single Process
 
-| Process | Runs As | Why |
-|---------|---------|-----|
-| `mirroir-mcp` | Current user | Window discovery, screenshots, OCR, app activation — all user-level APIs |
-| `mirroir-helper` | root | Karabiner's virtual HID sockets live in a root-only directory; cursor warping requires CGEvent privileges |
+mirroir-mcp runs as a single user-level process. All input (pointing and keyboard) is delivered via the macOS CGEvent API — no helper daemon, no root privileges, no DriverKit extensions.
 
-`HelperLib` is a shared Swift library linked into both executables and all test targets. It contains key mappings, permission logic, timing config, packed binary structs, and protocol types.
+`HelperLib` is a shared Swift library linked into the main executable and all test targets. It contains key mappings, permission logic, timing config, and protocol types.
 
 ## Tool Registration
 
@@ -113,15 +78,15 @@ MCP Client (Claude Code, Cursor, Copilot, etc.)
 ### Touch (tap, long_press, double_tap)
 
 ```
-MCP Client → MCPServer → InputSimulation → HelperClient
-  → CommandServer → CursorSync → KarabinerClient → vhidd_server → macOS HID → iPhone Mirroring
+MCP Client → MCPServer → InputSimulation → CGEventInput
+  → CGWarpMouseCursorPosition → CGEvent.post(tap: .cghidEventTap) → macOS HID → iPhone Mirroring
 ```
 
 ### Keyboard (type_text, press_key)
 
 ```
 MCP Client → MCPServer → InputSimulation → ensureFrontmost() (AppleScript)
-  → HelperClient → CommandServer → KarabinerClient.typeKey() → vhidd_server → macOS HID → iPhone Mirroring
+  → CGEventInput.postKey() → CGEvent.post(tap: .cghidEventTap) → macOS HID → iPhone Mirroring
 ```
 
 ### Navigation (press_home, press_app_switcher, spotlight)
@@ -130,7 +95,7 @@ MCP Client → MCPServer → InputSimulation → ensureFrontmost() (AppleScript)
 MCP Client → MCPServer → MirroringBridge.triggerMenuAction() → AXUIElement Menu Bar → iPhone Mirroring
 ```
 
-No helper daemon involved — direct Accessibility API call.
+Direct Accessibility API call — no CGEvent involved.
 
 ### Observation (screenshot, describe_screen, status)
 
@@ -138,7 +103,7 @@ No helper daemon involved — direct Accessibility API call.
 MCP Client → MCPServer → Bridge / Capture / Describer → AX API / screencapture / Vision OCR → Result
 ```
 
-No helper daemon involved.
+No input simulation involved.
 
 ## CursorSync Pattern
 
@@ -149,13 +114,10 @@ Every touch command follows this sequence:
 2. Disconnect → CGAssociateMouseAndMouseCursorPosition(false)
 3. Warp      → CGWarpMouseCursorPosition(target)
 4. Settle    → usleep(10ms)
-5. Nudge     → Karabiner pointing: +1 right, -1 left
-6. Execute   → The actual input operation
-7. Restore   → CGWarpMouseCursorPosition(savedPosition)
-8. Reconnect → CGAssociateMouseAndMouseCursorPosition(true)
+5. Execute   → CGEvent click/drag/scroll via CGEventInput
+6. Restore   → CGWarpMouseCursorPosition(savedPosition)
+7. Reconnect → CGAssociateMouseAndMouseCursorPosition(true)
 ```
-
-**Why nudge?** `CGWarpMouseCursorPosition` repositions the cursor but doesn't generate HID events. The nudge forces Karabiner's virtual pointing device to sync its internal position with the warped cursor.
 
 **Why disconnect?** Physical mouse movement during the sequence would interfere with target coordinates.
 
@@ -165,7 +127,7 @@ Every touch command follows this sequence:
 |---|---|---|
 | **macOS Input** | Scroll wheel events | Click-drag (button held) |
 | **iOS Gesture** | Scroll / page swipe | Touch-and-drag (rearranging, sliders) |
-| **Implementation** | `PointingInput.verticalWheel` | `PointingInput.buttons = 0x01` + interpolated movement |
+| **Implementation** | `CGEvent` scroll wheel | `CGEvent` mouseDown + mouseDragged + mouseUp |
 
 Getting them confused causes: swipe where drag intended → page scrolls instead of icon rearranging.
 
@@ -218,15 +180,3 @@ JSON-RPC 2.0 over line-delimited stdin/stdout. Supports protocol versions `2025-
 | `tools/list` | Returns visible tools filtered by permission policy |
 | `tools/call` | Permission check → tool handler dispatch |
 | `ping` | Returns `{}` |
-
-## Karabiner Wire Protocol
-
-Communicates with Karabiner's DriverKit daemon via Unix datagram sockets.
-
-| Struct | Size | Purpose |
-|--------|------|---------|
-| `KeyboardParameters` | 24 bytes | Device identity (vendorID=0x05ac, productID=0x0250) |
-| `KeyboardInput` | 67 bytes | Modifier bitmask + 32 key slots (u16 HID keycodes) |
-| `PointingInput` | 8 bytes | Buttons, x/y movement (i8), scroll wheels (i8) |
-
-Heartbeats sent every 3s. Server socket monitored for daemon restarts.

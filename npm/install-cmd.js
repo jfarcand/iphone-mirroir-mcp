@@ -1,99 +1,14 @@
 #!/usr/bin/env node
 // ABOUTME: Interactive one-command installer for mirroir-mcp.
-// ABOUTME: Handles standalone DriverKit install (or reuses Karabiner-Elements), helper daemon setup, and MCP client configuration.
+// ABOUTME: Builds from source if in a checkout, then configures the MCP client.
 
-const { execSync, execFileSync, spawnSync } = require("child_process");
+const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const readline = require("readline");
 
-const HELPER_SOCK = "/var/run/mirroir-helper.sock";
-const KARABINER_APP = "/Applications/Karabiner-Elements.app";
-const DRIVERKIT_MANAGER = "/Applications/.Karabiner-VirtualHIDDevice-Manager.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Manager";
-const DRIVERKIT_VERSION = "6.10.0";
-const DRIVERKIT_PKG = `Karabiner-DriverKit-VirtualHIDDevice-${DRIVERKIT_VERSION}.pkg`;
-const DRIVERKIT_URL = `https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice/releases/download/v${DRIVERKIT_VERSION}/${DRIVERKIT_PKG}`;
-const KARABINER_SOCK_DIR = "/Library/Application Support/org.pqrs/tmp/rootonly/vhidd_server";
-const SETUP_SCRIPT = path.join(__dirname, "setup.js");
 const BIN_DIR = path.join(__dirname, "bin");
 const REPO_ROOT = path.dirname(__dirname);
-
-// --- DriverKit ---
-
-function hasVhiddSocket() {
-  try {
-    const result = spawnSync("sudo", ["bash", "-c",
-      `ls '${KARABINER_SOCK_DIR}'/*.sock`
-    ], { timeout: 5000, stdio: ["pipe", "pipe", "pipe"] });
-    return result.status === 0;
-  } catch (checkErr) {
-    return false;
-  }
-}
-
-function ensureDriverKit() {
-  if (hasVhiddSocket()) {
-    const provider = fs.existsSync(KARABINER_APP) ? "Karabiner-Elements" : "standalone DriverKit";
-    console.log(`[1/3] DriverKit virtual HID is running (${provider}).`);
-    return;
-  }
-
-  if (fs.existsSync(KARABINER_APP)) {
-    console.log("[1/3] Karabiner-Elements is installed but the DriverKit extension is not running.");
-    console.log("  Approve the extension in System Settings:");
-    console.log("  System Settings > General > Login Items & Extensions");
-    console.log("  Enable all toggles under Karabiner-Elements");
-    console.log("");
-    console.log("Press Enter once you have approved the extension...");
-    spawnSync("bash", ["-c", "read -r"], { stdio: "inherit" });
-    return;
-  }
-
-  if (fs.existsSync(DRIVERKIT_MANAGER)) {
-    console.log("[1/3] Standalone DriverKit is installed but the extension is not running.");
-    console.log("  Activating...");
-    try {
-      execSync(`"${DRIVERKIT_MANAGER}" activate`, { stdio: "inherit" });
-    } catch (activateErr) {
-      // Activation may fail if already activated — continue
-    }
-    console.log("  Approve the extension in System Settings > General > Login Items & Extensions.");
-    console.log("");
-    console.log("Press Enter once you have approved the extension...");
-    spawnSync("bash", ["-c", "read -r"], { stdio: "inherit" });
-    return;
-  }
-
-  console.log("[1/3] Installing standalone Karabiner DriverKit package...");
-
-  const tmpPkg = `/tmp/${DRIVERKIT_PKG}`;
-  try {
-    execSync(`curl -fSL -o "${tmpPkg}" "${DRIVERKIT_URL}"`, { stdio: "inherit" });
-    execSync(`sudo installer -pkg "${tmpPkg}" -target /`, { stdio: "inherit" });
-    execSync(`rm -f "${tmpPkg}"`, { stdio: "ignore" });
-  } catch (installErr) {
-    console.error("Failed to install DriverKit package.");
-    console.error(`Download manually from: https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice/releases`);
-    process.exit(1);
-  }
-
-  console.log("");
-  console.log("Activating DriverKit system extension...");
-  try {
-    execSync(`"${DRIVERKIT_MANAGER}" activate`, { stdio: "inherit" });
-  } catch (activateErr) {
-    // Continue — user will approve in System Settings
-  }
-
-  console.log("");
-  console.log("Approve the system extension in System Settings:");
-  console.log("  System Settings > General > Login Items & Extensions");
-  console.log("  Enable the Karabiner-DriverKit-VirtualHIDDevice toggle");
-  console.log("");
-  console.log("Press Enter once you have approved the extension...");
-
-  spawnSync("bash", ["-c", "read -r"], { stdio: "inherit" });
-}
 
 // --- Source Build ---
 
@@ -106,56 +21,10 @@ function buildFromSource() {
   execSync("swift build -c release", { cwd: REPO_ROOT, stdio: "inherit" });
 
   const releaseBin = path.join(REPO_ROOT, ".build", "release");
-  const plistSrc = path.join(REPO_ROOT, "Resources", "com.jfarcand.mirroir-helper.plist");
 
   fs.mkdirSync(BIN_DIR, { recursive: true });
-  fs.copyFileSync(path.join(releaseBin, "mirroir-helper"), path.join(BIN_DIR, "mirroir-helper"));
-  fs.chmodSync(path.join(BIN_DIR, "mirroir-helper"), 0o755);
   fs.copyFileSync(path.join(releaseBin, "mirroir-mcp"), path.join(BIN_DIR, "mirroir-mcp-native"));
   fs.chmodSync(path.join(BIN_DIR, "mirroir-mcp-native"), 0o755);
-  fs.copyFileSync(plistSrc, path.join(BIN_DIR, "com.jfarcand.mirroir-helper.plist"));
-}
-
-// --- Helper Daemon ---
-
-function isHelperRunning() {
-  if (!fs.existsSync(HELPER_SOCK)) return false;
-  try {
-    const result = spawnSync("bash", ["-c",
-      `echo '{"action":"status"}' | nc -U ${HELPER_SOCK} 2>/dev/null`
-    ], { timeout: 3000 });
-    const output = result.stdout ? result.stdout.toString() : "";
-    return output.includes('"ok"');
-  } catch (socketErr) {
-    return false;
-  }
-}
-
-function ensureHelper() {
-  if (isHelperRunning()) {
-    console.log("[2/3] Helper daemon is running.");
-    return;
-  }
-
-  console.log("[2/3] Helper daemon not running. Setting up...");
-
-  // If helper binary is missing and we're in a source checkout, build first
-  const helperBin = path.join(BIN_DIR, "mirroir-helper");
-  if (!fs.existsSync(helperBin) && isSourceCheckout()) {
-    buildFromSource();
-  }
-
-  if (!fs.existsSync(SETUP_SCRIPT)) {
-    console.error("Setup script not found. Run: npm rebuild mirroir-mcp");
-    process.exit(1);
-  }
-
-  try {
-    execFileSync("node", [SETUP_SCRIPT], { stdio: "inherit" });
-  } catch (setupErr) {
-    console.error("Helper setup failed. See https://github.com/jfarcand/mirroir-mcp for manual install.");
-    process.exit(1);
-  }
 }
 
 // --- MCP Client Configuration ---
@@ -174,7 +43,7 @@ function ask(question) {
 }
 
 async function configureMcpClient() {
-  console.log("[3/3] Configure MCP client");
+  console.log("[1/1] Configure MCP client");
   console.log("");
   console.log("  1) Claude Code");
   console.log("  2) Cursor");
@@ -377,8 +246,12 @@ async function main() {
   console.log("=== mirroir-mcp installer ===");
   console.log("");
 
-  ensureDriverKit();
-  ensureHelper();
+  // Build from source if in a development checkout
+  const nativeBin = path.join(BIN_DIR, "mirroir-mcp-native");
+  if (!fs.existsSync(nativeBin) && isSourceCheckout()) {
+    buildFromSource();
+  }
+
   await configureMcpClient();
 
   console.log("");

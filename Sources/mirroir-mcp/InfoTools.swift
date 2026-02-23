@@ -50,8 +50,8 @@ extension MirroirMCP {
             name: "check_health",
             description: """
                 Run a comprehensive health check of the iPhone Mirroring setup. \
-                Checks mirroring window state, helper daemon connectivity, \
-                Karabiner virtual HID readiness, and screen capture availability. \
+                Checks mirroring window state, screen capture availability, \
+                and accessibility permissions. \
                 Use this to diagnose setup issues in a single call.
                 """,
             inputSchema: [
@@ -62,7 +62,6 @@ extension MirroirMCP {
                 let (ctx, err) = registry.resolveForTool(args)
                 guard let ctx else { return err! }
                 let bridge = ctx.bridge
-                let input = ctx.input
                 let capture = ctx.capture
 
                 var checks: [String] = []
@@ -97,26 +96,7 @@ extension MirroirMCP {
                     allOk = false
                 }
 
-                // 3. Helper daemon
-                if let status = input.helperStatus() {
-                    let kb = status["keyboard_ready"] as? Bool ?? false
-                    let pt = status["pointing_ready"] as? Bool ?? false
-                    if kb && pt {
-                        checks.append("[ok] Helper daemon connected (keyboard + pointing ready)")
-                    } else {
-                        checks.append(
-                            "[WARN] Helper connected but devices not ready " +
-                            "(keyboard=\(kb), pointing=\(pt))")
-                        allOk = false
-                    }
-                } else {
-                    checks.append(
-                        "[WARN] Helper daemon not reachable — " +
-                        "type/press_key unavailable. Tap, swipe, drag still work. " +
-                        "Run 'npx mirroir-mcp setup' to enable keyboard input.")
-                }
-
-                // 4. Screen capture
+                // 3. Screen capture
                 let screenshot = capture.captureBase64()
                 if screenshot != nil {
                     checks.append("[ok] Screen capture working")
@@ -137,9 +117,8 @@ extension MirroirMCP {
         server.registerTool(MCPToolDefinition(
             name: "status",
             description: """
-                Get the current status of the iPhone Mirroring connection and Karabiner helper. \
-                Returns whether the app is running, connected, paused, or has no window. \
-                Also reports whether the Karabiner helper daemon is available for input.
+                Get the current status of the iPhone Mirroring connection. \
+                Returns whether the app is running, connected, paused, or has no window.
                 """,
             inputSchema: [
                 "type": .string("object"),
@@ -149,7 +128,6 @@ extension MirroirMCP {
                 let (ctx, err) = registry.resolveForTool(args)
                 guard let ctx else { return err! }
                 let bridge = ctx.bridge
-                let input = ctx.input
 
                 let state = bridge.getState()
                 let mirroringStatus: String
@@ -170,17 +148,7 @@ extension MirroirMCP {
                     mirroringStatus = "No window — app is running but no mirroring window found"
                 }
 
-                // Check Karabiner helper status
-                let helperStatusMsg: String
-                if let status = input.helperStatus() {
-                    let kb = status["keyboard_ready"] as? Bool ?? false
-                    let pt = status["pointing_ready"] as? Bool ?? false
-                    helperStatusMsg = "Helper: connected (keyboard=\(kb), pointing=\(pt))"
-                } else {
-                    helperStatusMsg = "Helper: not running (type/press_key unavailable — tap/swipe/drag work without it)"
-                }
-
-                return .text("\(mirroringStatus)\n\(helperStatusMsg)")
+                return .text(mirroringStatus)
             }
         ))
     }

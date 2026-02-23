@@ -32,9 +32,9 @@ MIRROIR_BUNDLE_ID=com.jfarcand.FakeMirroring
 MIRROIR_PROCESS_NAME=FakeMirroring
 ```
 
-When unset, they default to `com.apple.ScreenContinuity` and `iPhone Mirroring` — the real app. This is the same `EnvConfig` system used for all runtime configuration (timing constants, HID parameters, etc.), so there is no test-only code path in production.
+When unset, they default to `com.apple.ScreenContinuity` and `iPhone Mirroring` — the real app. This is the same `EnvConfig` system used for all runtime configuration (timing constants, keyboard parameters, etc.), so there is no test-only code path in production.
 
-**Ref:** `Sources/HelperLib/EnvConfig.swift` (lines 129–135)
+**Ref:** `Sources/HelperLib/EnvConfig.swift`
 
 ### What FakeMirroring Renders
 
@@ -85,9 +85,8 @@ Run without any external dependencies. Three test targets:
 
 | Target | Tests | What It Validates |
 |--------|-------|-------------------|
-| `HelperLibTests` | HID key maps, layout mapper, permission policy, tap point calculator, grid overlay, MCP protocol types | Shared library logic |
+| `HelperLibTests` | Key maps, layout mapper, permission policy, tap point calculator, grid overlay, MCP protocol types | Shared library logic |
 | `MCPServerTests` | JSON-RPC dispatch, tool registration, permission enforcement, protocol negotiation | MCP server behavior using protocol-based test doubles |
-| `HelperDaemonTests` | Command parsing, response formatting | Daemon command handling |
 | `TestRunnerTests` | Skill parsing, step execution, element matching, YAML generation, event classification, JUnit/console reporters | Test runner (`mirroir test`) and recorder (`mirroir record`) |
 
 Unit tests use **protocol-based dependency injection** — five protocols (`MirroringBridging`, `InputProviding`, `ScreenCapturing`, `ScreenRecording`, `ScreenDescribing`) have stub implementations for test isolation. See `Tests/MCPServerTests/TestDoubles.swift`.
@@ -136,21 +135,19 @@ Three parallel jobs test each installation method end-to-end on `macos-15` runne
 Tests the one-line installer script that users run after cloning.
 
 ```
-install standalone DriverKit pkg → fake socket → ./mirroir.sh → build FakeMirroring → launch →
+./mirroir.sh → build FakeMirroring → launch →
   swift test --filter IntegrationTests (8 tests) →
   MCP initialize → MCP tools/call screenshot
 ```
-
-**CI accommodation:** `mirroir.sh` normally waits for the DriverKit extension (120s timeout). In CI, a fake socket file is created to bypass this wait — the daemon starts but Karabiner HID is unavailable (expected).
 
 ### Job 2: `homebrew-install` — Local Homebrew formula
 
 Tests the Homebrew installation path using a local tap.
 
 ```
-install standalone DriverKit pkg → git archive tarball → brew tap-new local/test →
+git archive tarball → brew tap-new local/test →
   generate formula with file:// URL → brew install local/test/mirroir-mcp →
-  sudo brew services start → build FakeMirroring → launch →
+  build FakeMirroring → launch →
   swift test --filter IntegrationTests (8 tests) →
   MCP initialize → MCP tools/call screenshot
 ```
@@ -160,8 +157,8 @@ install standalone DriverKit pkg → git archive tarball → brew tap-new local/
 Tests the npm/npx installation path.
 
 ```
-install standalone DriverKit pkg → fake socket → swift build → stage binaries into npm/bin/ →
-  node setup.js (daemon install) → build FakeMirroring → launch →
+swift build → stage binary into npm/bin/ →
+  build FakeMirroring → launch →
   swift test --filter IntegrationTests (8 tests) →
   MCP initialize → MCP tools/call screenshot
 ```
@@ -172,7 +169,6 @@ install standalone DriverKit pkg → fake socket → swift build → stage binar
 |-----------|---------------|-----------------|-------------|
 | Binary builds from source | `mirroir.sh` | Homebrew formula `swift build` | Direct `swift build` |
 | Binary location correct | `.build/release/` | `/opt/homebrew/bin/` | `npm/bin/` |
-| Daemon installs and starts | `launchctl bootstrap` | `brew services start` | `node setup.js` |
 | Process discovery works | Integration test | Integration test | Integration test |
 | AX window access works | Integration test | Integration test | Integration test |
 | Screenshot capture works | Integration test + MCP | Integration test + MCP | Integration test + MCP |

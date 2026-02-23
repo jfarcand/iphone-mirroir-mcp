@@ -68,11 +68,6 @@ final class StubInput: InputProviding, @unchecked Sendable {
     var pressKeyResult = TypeResult(success: true, warning: nil, error: nil)
     var launchAppResult: String?
     var openURLResult: String?
-    var statusDict: [String: Any]? = [
-        "ok": true, "keyboard_ready": true, "pointing_ready": true,
-    ]
-    var helperAvailable = true
-
     var tapCalls: [(x: Double, y: Double)] = []
     var swipeCalls: [(fromX: Double, fromY: Double, toX: Double, toY: Double)] = []
     var dragCalls: [(fromX: Double, fromY: Double, toX: Double, toY: Double)] = []
@@ -102,8 +97,6 @@ final class StubInput: InputProviding, @unchecked Sendable {
         return launchAppResult
     }
     func openURL(_ url: String) -> String? { openURLResult }
-    func helperStatus() -> [String: Any]? { statusDict }
-    var isHelperAvailable: Bool { helperAvailable }
 }
 
 // MARK: - StubCapture

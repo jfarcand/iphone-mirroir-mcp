@@ -43,7 +43,7 @@ or via [Homebrew](https://tap.mirroir.dev):
 brew tap jfarcand/tap && brew install mirroir-mcp
 ```
 
-After install, approve the DriverKit system extension if prompted: **System Settings > General > Login Items & Extensions**. The first time you take a screenshot, macOS will prompt for **Screen Recording** and **Accessibility** permissions. Grant both.
+The first time you take a screenshot, macOS will prompt for **Screen Recording** and **Accessibility** permissions. Grant both.
 
 <details>
 <summary>Per-client setup</summary>
@@ -97,14 +97,6 @@ Or add to `~/.codex/config.toml`:
 [mcp_servers.mirroir]
 command = "npx"
 args = ["-y", "mirroir-mcp"]
-```
-
-#### Helper daemon only
-
-If your MCP client is already configured but the helper daemon isn't running:
-
-```bash
-npx mirroir-mcp setup
 ```
 
 </details>
@@ -315,18 +307,15 @@ npx -y mirroir-mcp install
 
 # Homebrew
 brew upgrade mirroir-mcp
-sudo brew services restart mirroir-mcp
 
 # From source
-git pull
-sudo ./scripts/reinstall-helper.sh
+git pull && swift build -c release
 ```
 
 ## Uninstall
 
 ```bash
 # Homebrew
-sudo brew services stop mirroir-mcp
 brew uninstall mirroir-mcp
 
 # From source
@@ -352,7 +341,7 @@ Environment variables also work: `MIRROIR_KEYSTROKE_DELAY_US`. See [`TimingConst
 | | |
 |---|---|
 | [Tools Reference](docs/tools.md) | All 31 tools, parameters, and input workflows |
-| [FAQ](docs/faq.md) | Security, focus stealing, DriverKit, keyboard layouts |
+| [FAQ](docs/faq.md) | Security, focus stealing, keyboard layouts |
 | [Security](docs/security.md) | Threat model, kill switch, and recommendations |
 | [Permissions](docs/permissions.md) | Fail-closed permission model and config file |
 | [Architecture](docs/architecture.md) | System diagram and how input reaches the iPhone |

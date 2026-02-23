@@ -10,15 +10,11 @@ The MCP server only works while iPhone Mirroring is active. Closing the iPhone M
 
 ## Network Exposure
 
-The helper daemon listens on a **local Unix socket only** (`/var/run/mirroir-helper.sock`). It does not open any network ports. Remote access is not possible unless the socket is explicitly forwarded.
+The MCP server communicates exclusively via stdin/stdout with the MCP client. It does not open any network ports or listen on any sockets. Remote access is not possible.
 
-## Root Daemon
+## No Root Required
 
-The helper daemon runs as root because Karabiner's HID sockets require root access.
-
-**Socket ownership:** The socket at `/var/run/mirroir-helper.sock` is owned by the console user (the person physically logged in at the Mac) with mode `0600`. Only that user and root can connect. When no console user is detected (e.g. at the loginwindow), the socket is set to mode `0000` (fail-closed — no access until someone logs in).
-
-**Peer authentication:** On each incoming connection, the daemon calls `getpeereid()` to verify the connecting process's UID. Only the console user and root (uid 0) are allowed. All other connections are rejected and closed. The console UID is re-resolved on each connection to handle fast user switching.
+The MCP server runs as a regular user process. All input is delivered via the macOS CGEvent API, which requires only Accessibility permissions — no root privileges, no daemons, no kernel extensions.
 
 ## Fail-Closed Permissions
 

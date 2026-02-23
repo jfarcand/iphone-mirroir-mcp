@@ -94,8 +94,6 @@ final class DFSExplorerTests: XCTestCase {
 
         func launchApp(name: String) -> String? { nil }
         func openURL(_ url: String) -> String? { nil }
-        func helperStatus() -> [String: Any]? { nil }
-        var isHelperAvailable: Bool { true }
 
         var taps: [(x: Double, y: Double)] {
             lock.lock()

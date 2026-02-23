@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ABOUTME: Thin wrapper that launches the native MCP server binary.
-// ABOUTME: Routes "setup" and "install" subcommands to their respective scripts.
+// ABOUTME: Routes "install" subcommand to the interactive MCP client configuration script.
 
 const { execFileSync } = require("child_process");
 const fs = require("fs");
@@ -9,10 +9,9 @@ const path = require("path");
 const binDir = __dirname;
 const pkgDir = path.dirname(binDir);
 const binary = path.join(binDir, "mirroir-mcp-native");
-const setupScript = path.join(pkgDir, "setup.js");
 const installScript = path.join(pkgDir, "install-cmd.js");
 
-// Handle "install" subcommand — full interactive installer (Karabiner + helper + MCP client)
+// Handle "install" subcommand — interactive MCP client configuration
 if (process.argv[2] === "install") {
   if (!fs.existsSync(installScript)) {
     console.error("Install script not found. Run: npm rebuild mirroir-mcp");
@@ -27,24 +26,7 @@ if (process.argv[2] === "install") {
   process.exit(0);
 }
 
-// Handle "setup" subcommand — interactive helper daemon installation
-if (process.argv[2] === "setup") {
-  if (!fs.existsSync(setupScript)) {
-    console.error("Setup script not found. Run: npm rebuild mirroir-mcp");
-    process.exit(1);
-  }
-  try {
-    execFileSync("node", [setupScript], { stdio: "inherit" });
-  } catch (e) {
-    console.error("Setup failed. See https://github.com/jfarcand/mirroir-mcp for manual install.");
-    process.exit(1);
-  }
-  process.exit(0);
-}
-
-// Run the MCP server — starts regardless of helper daemon state.
-// If the helper isn't running, tools return helpful error messages
-// telling the user to run: npx mirroir-mcp setup
+// Run the MCP server
 try {
   execFileSync(binary, process.argv.slice(2), { stdio: "inherit" });
 } catch (e) {

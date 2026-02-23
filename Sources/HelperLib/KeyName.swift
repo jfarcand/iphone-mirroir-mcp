@@ -1,13 +1,12 @@
 // Copyright 2026 jfarcand@apache.org
 // Licensed under the Apache License, Version 2.0
 //
-// ABOUTME: Shared enum of special key names used by both AppleScriptKeyMap and HIDSpecialKeyMap.
-// ABOUTME: Provides compile-time safety ensuring both maps handle the same set of keys.
+// ABOUTME: Shared enum of special key names for keyboard operations.
+// ABOUTME: Used by AppleScriptKeyMap and CGEvent-based key press handling.
 
 /// Canonical names for special (non-printable) keyboard keys.
-/// Both `AppleScriptKeyMap` (macOS virtual codes) and `HIDSpecialKeyMap` (USB HID codes)
-/// use this enum as their key type, ensuring that adding a new key in one map
-/// requires updating the other — a compile-time guarantee that the key sets stay in sync.
+/// Used as the key type for `AppleScriptKeyMap` (macOS virtual key codes)
+/// and referenced by CGEvent key press operations.
 public enum KeyName: String, CaseIterable, Sendable {
     case `return` = "return"
     case escape = "escape"

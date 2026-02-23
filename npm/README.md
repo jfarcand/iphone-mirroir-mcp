@@ -7,7 +7,6 @@ This npm package downloads the pre-built macOS binary from [GitHub releases](htt
 ## Requirements
 
 - macOS 15+ with iPhone Mirroring
-- [Karabiner-Elements](https://karabiner-elements.pqrs.org/) installed and activated
 - iPhone connected via iPhone Mirroring
 
 ## Install
@@ -28,7 +27,7 @@ Then add to your MCP client config:
 }
 ```
 
-See the [full documentation](https://github.com/jfarcand/mirroir-mcp) for setup instructions including the Karabiner helper daemon.
+See the [full documentation](https://github.com/jfarcand/mirroir-mcp) for details.
 
 ## License
 

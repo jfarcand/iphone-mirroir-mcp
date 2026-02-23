@@ -77,7 +77,7 @@ final class InputSimulationLogicTests: XCTestCase {
     func testBuildTypeSegmentsAllHID() {
         let segments = simulation.buildTypeSegments("hello")
         XCTAssertEqual(segments.count, 1)
-        XCTAssertEqual(segments.first?.method, .hid)
+        XCTAssertEqual(segments.first?.method, .keyEvent)
         XCTAssertEqual(segments.first?.text, "hello")
     }
 
@@ -89,18 +89,18 @@ final class InputSimulationLogicTests: XCTestCase {
     // MARK: - buildTypeSegments with Accented Characters
 
     func testBuildTypeSegmentsCafeAllHID() {
-        // "café" — all characters (c, a, f, é) have HID mappings now
+        // "café" — all characters (c, a, f, é) have key mappings now
         let segments = simulation.buildTypeSegments("café")
         XCTAssertEqual(segments.count, 1)
-        XCTAssertEqual(segments.first?.method, .hid)
+        XCTAssertEqual(segments.first?.method, .keyEvent)
         XCTAssertEqual(segments.first?.text, "café")
     }
 
     func testBuildTypeSegmentsResumeAllHID() {
-        // "résumé" — all characters have HID mappings via dead-key sequences
+        // "résumé" — all characters have key mappings via dead-key sequences
         let segments = simulation.buildTypeSegments("résumé")
         XCTAssertEqual(segments.count, 1)
-        XCTAssertEqual(segments.first?.method, .hid)
+        XCTAssertEqual(segments.first?.method, .keyEvent)
         XCTAssertEqual(segments.first?.text, "résumé")
     }
 
@@ -108,9 +108,9 @@ final class InputSimulationLogicTests: XCTestCase {
         // "résumé 😀" — accented chars are HID, emoji is paste
         let segments = simulation.buildTypeSegments("résumé 😀")
         XCTAssertEqual(segments.count, 2)
-        XCTAssertEqual(segments[0].method, .hid)
+        XCTAssertEqual(segments[0].method, .keyEvent)
         XCTAssertEqual(segments[0].text, "résumé ")
-        XCTAssertEqual(segments[1].method, .paste)
+        XCTAssertEqual(segments[1].method, .skip)
         XCTAssertEqual(segments[1].text, "😀")
     }
 
@@ -118,7 +118,7 @@ final class InputSimulationLogicTests: XCTestCase {
         // "naïve" — ï is in the umlaut dead-key family
         let segments = simulation.buildTypeSegments("naïve")
         XCTAssertEqual(segments.count, 1)
-        XCTAssertEqual(segments.first?.method, .hid)
+        XCTAssertEqual(segments.first?.method, .keyEvent)
         XCTAssertEqual(segments.first?.text, "naïve")
     }
 
@@ -126,7 +126,7 @@ final class InputSimulationLogicTests: XCTestCase {
         // "garçon" — ç is a direct Option+c character
         let segments = simulation.buildTypeSegments("garçon")
         XCTAssertEqual(segments.count, 1)
-        XCTAssertEqual(segments.first?.method, .hid)
+        XCTAssertEqual(segments.first?.method, .keyEvent)
         XCTAssertEqual(segments.first?.text, "garçon")
     }
 }
