@@ -134,12 +134,22 @@ final class HelperClient: Sendable {
     }
 
     /// Get an error message explaining that the helper is not available.
+    /// Checks the socket path to provide targeted diagnostic advice.
     var unavailableMessage: String {
+        let socketExists = access(socketPath, F_OK) == 0
+        if socketExists {
+            return """
+                Helper daemon socket exists but not responding. Try:\n\
+                  sudo launchctl kickstart -k system/com.jfarcand.mirroir-helper\n\
+                Type and press_key require the helper daemon.\n\
+                Tap, swipe, drag, screenshots, and menu actions work without it.
+                """
+        }
         return """
-            Helper daemon not running. Tap, type, and swipe require the helper daemon.\n\
-            Run this in your terminal to complete setup:\n\
+            Helper daemon not installed. Run this in your terminal to complete setup:\n\
               npx mirroir-mcp setup\n\
-            Screenshots and menu actions (Home, Spotlight, App Switcher) still work without it.
+            Type and press_key require the helper daemon.\n\
+            Tap, swipe, drag, screenshots, and menu actions work without it.
             """
     }
 

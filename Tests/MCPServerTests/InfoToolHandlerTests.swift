@@ -162,7 +162,8 @@ final class InfoToolHandlerTests: XCTestCase {
         input.statusDict = nil
         let response = callTool("check_health")
         let text = extractText(response)!
-        XCTAssertTrue(text.contains("[FAIL] Helper daemon not reachable"))
+        XCTAssertTrue(text.contains("[WARN] Helper daemon not reachable"))
+        XCTAssertTrue(text.contains("type/press_key unavailable"))
     }
 
     func testCheckHealthCaptureFailed() {

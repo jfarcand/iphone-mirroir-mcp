@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 //
 // ABOUTME: Simulates user input (tap, swipe, keyboard) on the iPhone Mirroring window.
-// ABOUTME: Delegates to the privileged Karabiner helper daemon for taps and swipes.
+// ABOUTME: Uses CGEvent for pointing (tap, swipe, drag) and the Karabiner helper daemon for keyboard input.
 
 import AppKit
 import Carbon
@@ -34,9 +34,10 @@ enum CursorMode: Sendable {
 /// Simulates touch and keyboard input on a target window.
 /// All coordinates are relative to the target window's content area.
 ///
-/// Requires the Karabiner helper daemon for all input operations (tap, swipe,
-/// type, press_key). Keyboard input is sent via Karabiner virtual HID to avoid
-/// the Space-switching overhead of AppleScript activation.
+/// Pointing operations (tap, swipe, drag, long press, double tap) use CGEvent
+/// mouse events posted directly into the macOS event pipeline — no helper daemon
+/// required. Keyboard operations (type, press_key, shake) use the Karabiner
+/// virtual HID via the privileged helper daemon.
 final class InputSimulation: Sendable {
     private let bridge: any WindowBridging
     let helperClient = HelperClient()
@@ -79,22 +80,30 @@ final class InputSimulation: Sendable {
         }
     }
 
-    /// Verify that iPhone Mirroring is connected and accepting input.
-    /// Returns an error message if input should be blocked, nil if safe to proceed.
+    /// Verify that the target window is connected and accepting input.
+    /// Returns a state-specific error message if input should be blocked, nil if safe to proceed.
     private func checkMirroringConnected(tag: String) -> String? {
         let state = bridge.getState()
-        guard state == .connected else {
-            DebugLog.log(tag, "ERROR: mirroring not connected (state: \(state))")
-            return "Target '\(bridge.targetName)' is not connected. Is the window visible?"
+        switch state {
+        case .connected:
+            return nil
+        case .paused:
+            DebugLog.log(tag, "ERROR: target paused")
+            return "Target '\(bridge.targetName)' is paused. Unlock iPhone or click Resume in the mirroring window."
+        case .noWindow:
+            DebugLog.log(tag, "ERROR: no window")
+            return "Target '\(bridge.targetName)' window not found. Is the app running?"
+        case .notRunning:
+            DebugLog.log(tag, "ERROR: not running")
+            return "Target '\(bridge.targetName)' is not running. Launch iPhone Mirroring first."
         }
-        return nil
     }
 
-    /// Common preamble for coordinate-based input operations.
-    /// Validates that mirroring is connected, the helper is available, the window exists,
-    /// coordinates are in bounds, then logs window state and ensures mirroring is frontmost.
+    /// Common preamble for pointing operations (tap, swipe, drag, long press, double tap).
+    /// Validates that the target is connected, the window exists, and coordinates are in bounds.
+    /// Does NOT check helper daemon availability — pointing uses CGEvent.
     /// Returns `(info, nil)` on success, or `(nil, errorMessage)` on failure.
-    private func prepareInput(tag: String, x: Double, y: Double) -> (info: WindowInfo?, error: String?) {
+    private func preparePointingInput(tag: String, x: Double, y: Double) -> (info: WindowInfo?, error: String?) {
         if let stateError = checkMirroringConnected(tag: tag) {
             return (nil, stateError)
         }
@@ -104,11 +113,6 @@ final class InputSimulation: Sendable {
             return (nil, "Target '\(bridge.targetName)' window not found")
         }
 
-        guard helperClient.isAvailable else {
-            DebugLog.log(tag, "ERROR: helper unavailable")
-            return (nil, helperClient.unavailableMessage)
-        }
-
         if let boundsError = validateBounds(x: x, y: y, info: info, tag: tag) {
             return (nil, boundsError)
         }
@@ -116,6 +120,20 @@ final class InputSimulation: Sendable {
         logWindowState(tag, info)
         ensureTargetFrontmost()
         return (info, nil)
+    }
+
+    /// Common preamble for keyboard operations (type, press_key, shake).
+    /// Validates that the target is connected AND the helper daemon is available.
+    private func prepareKeyboardInput(tag: String) -> String? {
+        if let stateError = checkMirroringConnected(tag: tag) {
+            return stateError
+        }
+
+        guard helperClient.isAvailable else {
+            DebugLog.log(tag, "ERROR: helper unavailable")
+            return helperClient.unavailableMessage
+        }
+        return nil
     }
 
     // MARK: - Cursor management
@@ -153,9 +171,9 @@ final class InputSimulation: Sendable {
     }
 
     /// Tap at a position relative to the target window.
-    /// Returns nil on success, or an error message if the helper is unavailable.
+    /// Returns nil on success, or an error message on failure.
     func tap(x: Double, y: Double, cursorMode override: CursorMode? = nil) -> String? {
-        let prep = prepareInput(tag: "tap", x: x, y: y)
+        let prep = preparePointingInput(tag: "tap", x: x, y: y)
         guard let info = prep.info else { return prep.error }
 
         let saved = saveCursor(mode: override)
@@ -165,17 +183,17 @@ final class InputSimulation: Sendable {
         let screenY = info.position.y + CGFloat(y)
         DebugLog.log("tap", "relative=(\(x),\(y)) screen=(\(Int(screenX)),\(Int(screenY)))")
 
-        let result = helperClient.click(x: Double(screenX), y: Double(screenY))
-        DebugLog.log("tap", "helperClick=\(result ? "OK" : "FAILED")")
-        return result ? nil : "Helper click failed"
+        let result = CGEventInput.click(at: CGPoint(x: screenX, y: screenY))
+        DebugLog.log("tap", "CGEvent=\(result ? "OK" : "FAILED")")
+        return result ? nil : "CGEvent click failed"
     }
 
     /// Swipe from one point to another relative to the target window.
-    /// Returns nil on success, or an error message if the helper is unavailable.
+    /// Returns nil on success, or an error message on failure.
     func swipe(fromX: Double, fromY: Double, toX: Double, toY: Double,
                durationMs: Int = 300, cursorMode override: CursorMode? = nil) -> String?
     {
-        let prep = prepareInput(tag: "swipe", x: fromX, y: fromY)
+        let prep = preparePointingInput(tag: "swipe", x: fromX, y: fromY)
         guard let info = prep.info else { return prep.error }
 
         if let boundsError = validateBounds(x: toX, y: toY, info: info, tag: "swipe") {
@@ -192,18 +210,20 @@ final class InputSimulation: Sendable {
 
         DebugLog.log("swipe", "from=(\(fromX),\(fromY))->(\(toX),\(toY)) screen=(\(Int(startX)),\(Int(startY)))->(\(Int(endX)),\(Int(endY))) duration=\(durationMs)ms")
 
-        let result = helperClient.swipe(fromX: startX, fromY: startY,
-                              toX: endX, toY: endY,
-                              durationMs: durationMs)
-        DebugLog.log("swipe", "helper=\(result ? "OK" : "FAILED")")
-        return result ? nil : "Helper swipe failed"
+        let result = CGEventInput.swipe(
+            from: CGPoint(x: startX, y: startY),
+            to: CGPoint(x: endX, y: endY),
+            durationMs: durationMs
+        )
+        DebugLog.log("swipe", "CGEvent=\(result ? "OK" : "FAILED")")
+        return result ? nil : "CGEvent swipe failed"
     }
 
     /// Long press at a position relative to the target window.
     /// Returns nil on success, or an error message on failure.
     func longPress(x: Double, y: Double, durationMs: Int = 500,
                    cursorMode override: CursorMode? = nil) -> String? {
-        let prep = prepareInput(tag: "longPress", x: x, y: y)
+        let prep = preparePointingInput(tag: "longPress", x: x, y: y)
         guard let info = prep.info else { return prep.error }
 
         let saved = saveCursor(mode: override)
@@ -213,15 +233,15 @@ final class InputSimulation: Sendable {
         let screenY = Double(info.position.y) + y
         DebugLog.log("longPress", "relative=(\(x),\(y)) screen=(\(Int(screenX)),\(Int(screenY))) duration=\(durationMs)ms")
 
-        let result = helperClient.longPress(x: screenX, y: screenY, durationMs: durationMs)
-        DebugLog.log("longPress", "helper=\(result ? "OK" : "FAILED")")
-        return result ? nil : "Helper long press failed"
+        let result = CGEventInput.longPress(at: CGPoint(x: screenX, y: screenY), durationMs: durationMs)
+        DebugLog.log("longPress", "CGEvent=\(result ? "OK" : "FAILED")")
+        return result ? nil : "CGEvent long press failed"
     }
 
     /// Double-tap at a position relative to the target window.
     /// Returns nil on success, or an error message on failure.
     func doubleTap(x: Double, y: Double, cursorMode override: CursorMode? = nil) -> String? {
-        let prep = prepareInput(tag: "doubleTap", x: x, y: y)
+        let prep = preparePointingInput(tag: "doubleTap", x: x, y: y)
         guard let info = prep.info else { return prep.error }
 
         let saved = saveCursor(mode: override)
@@ -231,9 +251,9 @@ final class InputSimulation: Sendable {
         let screenY = Double(info.position.y) + y
         DebugLog.log("doubleTap", "relative=(\(x),\(y)) screen=(\(Int(screenX)),\(Int(screenY)))")
 
-        let result = helperClient.doubleTap(x: screenX, y: screenY)
-        DebugLog.log("doubleTap", "helper=\(result ? "OK" : "FAILED")")
-        return result ? nil : "Helper double tap failed"
+        let result = CGEventInput.doubleTap(at: CGPoint(x: screenX, y: screenY))
+        DebugLog.log("doubleTap", "CGEvent=\(result ? "OK" : "FAILED")")
+        return result ? nil : "CGEvent double tap failed"
     }
 
     /// Drag from one point to another relative to the target window.
@@ -242,7 +262,7 @@ final class InputSimulation: Sendable {
     /// Returns nil on success, or an error message on failure.
     func drag(fromX: Double, fromY: Double, toX: Double, toY: Double,
               durationMs: Int = 1000, cursorMode override: CursorMode? = nil) -> String? {
-        let prep = prepareInput(tag: "drag", x: fromX, y: fromY)
+        let prep = preparePointingInput(tag: "drag", x: fromX, y: fromY)
         guard let info = prep.info else { return prep.error }
 
         if let boundsError = validateBounds(x: toX, y: toY, info: info, tag: "drag") {
@@ -259,23 +279,20 @@ final class InputSimulation: Sendable {
 
         DebugLog.log("drag", "from=(\(fromX),\(fromY))->(\(toX),\(toY)) screen=(\(Int(startX)),\(Int(startY)))->(\(Int(endX)),\(Int(endY))) duration=\(durationMs)ms")
 
-        let result = helperClient.drag(fromX: startX, fromY: startY,
-                             toX: endX, toY: endY,
-                             durationMs: durationMs)
-        DebugLog.log("drag", "helper=\(result ? "OK" : "FAILED")")
-        return result ? nil : "Helper drag failed"
+        let result = CGEventInput.drag(
+            from: CGPoint(x: startX, y: startY),
+            to: CGPoint(x: endX, y: endY),
+            durationMs: durationMs
+        )
+        DebugLog.log("drag", "CGEvent=\(result ? "OK" : "FAILED")")
+        return result ? nil : "CGEvent drag failed"
     }
 
     /// Trigger a shake gesture on the mirrored iPhone.
     /// Sends Ctrl+Cmd+Z which triggers shake-to-undo in iOS apps.
     func shake() -> TypeResult {
-        if let stateError = checkMirroringConnected(tag: "shake") {
-            return TypeResult(success: false, warning: nil, error: stateError)
-        }
-        guard helperClient.isAvailable else {
-            DebugLog.log("shake", "ERROR: helper unavailable")
-            return TypeResult(success: false,
-                              warning: nil, error: helperClient.unavailableMessage)
+        if let keyboardError = prepareKeyboardInput(tag: "shake") {
+            return TypeResult(success: false, warning: nil, error: keyboardError)
         }
 
         DebugLog.log("shake", "sending shake gesture")
@@ -428,13 +445,8 @@ final class InputSimulation: Sendable {
     /// HID segments longer than 15 characters are sent in chunks to stay within
     /// the Karabiner HID report buffer capacity.
     func typeText(_ text: String) -> TypeResult {
-        if let stateError = checkMirroringConnected(tag: "typeText") {
-            return TypeResult(success: false, warning: nil, error: stateError)
-        }
-        guard helperClient.isAvailable else {
-            DebugLog.log("typeText", "ERROR: helper unavailable")
-            return TypeResult(success: false,
-                              warning: nil, error: helperClient.unavailableMessage)
+        if let keyboardError = prepareKeyboardInput(tag: "typeText") {
+            return TypeResult(success: false, warning: nil, error: keyboardError)
         }
 
         DebugLog.log("typeText", "typing \(text.count) char(s)")
@@ -532,13 +544,8 @@ final class InputSimulation: Sendable {
     /// via Karabiner virtual keyboard through the helper daemon.
     /// Activates iPhone Mirroring if needed (at most one Space switch).
     func pressKey(keyName: String, modifiers: [String] = []) -> TypeResult {
-        if let stateError = checkMirroringConnected(tag: "pressKey") {
-            return TypeResult(success: false, warning: nil, error: stateError)
-        }
-        guard helperClient.isAvailable else {
-            DebugLog.log("pressKey", "ERROR: helper unavailable")
-            return TypeResult(success: false,
-                              warning: nil, error: helperClient.unavailableMessage)
+        if let keyboardError = prepareKeyboardInput(tag: "pressKey") {
+            return TypeResult(success: false, warning: nil, error: keyboardError)
         }
 
         let modStr = modifiers.isEmpty ? "" : " modifiers=\(modifiers.joined(separator: "+"))"

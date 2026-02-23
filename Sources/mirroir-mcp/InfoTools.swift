@@ -111,9 +111,9 @@ extension MirroirMCP {
                     }
                 } else {
                     checks.append(
-                        "[FAIL] Helper daemon not reachable — " +
-                        "run 'npx mirroir-mcp setup' or check launchd")
-                    allOk = false
+                        "[WARN] Helper daemon not reachable — " +
+                        "type/press_key unavailable. Tap, swipe, drag still work. " +
+                        "Run 'npx mirroir-mcp setup' to enable keyboard input.")
                 }
 
                 // 4. Screen capture
@@ -177,7 +177,7 @@ extension MirroirMCP {
                     let pt = status["pointing_ready"] as? Bool ?? false
                     helperStatusMsg = "Helper: connected (keyboard=\(kb), pointing=\(pt))"
                 } else {
-                    helperStatusMsg = "Helper: not running (tap/type/swipe unavailable)"
+                    helperStatusMsg = "Helper: not running (type/press_key unavailable — tap/swipe/drag work without it)"
                 }
 
                 return .text("\(mirroringStatus)\n\(helperStatusMsg)")
