@@ -5,10 +5,10 @@ description: Validates test runner against FakeMirroring in CI (OCR-based assert
 steps:
   - wait_for: "Settings"
   - assert_visible: "Settings"
-  - assert_visible: "Safari"
-  - assert_visible: "Photos"
-  - assert_visible: "Camera"
-  - assert_visible: "Messages"
+  - assert_visible: "General"
+  - assert_visible: "Display"
+  - assert_visible: "Privacy"
+  - assert_visible: "About"
   - assert_not_visible: "NonExistent"
   - assert_not_visible: "Instagram"
   - home
