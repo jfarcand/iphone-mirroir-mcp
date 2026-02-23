@@ -25,9 +25,9 @@ Cut a new release. Argument is the version number (e.g. `0.16.0`). Every step mu
    gh run list --branch main --limit 3
    ```
 
-## Step 1 — Bump version strings (6 files)
+## Step 1 — Bump version strings (5 files + Homebrew in Step 7)
 
-All six files **must** be updated to the new version. No exceptions.
+Check all five files below. Each **must** contain the target version X.Y.Z.
 
 | # | File | What to change |
 |---|------|----------------|
@@ -36,13 +36,16 @@ All six files **must** be updated to the new version. No exceptions.
 | 3 | `server.json` | Both `"version": "X.Y.Z"` fields (top-level and inside `packages[0]`) |
 | 4 | `Sources/mirroir-mcp/MCPServer.swift` | `"version": .string("X.Y.Z")` in `handleInitialize` |
 | 5 | `Tests/MCPServerTests/MCPServerRoutingTests.swift` | `XCTAssertEqual(serverInfo["version"], .string("X.Y.Z"))` |
-| 6 | `../homebrew-tap/Formula/mirroir-mcp.rb` | `url` tag component and will be updated in Step 7 |
 
-**Verify** — grep across ALL file types to make sure no old version remains anywhere:
+**If versions are already at X.Y.Z** (e.g. bumped in a prior session), skip editing but still run the verification grep below. Then proceed to Step 2 (no commit needed in Step 3 — skip to Step 4).
+
+**If versions need bumping**, edit all 5 files to replace the old version with X.Y.Z.
+
+**Verify** — grep across ALL file types to confirm only X.Y.Z appears (not any old version):
 ```bash
 grep -rn "OLD_VERSION" --include="*.swift" --include="*.json" --include="*.js" --include="*.md" --include="*.rb" --include="*.sh" --include="*.yml" --include="*.yaml" --include="*.astro" --include="*.css" .
 ```
-If any hit is found, fix it before proceeding. Do NOT skip non-code files — version strings leak into docs, CI, and website.
+If any hit of the old version is found, fix it before proceeding. Do NOT skip non-code files — version strings leak into docs, CI, and website.
 
 ## Step 2 — Build and test
 
@@ -54,6 +57,8 @@ swift test
 Both must pass. Check that test count > 0 in the output.
 
 ## Step 3 — Commit the version bump
+
+**Skip this step if versions were already at X.Y.Z** (no files changed). Go directly to Step 4.
 
 ```bash
 git add npm/package.json npm/install.js server.json \
