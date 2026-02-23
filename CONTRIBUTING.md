@@ -6,7 +6,7 @@ Thank you for your interest in contributing! By submitting a contribution, you a
 
 1. Fork the repository and clone your fork
 2. Run the [installer](mirroir.sh) to build the server binary
-3. Read this guide and the [Architecture](docs/architecture.md) doc to understand the system
+3. Read this guide to understand the system
 4. Create a feature branch for your work
 
 ## Project Structure
@@ -195,7 +195,6 @@ Add tests in `Tests/MCPServerTests/` for tool handler logic and `Tests/HelperLib
 ### Step 7: Update Documentation
 
 - Add the tool to `docs/tools.md`
-- Update `docs/architecture.md` if the tool introduces a new input path
 
 ## Test Architecture
 

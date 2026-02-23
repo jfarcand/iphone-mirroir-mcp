@@ -25,8 +25,6 @@ Single-process design using the macOS CGEvent API for all input:
 
 The input path: MCP client -> mirroir-mcp -> CGEvent API -> macOS HID -> iPhone Mirroring -> iPhone.
 
-- [Architecture diagram and details](docs/architecture.md)
-
 ## Installation
 
 Three methods: curl installer, npx, or Homebrew.
@@ -259,7 +257,6 @@ Multi-target configuration via `targets.json` for controlling multiple windows s
 
 - [README](README.md) — Installation, examples, quick start
 - [Tools Reference](docs/tools.md) — All 31 tools with parameters
-- [Architecture](docs/architecture.md) — System diagram, CGEvent input design
 - [Security](docs/security.md) — Threat model, kill switch, recommendations
 - [Permissions](docs/permissions.md) — Fail-closed permission model
 - [Compiled Skills](docs/compiled-skills.md) — Zero-OCR skill replay

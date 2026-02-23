@@ -1,6 +1,6 @@
 #!/bin/bash
 # ABOUTME: Full uninstaller for mirroir-mcp.
-# ABOUTME: Removes binaries, config, and cleans up legacy helper daemon/Karabiner artifacts.
+# ABOUTME: Removes binaries, config, and cleans up legacy artifacts from older versions.
 
 set -e
 

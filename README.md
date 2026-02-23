@@ -12,12 +12,12 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)](https://support.apple.com/en-us/105071)
 
-An MCP server that controls iPhones through macOS iPhone Mirroring — and any macOS window. [Screenshot, tap, swipe, type, scroll_to, measure](docs/tools.md) from any MCP client.
+An MCP server that controls iPhones through macOS iPhone Mirroring. Experimental support for macOS windows. [Screenshot, tap, swipe, type, scroll_to, measure](docs/tools.md) from any MCP client.
 
 ## What's Changed
 
-- **No more Karabiner or root privileges** — All input (tap, swipe, type, press_key, shake) now uses macOS CGEvent API directly. No helper daemon, no DriverKit extension, no sudo. Just grant Accessibility + Screen Recording permissions.
-- **Autonomous app explorer** — `generate_skill` with `action: "explore"` does DFS exploration of any app, producing SKILL.md files automatically.
+- **Autonomous app explorer** — `generate_skill` with `action: "explore"` does DFS graph traversal of any app, producing SKILL.md files automatically. Supports mobile, social, and desktop exploration strategies.
+- **CGEvent-only input** — All input (tap, swipe, type, press_key, shake) uses macOS CGEvent API directly. No kernel extensions, no root privileges, no helper daemons.
 - **Icon detection** — `describe_screen` detects unlabeled tab bar and toolbar icons via pixel clustering with Vision saliency fallback.
 
 ## Requirements
@@ -344,7 +344,6 @@ Environment variables also work: `MIRROIR_KEYSTROKE_DELAY_US`. See [`TimingConst
 | [FAQ](docs/faq.md) | Security, focus stealing, keyboard layouts |
 | [Security](docs/security.md) | Threat model, kill switch, and recommendations |
 | [Permissions](docs/permissions.md) | Fail-closed permission model and config file |
-| [Architecture](docs/architecture.md) | System diagram and how input reaches the iPhone |
 | [Known Limitations](docs/limitations.md) | Focus stealing, keyboard layout gaps, autocorrect |
 | [Compiled Skills](docs/compiled-skills.md) | Zero-OCR skill replay |
 | [Testing](docs/testing.md) | FakeMirroring, integration tests, and CI strategy |

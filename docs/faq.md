@@ -43,8 +43,6 @@ Text is typed character-by-character through CGEvent key events instead.
 
 All input (touch and keyboard) is delivered via the macOS CGEvent API. CGEvent posts go through the system HID path, which iPhone Mirroring's Continuity compositor picks up and forwards to the physical iPhone over AirPlay + Bluetooth LE. No kernel extensions, no root privileges, no helper daemons.
 
-See [Architecture](architecture.md) for the full input path diagram.
-
 ## Does it work with non-US keyboard layouts?
 
 Yes, with opt-in configuration. Set the `IPHONE_KEYBOARD_LAYOUT` environment variable to your iPhone's hardware keyboard layout, and the server uses `UCKeyTranslate` to map characters to the correct keycodes:

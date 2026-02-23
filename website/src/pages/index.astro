@@ -221,7 +221,7 @@ if (!skillsAvailable) {
       Give your AI an iPhone.
     </p>
     <p class="subtitle">
-      We built an MCP server to control iPhones through macOS iPhone Mirroring. Then we realized the same tools &mdash; screenshot, tap, swipe, type &mdash; work on any macOS window. Same security model. Same skills. Same AI.
+      An MCP server that gives AI agents full control of iPhones through macOS iPhone Mirroring &mdash; screenshot, tap, swipe, type &mdash; from any MCP client. Experimental support for macOS windows too.
     </p>
   </header>
 
@@ -354,6 +354,62 @@ if (!skillsAvailable) {
     </div>
   </section>
 
+  <!-- Generate → Write → Run → Test → Diagnose pipeline -->
+  <section>
+    <h2>Generate, write, run, test, diagnose</h2>
+    <p>
+      Point mirroir at any app and it autonomously discovers every reachable screen using DFS graph traversal &mdash; screens are nodes, taps are edges. The output: a navigation graph and a bundle of ready-to-run SKILL.md files. Edit them, test them deterministically from the CLI, diagnose failures with <code>--agent</code>.
+    </p>
+
+    <div class="pipeline-grid">
+      <div class="pipeline-step">
+        <div class="pipeline-icon">1</div>
+        <h3>Generate</h3>
+        <p>A single <code>generate_skill(action: "explore")</code> call runs autonomous DFS traversal &mdash; tapping unvisited elements, backtracking when branches are exhausted, building a navigation graph of the entire app.</p>
+        <div class="pipeline-cmd">
+          <code>generate_skill(action: "explore", app: "Settings")</code>
+        </div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-icon">2</div>
+        <h3>Write</h3>
+        <p>Edit the generated skill or author one from scratch &mdash; numbered steps, no coordinates.</p>
+        <div class="pipeline-cmd">
+          <code>vim login.md</code>
+        </div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-icon">3</div>
+        <h3>Run</h3>
+        <p>The AI reads the skill via <code>get_skill</code>, executes each step with MCP tools, and auto-compiles coordinates at the end.</p>
+        <div class="pipeline-cmd">
+          <code>get_skill &rarr; record_step &rarr; save_compiled</code>
+        </div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-icon">4</div>
+        <h3>Test</h3>
+        <p>Replay with zero OCR &mdash; pure input injection. A 10-step skill drops from 5+ seconds of OCR to under a second.</p>
+        <div class="pipeline-cmd">
+          <code>mirroir test login</code>
+        </div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-icon">5</div>
+        <h3>Diagnose</h3>
+        <p>When a step fails, <code>--agent</code> compares expected vs. actual OCR and tells you the root cause and fix.</p>
+        <div class="pipeline-cmd">
+          <code>mirroir test --agent login</code>
+        </div>
+      </div>
+    </div>
+
+    <p>
+      Agent diagnosis runs in two tiers: deterministic OCR analysis first (free, no API key), then optionally an AI model for richer analysis.
+      Supports <a href="https://github.com/jfarcand/mirroir-mcp#agent-diagnosis" rel="noopener noreferrer">Anthropic, OpenAI, local Ollama, and CLI agents</a>.
+    </p>
+  </section>
+
   <!-- Skills -->
   <section>
     <h2>Skills: intents, not scripts</h2>
@@ -375,7 +431,7 @@ if (!skillsAvailable) {
           <Code code={skillWaze} lang="markdown" theme="github-dark" />
         </div>
         <div class="carousel-slide skill-slide">
-          <h3>macOS window</h3>
+          <h3>macOS window (experimental)</h3>
           <Code code={skillSpotify} lang="markdown" theme="github-dark" />
         </div>
       </div>
@@ -498,62 +554,6 @@ if (!skillsAvailable) {
         render(matches);
       });
     </script>
-  </section>
-
-  <!-- Generate → Write → Run → Test → Diagnose pipeline -->
-  <section>
-    <h2>Generate, write, run, test, diagnose</h2>
-    <p>
-      Point mirroir at any app and it autonomously discovers every reachable screen using DFS graph traversal &mdash; screens are nodes, taps are edges. The output: a navigation graph and a bundle of ready-to-run SKILL.md files. Edit them, test them deterministically from the CLI, diagnose failures with <code>--agent</code>.
-    </p>
-
-    <div class="pipeline-grid">
-      <div class="pipeline-step">
-        <div class="pipeline-icon">1</div>
-        <h3>Generate</h3>
-        <p>A single <code>generate_skill(action: "explore")</code> call runs autonomous DFS traversal &mdash; tapping unvisited elements, backtracking when branches are exhausted, building a navigation graph of the entire app.</p>
-        <div class="pipeline-cmd">
-          <code>generate_skill(action: "explore", app: "Settings")</code>
-        </div>
-      </div>
-      <div class="pipeline-step">
-        <div class="pipeline-icon">2</div>
-        <h3>Write</h3>
-        <p>Edit the generated skill or author one from scratch &mdash; numbered steps, no coordinates.</p>
-        <div class="pipeline-cmd">
-          <code>vim login.md</code>
-        </div>
-      </div>
-      <div class="pipeline-step">
-        <div class="pipeline-icon">3</div>
-        <h3>Run</h3>
-        <p>The AI reads the skill via <code>get_skill</code>, executes each step with MCP tools, and auto-compiles coordinates at the end.</p>
-        <div class="pipeline-cmd">
-          <code>get_skill &rarr; record_step &rarr; save_compiled</code>
-        </div>
-      </div>
-      <div class="pipeline-step">
-        <div class="pipeline-icon">4</div>
-        <h3>Test</h3>
-        <p>Replay with zero OCR &mdash; pure input injection. A 10-step skill drops from 5+ seconds of OCR to under a second.</p>
-        <div class="pipeline-cmd">
-          <code>mirroir test login</code>
-        </div>
-      </div>
-      <div class="pipeline-step">
-        <div class="pipeline-icon">5</div>
-        <h3>Diagnose</h3>
-        <p>When a step fails, <code>--agent</code> compares expected vs. actual OCR and tells you the root cause and fix.</p>
-        <div class="pipeline-cmd">
-          <code>mirroir test --agent login</code>
-        </div>
-      </div>
-    </div>
-
-    <p>
-      Agent diagnosis runs in two tiers: deterministic OCR analysis first (free, no API key), then optionally an AI model for richer analysis.
-      Supports <a href="https://github.com/jfarcand/mirroir-mcp#agent-diagnosis" rel="noopener noreferrer">Anthropic, OpenAI, local Ollama, and CLI agents</a>.
-    </p>
   </section>
 
   <!-- What it does -->
@@ -690,7 +690,7 @@ if (!skillsAvailable) {
       </details>
       <details>
         <summary>Can it control macOS apps too, not just iPhone?</summary>
-        <p>Yes. Add a target in <code>.mirroir-mcp/targets.json</code> pointing at any macOS window — Spotify, Figma, Terminal, anything. The same 31 tools work on any target. Use <code>switch_target</code> to move between iPhone and macOS windows.</p>
+        <p>Experimental. You can add targets in <code>.mirroir-mcp/targets.json</code> pointing at macOS windows. The same tools work, but with limitations &mdash; both the MCP client and target window must be in the same macOS Space, and iPhone-specific tools (press_home, app_switcher, spotlight) don't apply. See the README for details.</p>
       </details>
       <details>
         <summary>Can I restrict which tools the AI can use?</summary>

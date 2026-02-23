@@ -4,7 +4,6 @@
 
 # --- Cursor & Input Settling ---
 # export MIRROIR_CURSOR_SETTLE_US=10000       # Delay after cursor warp (10ms)
-# export MIRROIR_NUDGE_SETTLE_US=5000          # Delay after Karabiner nudge (5ms)
 # export MIRROIR_CLICK_HOLD_US=80000           # Click hold duration (80ms)
 # export MIRROIR_DOUBLE_TAP_HOLD_US=40000      # Per-tap hold in double-tap (40ms)
 # export MIRROIR_DOUBLE_TAP_GAP_US=50000       # Gap between double-tap taps (50ms)
@@ -25,10 +24,6 @@
 # export MIRROIR_EARLY_FAILURE_DETECT_US=500000  # Early failure detection (500ms)
 # export MIRROIR_RESUME_FROM_PAUSED_US=2000000  # Resume from paused delay (2s)
 # export MIRROIR_POST_HEARTBEAT_SETTLE_US=100000  # Post-heartbeat settle (100ms)
-
-# --- Karabiner HID ---
-# export MIRROIR_KEY_HOLD_US=20000              # Key press hold duration (20ms)
-# export MIRROIR_RECV_TIMEOUT_US=200000         # Socket recv timeout (200ms)
 
 # --- Non-Timing Constants ---
 # export MIRROIR_DRAG_INTERPOLATION_STEPS=60    # Steps for drag interpolation
