@@ -133,6 +133,11 @@ public enum TimingConstants {
     /// Elements within this vertical distance are treated as the same row.
     public static let tapRowTolerance: Double = 10.0
 
+    /// Fraction of window height defining the bottom zone.
+    /// Icon rows in this zone always get the upward tap offset, regardless of gap,
+    /// to handle in-app tab bars where content sits close above the tab labels.
+    public static let tapBottomZoneFraction: Double = 0.90
+
     // MARK: - Grid Overlay
 
     /// Points between grid lines in the mirroring window's coordinate space.

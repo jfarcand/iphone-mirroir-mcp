@@ -13,6 +13,9 @@ struct TapPointCalculatorTests {
     /// Typical iPhone Mirroring window width in points.
     private let windowWidth: Double = 410.0
 
+    /// Typical iPhone Mirroring window height in points.
+    private let windowHeight: Double = 898.0
+
     /// Helper to create a RawTextElement with sensible defaults.
     private func element(
         text: String, tapX: Double = 100.0,
@@ -39,7 +42,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         #expect(results.count == 4)
@@ -62,7 +65,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         #expect(results.count == 6)
@@ -85,7 +88,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         #expect(results.count == 3)
@@ -111,7 +114,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         let meteo = results.first { $0.text == "Météo" }!
@@ -133,7 +136,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         let yAller = results.first { $0.text == "Y aller" }!
@@ -156,7 +159,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         #expect(results.count == 1)
@@ -175,7 +178,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         #expect(results.count == 1)
@@ -199,7 +202,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         #expect(results.count == 3)
@@ -221,7 +224,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         #expect(results.count == 2)
@@ -240,7 +243,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         #expect(results.count == 1)
@@ -255,7 +258,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         #expect(results.count == 1)
@@ -268,7 +271,7 @@ struct TapPointCalculatorTests {
     @Test("empty input returns empty output")
     func emptyInput() {
         let results = TapPointCalculator.computeTapPoints(
-            elements: [], windowWidth: windowWidth
+            elements: [], windowWidth: windowWidth, windowHeight: windowHeight
         )
         #expect(results.isEmpty)
     }
@@ -285,7 +288,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
         // "Header": wide text, no offset → text center = (0+5)/2 = 2.5
         #expect(results[0].tapY == 2.5)
@@ -302,7 +305,7 @@ struct TapPointCalculatorTests {
             element(text: "Ghi", tapX: 194, textTopY: 80, textBottomY: 95),
         ]
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
         // Gap from y=0 = 80 > 50, isIconRow → offset 30 → tapY = 80 - 30 = 50
         #expect(results[0].tapY == 50.0, "Icon row should use textTopY - 30pt offset")
@@ -323,7 +326,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         #expect(results.count == 1)
@@ -343,7 +346,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         #expect(results.count == 2)
@@ -364,7 +367,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         // gap = 100 > 50, isIconRow (3 short labels) → fixed 30pt offset
@@ -379,7 +382,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         #expect(results[0].tapY == 107.5, "16-char label should use text center")
@@ -394,7 +397,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         // "First": gap = 0, not > 50 → no offset, use text center = (0+10)/2 = 5.0
@@ -414,7 +417,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         // "App1": gap = 61 - 10 = 51 > 50, isIconRow → offset 30 → tapY = 61 - 30 = 31
@@ -458,7 +461,7 @@ struct TapPointCalculatorTests {
             TapPointCalculator.Row(elements: regularElements, bottomY: 65),
             TapPointCalculator.Row(elements: iconElements, bottomY: 165),
         ]
-        let classified = TapPointCalculator.classifyRows(rows, windowWidth: windowWidth)
+        let classified = TapPointCalculator.classifyRows(rows, windowWidth: windowWidth, windowHeight: windowHeight)
         #expect(classified.count == 2)
         #expect(!classified[0].isIconRow, "Wide text row should not be icon row")
         #expect(classified[1].isIconRow, "3 short labels should be icon row")
@@ -473,7 +476,7 @@ struct TapPointCalculatorTests {
             element(text: "Label", tapX: 100, textTopY: 200, textBottomY: 220),
         ]
         let row = TapPointCalculator.Row(elements: elements, bottomY: 220)
-        let classified = [TapPointCalculator.ClassifiedRow(row: row, isIconRow: false, gap: 100)]
+        let classified = [TapPointCalculator.ClassifiedRow(row: row, isIconRow: false, gap: 100, isInBottomZone: false)]
         let points = TapPointCalculator.applyOffsets(classified)
         #expect(points.count == 1)
         #expect(points[0].tapY == 210.0, "Non-icon row should use text center")
@@ -487,7 +490,7 @@ struct TapPointCalculatorTests {
             element(text: "App3", tapX: 194, textTopY: 150, textBottomY: 165),
         ]
         let row = TapPointCalculator.Row(elements: elements, bottomY: 165)
-        let classified = [TapPointCalculator.ClassifiedRow(row: row, isIconRow: true, gap: 80)]
+        let classified = [TapPointCalculator.ClassifiedRow(row: row, isIconRow: true, gap: 80, isInBottomZone: false)]
         let points = TapPointCalculator.applyOffsets(classified)
         #expect(points.count == 3)
         for point in points {
@@ -510,7 +513,7 @@ struct TapPointCalculatorTests {
         ]
 
         let results = TapPointCalculator.computeTapPoints(
-            elements: elements, windowWidth: windowWidth
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         let general = results.first { $0.text == "Général" }!
@@ -520,5 +523,122 @@ struct TapPointCalculatorTests {
 
         let batterie = results.first { $0.text == "Batterie" }!
         #expect(batterie.tapY == 612.5, "Settings item should use text center")
+    }
+
+    // MARK: - Bottom zone (tab bar) tests
+
+    @Test("tab bar with small gap gets offset via bottom zone")
+    func tabBarSmallGapGetsOffset() {
+        // Reddit-style layout: feed content at y=826, tab bar labels at y=856.
+        // Gap = 30 < 50 threshold, but y=856 is in bottom 10% of 898pt window
+        // (bottomZoneY = 898 * 0.9 = 808.2), so offset is applied.
+        let elements = [
+            element(
+                text: "Long feed content row that spans most of the width",
+                tapX: 200, textTopY: 826, textBottomY: 840, bboxWidth: 350
+            ),
+            element(text: "Home", tapX: 56, textTopY: 856, textBottomY: 870),
+            element(text: "Communities", tapX: 130, textTopY: 856, textBottomY: 870),
+            element(text: "Create", tapX: 205, textTopY: 856, textBottomY: 870),
+            element(text: "Chat", tapX: 280, textTopY: 856, textBottomY: 870),
+            element(text: "Inbox", tapX: 355, textTopY: 856, textBottomY: 870),
+        ]
+
+        let results = TapPointCalculator.computeTapPoints(
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
+        )
+
+        let home = results.first { $0.text == "Home" }!
+        // Bottom zone offset: tapY = 856 - 30 = 826
+        #expect(home.tapY == 826.0, "Tab bar label should get offset via bottom zone")
+
+        let chat = results.first { $0.text == "Chat" }!
+        #expect(chat.tapY == 826.0, "All tab bar labels should get offset via bottom zone")
+    }
+
+    @Test("icon row mid-screen with small gap does not get offset")
+    func midScreenSmallGapNoOffset() {
+        // Same gap as tab bar test but at y=400 — not in bottom zone.
+        // Need a multi-element row above so the icon row gap is measured correctly.
+        // Gap = 400 - 384 = 16 < 50 threshold and not in bottom zone → no offset.
+        let elements = [
+            element(text: "Left col", tapX: 100, textTopY: 370, textBottomY: 384),
+            element(text: "Right col", tapX: 300, textTopY: 370, textBottomY: 384),
+            element(text: "Item1", tapX: 56, textTopY: 400, textBottomY: 414),
+            element(text: "Item2", tapX: 130, textTopY: 400, textBottomY: 414),
+            element(text: "Item3", tapX: 205, textTopY: 400, textBottomY: 414),
+        ]
+
+        let results = TapPointCalculator.computeTapPoints(
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
+        )
+
+        let item1 = results.first { $0.text == "Item1" }!
+        // Not in bottom zone, gap = 400 - 384 = 16 < 50 → text center
+        #expect(item1.tapY == 407.0, "Mid-screen icon row with small gap should use text center")
+    }
+
+    @Test("classifyRows sets isInBottomZone correctly")
+    func classifyRowsBottomZone() {
+        // Two icon rows: one mid-screen, one at bottom
+        let midElements = [
+            element(text: "App1", tapX: 54, textTopY: 150, textBottomY: 165),
+            element(text: "App2", tapX: 124, textTopY: 150, textBottomY: 165),
+            element(text: "App3", tapX: 194, textTopY: 150, textBottomY: 165),
+        ]
+        let bottomElements = [
+            element(text: "Home", tapX: 56, textTopY: 856, textBottomY: 870),
+            element(text: "Search", tapX: 130, textTopY: 856, textBottomY: 870),
+            element(text: "Profile", tapX: 205, textTopY: 856, textBottomY: 870),
+        ]
+        let rows = [
+            TapPointCalculator.Row(elements: midElements, bottomY: 165),
+            TapPointCalculator.Row(elements: bottomElements, bottomY: 870),
+        ]
+        let classified = TapPointCalculator.classifyRows(
+            rows, windowWidth: windowWidth, windowHeight: windowHeight
+        )
+        #expect(classified.count == 2)
+        #expect(classified[0].isIconRow, "Mid-screen row should be icon row")
+        #expect(!classified[0].isInBottomZone, "Mid-screen row should not be in bottom zone")
+        #expect(classified[1].isIconRow, "Bottom row should be icon row")
+        #expect(classified[1].isInBottomZone, "Bottom row should be in bottom zone")
+    }
+
+    @Test("bottom zone with exactly 3 labels gets offset")
+    func bottomZoneMinimumLabels() {
+        // Minimum icon row count (3) at the bottom of the screen
+        let elements = [
+            element(text: "Tab1", tapX: 100, textTopY: 860, textBottomY: 874),
+            element(text: "Tab2", tapX: 205, textTopY: 860, textBottomY: 874),
+            element(text: "Tab3", tapX: 310, textTopY: 860, textBottomY: 874),
+        ]
+
+        let results = TapPointCalculator.computeTapPoints(
+            elements: elements, windowWidth: windowWidth, windowHeight: windowHeight
+        )
+
+        // y=860 is in bottom zone (808.2), gap from y=0 = 860 > 50 so gap also triggers.
+        // But importantly, bottom zone flag is set.
+        #expect(results[0].tapY == 830.0, "Bottom zone with 3 labels should get offset")
+    }
+
+    @Test("applyOffsets applies offset when isInBottomZone is true despite small gap")
+    func applyOffsetsBottomZone() {
+        let elements = [
+            element(text: "Home", tapX: 56, textTopY: 856, textBottomY: 870),
+            element(text: "Search", tapX: 130, textTopY: 856, textBottomY: 870),
+            element(text: "Profile", tapX: 205, textTopY: 856, textBottomY: 870),
+        ]
+        let row = TapPointCalculator.Row(elements: elements, bottomY: 870)
+        // Small gap (30) but isInBottomZone = true
+        let classified = [TapPointCalculator.ClassifiedRow(
+            row: row, isIconRow: true, gap: 30, isInBottomZone: true
+        )]
+        let points = TapPointCalculator.applyOffsets(classified)
+        #expect(points.count == 3)
+        for point in points {
+            #expect(point.tapY == 826.0, "\(point.text) should get offset via bottom zone")
+        }
     }
 }

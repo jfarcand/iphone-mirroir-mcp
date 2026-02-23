@@ -195,6 +195,10 @@ public enum EnvConfig {
         readDouble("tapRowTolerance", default: TimingConstants.tapRowTolerance)
     }
 
+    public static var tapBottomZoneFraction: Double {
+        readDouble("tapBottomZoneFraction", default: TimingConstants.tapBottomZoneFraction)
+    }
+
     // MARK: - Grid Overlay
 
     public static var gridSpacing: Double {

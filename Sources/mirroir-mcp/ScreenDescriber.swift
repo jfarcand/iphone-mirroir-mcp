@@ -114,7 +114,7 @@ final class ScreenDescriber: Sendable {
         // Apply smart tap-point offsets: short labels are shifted upward
         // toward the icon/button above them.
         let elements = TapPointCalculator.computeTapPoints(
-            elements: rawElements, windowWidth: windowWidth
+            elements: rawElements, windowWidth: windowWidth, windowHeight: windowHeight
         )
 
         // Detect unlabeled icons in OCR-empty zones (tab bars, toolbars)

@@ -32,9 +32,13 @@ final class FakeScreenView: NSView {
 
     /// Tab bar icon positions (x-center) and sizes — 5 evenly spaced icons
     /// on a white bar at the bottom, simulating an iOS tab bar for icon detection testing.
-    private let tabBarHeight: CGFloat = 50
+    private let tabBarHeight: CGFloat = 60
     private let iconSize: CGFloat = 24
     private let tabBarIconXPositions: [CGFloat] = [50, 130, 210, 290, 370]
+
+    /// Tab bar labels below each icon — simulates real iOS tab bars with text labels
+    /// positioned in the bottom zone of the window for tap offset testing.
+    private let tabBarLabels = ["Home", "Search", "Feed", "Chat", "Profile"]
 
     /// Row height and separator styling.
     private let rowHeight: CGFloat = 44
@@ -111,8 +115,9 @@ final class FakeScreenView: NSView {
         NSRect(x: 0, y: barY, width: bounds.width, height: tabBarHeight).fill()
 
         // Draw dark icon shapes (simple filled rectangles) on the tab bar
-        NSColor(red: 0.15, green: 0.15, blue: 0.15, alpha: 1.0).setFill()
-        let iconY = barY + (tabBarHeight - iconSize) / 2
+        let iconColor = NSColor(red: 0.15, green: 0.15, blue: 0.15, alpha: 1.0)
+        iconColor.setFill()
+        let iconY = barY + 6
         for iconX in tabBarIconXPositions {
             let rect = NSRect(
                 x: iconX - iconSize / 2,
@@ -121,6 +126,19 @@ final class FakeScreenView: NSView {
                 height: iconSize
             )
             NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
+        }
+
+        // Draw text labels below each icon
+        let labelFont = NSFont.systemFont(ofSize: 10, weight: .medium)
+        let labelAttrs: [NSAttributedString.Key: Any] = [
+            .font: labelFont,
+            .foregroundColor: iconColor,
+        ]
+        let labelY = iconY + iconSize + 4
+        for (idx, label) in tabBarLabels.enumerated() {
+            let size = (label as NSString).size(withAttributes: labelAttrs)
+            let x = tabBarIconXPositions[idx] - size.width / 2
+            (label as NSString).draw(at: NSPoint(x: x, y: labelY), withAttributes: labelAttrs)
         }
     }
 }

@@ -93,6 +93,9 @@ public enum TapPointCalculator {
         public let isIconRow: Bool
         /// Vertical gap from the bottom of the reference row above.
         public let gap: Double
+        /// Whether this icon row is in the bottom zone of the window (e.g. tab bar).
+        /// When true, the upward offset is applied regardless of gap size.
+        public let isInBottomZone: Bool
     }
 
     // MARK: - Stage 1: Group into rows
@@ -127,9 +130,12 @@ public enum TapPointCalculator {
     ///
     /// Icon rows measure their gap from the previous multi-element row,
     /// bypassing single-element OCR fragments inside icons (e.g. Calendar date).
+    /// Icon rows in the bottom zone of the window (e.g. tab bars) are flagged
+    /// so the offset can be applied regardless of gap size.
     public static func classifyRows(
-        _ rows: [Row], windowWidth: Double
+        _ rows: [Row], windowWidth: Double, windowHeight: Double
     ) -> [ClassifiedRow] {
+        let bottomZoneY = windowHeight * EnvConfig.tapBottomZoneFraction
         var classified: [ClassifiedRow] = []
         var previousRowBottomY: Double = 0.0
         var previousMultiRowBottomY: Double = 0.0
@@ -150,7 +156,12 @@ public enum TapPointCalculator {
                 gap = rowTopY - previousRowBottomY
             }
 
-            classified.append(ClassifiedRow(row: row, isIconRow: isIconRow, gap: gap))
+            let isInBottomZone = isIconRow && rowTopY >= bottomZoneY
+
+            classified.append(ClassifiedRow(
+                row: row, isIconRow: isIconRow, gap: gap,
+                isInBottomZone: isInBottomZone
+            ))
 
             previousRowBottomY = max(previousRowBottomY, row.bottomY)
             if row.elements.count >= 2 {
@@ -172,7 +183,8 @@ public enum TapPointCalculator {
             for element in classified.row.elements {
                 let tapY: Double
                 let textCenterY = (element.textTopY + element.textBottomY) / 2.0
-                if classified.isIconRow && classified.gap > minGapForOffset {
+                if classified.isIconRow
+                    && (classified.gap > minGapForOffset || classified.isInBottomZone) {
                     tapY = max(element.textTopY - iconOffset, 0.0)
                 } else {
                     tapY = textCenterY
@@ -199,11 +211,11 @@ public enum TapPointCalculator {
     /// Elements at the same vertical position (within `rowTolerance`) are
     /// processed as a batch so they all share the same gap from the row above.
     public static func computeTapPoints(
-        elements: [RawTextElement], windowWidth: Double
+        elements: [RawTextElement], windowWidth: Double, windowHeight: Double
     ) -> [TapPoint] {
         let sorted = elements.sorted { $0.textTopY < $1.textTopY }
         let rows = groupIntoRows(sorted)
-        let classified = classifyRows(rows, windowWidth: windowWidth)
+        let classified = classifyRows(rows, windowWidth: windowWidth, windowHeight: windowHeight)
         return applyOffsets(classified)
     }
 }

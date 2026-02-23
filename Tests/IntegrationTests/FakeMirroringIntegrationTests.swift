@@ -114,30 +114,75 @@ final class FakeMirroringIntegrationTests: XCTestCase {
         XCTAssertFalse(result.screenshotBase64.isEmpty, "Should include screenshot in describe result")
     }
 
-    func testIconDetectionInTabBar() {
+    func testIconDetectionSkipsLabeledTabBar() {
         let describer = ScreenDescriber(bridge: bridge, capture: ScreenCapture(bridge: bridge))
         guard let result = describer.describe() else {
             XCTFail("describe() returned nil")
             return
         }
 
-        // FakeMirroring renders 5 dark icon rectangles on a white bar at the bottom.
-        // The icon detector should find them (possibly via clustering, saliency, or
-        // spacing interpolation). We verify at least 3 are detected with correct positions.
-        XCTAssertGreaterThanOrEqual(
-            result.icons.count, 3,
-            "Should detect at least 3 tab bar icons, got \(result.icons.count)"
-        )
-
-        // All detected icons should be in the bottom 10% of the window
+        // FakeMirroring renders 5 tab bar icons WITH text labels below them.
+        // The icon detector only detects icons in OCR-empty zones. Since the tab bar
+        // now has OCR-detectable labels, the detector correctly skips it — the labels
+        // are handled by TapPointCalculator's bottom-zone offset instead.
+        // Any detected icons should NOT be in the tab bar area.
         let info = bridge.getWindowInfo()
         guard let info = info else { return }
         let windowHeight = Double(info.size.height)
 
-        for icon in result.icons {
+        let tabBarThreshold = windowHeight * 0.90
+        let tabBarIcons = result.icons.filter { $0.tapY > tabBarThreshold }
+        XCTAssertEqual(
+            tabBarIcons.count, 0,
+            "Icon detector should skip labeled tab bar, but found \(tabBarIcons.count) icons there"
+        )
+    }
+
+    func testTabBarLabelsGetTapOffset() {
+        let describer = ScreenDescriber(bridge: bridge, capture: ScreenCapture(bridge: bridge))
+        guard let result = describer.describe() else {
+            XCTFail("describe() returned nil")
+            return
+        }
+
+        let info = bridge.getWindowInfo()
+        guard let info = info else {
+            XCTFail("getWindowInfo() returned nil")
+            return
+        }
+        let windowHeight = Double(info.size.height)
+
+        // FakeMirroring renders 5 tab bar labels ("Home", "Search", "Feed", "Chat", "Profile")
+        // in the bottom zone. TapPointCalculator should classify them as an icon row
+        // and apply the upward offset so taps land on the icon above the text.
+        let tabBarNames = Set(["Home", "Search", "Feed", "Chat", "Profile"])
+        let tabBarElements = result.elements.filter { tabBarNames.contains($0.text) }
+
+        XCTAssertGreaterThanOrEqual(
+            tabBarElements.count, 3,
+            "OCR should detect at least 3 tab bar labels, found: \(tabBarElements.map(\.text))"
+        )
+
+        // All tab bar labels should be in the bottom 15% of the window
+        let bottomThreshold = windowHeight * 0.85
+        for element in tabBarElements {
             XCTAssertGreaterThan(
-                icon.tapY, windowHeight * 0.85,
-                "Tab bar icon should be near bottom, got tapY=\(icon.tapY)"
+                element.tapY, bottomThreshold * 0.8,
+                "Tab bar label '\(element.text)' tapY=\(element.tapY) should be near bottom of window"
+            )
+        }
+
+        // The key assertion: tapY should be offset ABOVE the text center.
+        // Without offset, tapY would equal the text center. With the 30pt upward
+        // offset, tapY should be noticeably above where the text renders.
+        // We verify that at least the detected labels have tapY < the bottom 5%
+        // of the window, indicating the offset pulled them up from the label position.
+        let bottomLabelZone = windowHeight * 0.95
+        for element in tabBarElements {
+            XCTAssertLessThan(
+                element.tapY, bottomLabelZone,
+                "Tab bar label '\(element.text)' tapY=\(element.tapY) should be offset upward "
+                + "from label position (< \(bottomLabelZone))"
             )
         }
     }
