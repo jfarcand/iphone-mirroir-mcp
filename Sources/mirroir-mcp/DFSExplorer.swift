@@ -28,6 +28,7 @@ final class DFSExplorer: @unchecked Sendable {
     private let graph: NavigationGraph
     private let session: ExplorationSession
     private let budget: ExplorationBudget
+    private let windowSize: CGSize
     private var backtrackStack: [String] = []
     private var startTime: Date = Date()
     private var actionCount: Int = 0
@@ -40,10 +41,12 @@ final class DFSExplorer: @unchecked Sendable {
     /// - Parameters:
     ///   - session: The exploration session tracking screens and graph state.
     ///   - budget: Exploration budget limits.
-    init(session: ExplorationSession, budget: ExplorationBudget) {
+    ///   - windowSize: Size of the target window for scroll coordinate computation.
+    init(session: ExplorationSession, budget: ExplorationBudget, windowSize: CGSize = CGSize(width: 410, height: 890)) {
         self.session = session
         self.graph = session.currentGraph
         self.budget = budget
+        self.windowSize = windowSize
     }
 
     /// Record the exploration start time. Call once after the initial screen capture.
@@ -118,7 +121,14 @@ final class DFSExplorer: @unchecked Sendable {
             )
         }
 
-        // No more elements or actions exhausted — backtrack
+        // Try scrolling to reveal hidden elements before backtracking
+        if let scrollResult = performScrollIfAvailable(
+            currentFP: currentFP, input: input, describer: describer
+        ) {
+            return scrollResult
+        }
+
+        // No more elements, scroll exhausted — backtrack
         return performBacktrack(
             currentFP: currentFP, input: input,
             describer: describer, strategy: strategy, hints: result.hints
@@ -260,6 +270,38 @@ final class DFSExplorer: @unchecked Sendable {
 
         let toFP = graph.currentFingerprint
         return .backtracked(from: fromFP, to: toFP)
+    }
+
+    /// Attempt to scroll the current screen to reveal hidden elements.
+    /// Returns a step result if scrolling revealed new elements, or nil to fall through to backtrack.
+    private func performScrollIfAvailable(
+        currentFP: String,
+        input: InputProviding,
+        describer: ScreenDescribing
+    ) -> ExploreStepResult? {
+        guard graph.scrollCount(for: currentFP) < budget.scrollLimit else { return nil }
+
+        // Swipe up (scroll content down) from center of screen
+        let centerX = windowSize.width / 2
+        let fromY = windowSize.height * 0.75
+        let toY = windowSize.height * 0.25
+        _ = input.swipe(fromX: centerX, fromY: fromY, toX: centerX, toY: toY, durationMs: 300)
+
+        usleep(EnvConfig.stepSettlingDelayMs * 1000)
+
+        // OCR the new viewport
+        guard let afterResult = describer.describe(skipOCR: false) else { return nil }
+
+        let novelCount = graph.mergeScrolledElements(
+            fingerprint: currentFP, newElements: afterResult.elements
+        )
+        graph.incrementScrollCount(for: currentFP)
+
+        if novelCount > 0 {
+            return .continue(description: "Scrolled, found \(novelCount) new elements")
+        }
+        // No new elements — scroll exhaustion, fall through to backtrack
+        return nil
     }
 
     /// OCR the screen and dismiss any detected iOS alert before returning the result.

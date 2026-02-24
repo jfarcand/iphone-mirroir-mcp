@@ -527,6 +527,150 @@ final class DFSExplorerTests: XCTestCase {
             "Alert should not create a graph node")
     }
 
+    // MARK: - Scroll Handling
+
+    func testExplorerScrollsBeforeBacktracking() {
+        let session = ExplorationSession()
+        session.start(appName: "TestApp", goal: "test")
+
+        let rootElements = makeElements(["Settings"])
+        session.capture(
+            elements: rootElements, hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
+        )
+
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 3,
+            skipPatterns: ExplorationBudget.default.skipPatterns
+        )
+
+        let explorer = DFSExplorer(session: session, budget: budget)
+        explorer.markStarted()
+
+        // Mark root element visited so explorer would normally backtrack
+        let graph = session.currentGraph
+        graph.markElementVisited(fingerprint: graph.currentFingerprint, elementText: "Settings")
+
+        // After scroll, new elements appear
+        let scrolledElements = makeElements(["General", "Privacy", "About"])
+        let describer = MockDescriber(screens: [
+            // step() OCR: all visited on root
+            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
+            // After scroll: new elements visible
+            ScreenDescriber.DescribeResult(elements: scrolledElements, screenshotBase64: "img0_scrolled"),
+        ])
+        let input = MockInput()
+
+        let result = explorer.step(
+            describer: describer, input: input, strategy: MobileAppStrategy.self
+        )
+
+        if case .continue(let desc) = result {
+            XCTAssertTrue(desc.contains("Scrolled"), "Should describe scroll action. Got: \(desc)")
+        } else {
+            XCTFail("Expected .continue after scroll, got \(result)")
+        }
+    }
+
+    func testExplorerRespectsScrollLimit() {
+        let session = ExplorationSession()
+        session.start(appName: "TestApp", goal: "test")
+
+        let rootElements = makeElements(["Settings"])
+        session.capture(
+            elements: rootElements, hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
+        )
+
+        // Budget allows 0 scrolls
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 0,
+            skipPatterns: ExplorationBudget.default.skipPatterns
+        )
+
+        let explorer = DFSExplorer(session: session, budget: budget)
+        explorer.markStarted()
+
+        // Mark all visited
+        let graph = session.currentGraph
+        graph.markElementVisited(fingerprint: graph.currentFingerprint, elementText: "Settings")
+
+        let describer = MockDescriber(screens: [
+            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
+        ])
+        let input = MockInput()
+
+        let result = explorer.step(
+            describer: describer, input: input, strategy: MobileAppStrategy.self
+        )
+
+        // With scrollLimit=0 and at root, should finish (not scroll)
+        if case .finished = result {
+            // Expected: no scrolling, immediate finish
+        } else {
+            XCTFail("Expected .finished with scrollLimit=0, got \(result)")
+        }
+    }
+
+    func testExplorerScrollExhaustionFallsToBacktrack() {
+        let session = ExplorationSession()
+        session.start(appName: "TestApp", goal: "test")
+
+        let rootElements = makeElements(["Settings", "General"])
+        session.capture(
+            elements: rootElements, hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
+        )
+
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 1,
+            skipPatterns: ExplorationBudget.default.skipPatterns
+        )
+
+        let explorer = DFSExplorer(session: session, budget: budget)
+        explorer.markStarted()
+
+        // Navigate to a detail screen
+        let detailElements = makeElements(["Version", "Build"])
+        let describer1 = MockDescriber(screens: [
+            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
+            ScreenDescriber.DescribeResult(elements: detailElements, screenshotBase64: "img1"),
+        ])
+        let input = MockInput()
+
+        // Step 1: Tap to get to detail screen
+        _ = explorer.step(describer: describer1, input: input, strategy: MobileAppStrategy.self)
+
+        // Mark all detail elements visited
+        let graph = session.currentGraph
+        let fp = graph.currentFingerprint
+        graph.markElementVisited(fingerprint: fp, elementText: "Version")
+        graph.markElementVisited(fingerprint: fp, elementText: "Build")
+
+        // Scroll returns same elements (no novel ones)
+        let describer2 = MockDescriber(screens: [
+            ScreenDescriber.DescribeResult(elements: detailElements, screenshotBase64: "img1"),
+            // After scroll: same elements
+            ScreenDescriber.DescribeResult(elements: detailElements, screenshotBase64: "img1"),
+        ])
+
+        let result = explorer.step(
+            describer: describer2, input: input, strategy: MobileAppStrategy.self
+        )
+
+        // Should backtrack after scroll found nothing new
+        if case .backtracked = result {
+            // Expected
+        } else if case .finished = result {
+            // Also acceptable
+        } else {
+            XCTFail("Expected .backtracked after scroll exhaustion, got \(result)")
+        }
+    }
+
     // MARK: - Depth Limit
 
     func testExplorerRespectsMaxDepth() {

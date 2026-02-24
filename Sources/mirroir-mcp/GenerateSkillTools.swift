@@ -404,7 +404,8 @@ extension MirroirMCP {
         )
 
         // Create DFS explorer and run exploration loop
-        let explorer = DFSExplorer(session: session, budget: budget)
+        let windowSize = ctx.bridge.getWindowInfo()?.size ?? CGSize(width: 410, height: 890)
+        let explorer = DFSExplorer(session: session, budget: budget, windowSize: windowSize)
         explorer.markStarted()
 
         var stepResults: [String] = [

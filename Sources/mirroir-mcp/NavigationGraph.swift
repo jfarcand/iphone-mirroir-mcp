@@ -96,6 +96,7 @@ final class NavigationGraph: @unchecked Sendable {
     private var currentFP: String = ""
     private var rootFP: String = ""
     private var isStarted: Bool = false
+    private var scrollCounts: [String: Int] = [:]
     private let lock = NSLock()
 
     // MARK: - Lifecycle
@@ -120,6 +121,7 @@ final class NavigationGraph: @unchecked Sendable {
 
         nodes = [:]
         edges = []
+        scrollCounts = [:]
 
         let fp = StructuralFingerprint.compute(elements: rootElements, icons: icons)
         let node = ScreenNode(
@@ -276,6 +278,73 @@ final class NavigationGraph: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return nodes[fingerprint]
+    }
+
+    // MARK: - Scroll Support
+
+    /// Merge newly discovered elements (from scrolling) into an existing screen node.
+    /// Deduplicates by element text — only elements with novel text are added.
+    ///
+    /// - Parameters:
+    ///   - fingerprint: The screen to merge elements into.
+    ///   - newElements: Elements from the scrolled viewport.
+    /// - Returns: Number of novel elements added, or 0 if all were duplicates.
+    func mergeScrolledElements(fingerprint: String, newElements: [TapPoint]) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let node = nodes[fingerprint] else { return 0 }
+        let existingTexts = Set(node.elements.map(\.text))
+        let novel = newElements.filter { !existingTexts.contains($0.text) }
+        guard !novel.isEmpty else { return 0 }
+        var updatedElements = node.elements
+        updatedElements.append(contentsOf: novel)
+        nodes[fingerprint] = ScreenNode(
+            fingerprint: node.fingerprint,
+            elements: updatedElements,
+            icons: node.icons,
+            hints: node.hints,
+            depth: node.depth,
+            screenType: node.screenType,
+            screenshotBase64: node.screenshotBase64,
+            visitedElements: node.visitedElements
+        )
+        return novel.count
+    }
+
+    /// Get the number of scroll actions performed on a screen.
+    func scrollCount(for fingerprint: String) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return scrollCounts[fingerprint, default: 0]
+    }
+
+    /// Increment the scroll count for a screen.
+    func incrementScrollCount(for fingerprint: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        scrollCounts[fingerprint, default: 0] += 1
+    }
+
+    /// Get the screen type of the root node.
+    func rootScreenType() -> ScreenType? {
+        lock.lock()
+        defer { lock.unlock() }
+        return nodes[rootFP]?.screenType
+    }
+
+    /// Fingerprint of the root (first) screen.
+    var rootFingerprint: String {
+        lock.lock()
+        defer { lock.unlock() }
+        return rootFP
+    }
+
+    /// Check if a screen has unvisited elements (elements not in the visited set).
+    func hasUnvisitedElements(for fingerprint: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let node = nodes[fingerprint] else { return false }
+        return node.elements.contains { !node.visitedElements.contains($0.text) }
     }
 
     // MARK: - Private

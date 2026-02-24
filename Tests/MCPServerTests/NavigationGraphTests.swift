@@ -409,6 +409,135 @@ final class NavigationGraphTests: XCTestCase {
         XCTAssertEqual(node?.icons.count, 2)
     }
 
+    // MARK: - Scroll Support
+
+    func testMergeScrolledElementsAddsNovelElements() {
+        let graph = NavigationGraph()
+        let rootElements = makeElements(["Settings", "General", "Privacy"])
+        graph.start(
+            rootElements: rootElements, icons: noIcons(), hints: [],
+            screenshot: "img", screenType: .settings
+        )
+        let fp = graph.currentFingerprint
+
+        // Scroll reveals new elements
+        let scrolledElements = makeElements(["Privacy", "About", "Storage"])
+        let novelCount = graph.mergeScrolledElements(fingerprint: fp, newElements: scrolledElements)
+
+        XCTAssertEqual(novelCount, 2, "Should add 'About' and 'Storage' (Privacy is duplicate)")
+
+        let node = graph.node(for: fp)
+        XCTAssertEqual(node?.elements.count, 5, "Original 3 + 2 novel = 5")
+    }
+
+    func testMergeScrolledElementsDeduplicatesByText() {
+        let graph = NavigationGraph()
+        let rootElements = makeElements(["Settings", "General"])
+        graph.start(
+            rootElements: rootElements, icons: noIcons(), hints: [],
+            screenshot: "img", screenType: .settings
+        )
+        let fp = graph.currentFingerprint
+
+        // All elements already exist
+        let duplicateElements = makeElements(["Settings", "General"])
+        let novelCount = graph.mergeScrolledElements(fingerprint: fp, newElements: duplicateElements)
+
+        XCTAssertEqual(novelCount, 0, "All elements are duplicates")
+        XCTAssertEqual(graph.node(for: fp)?.elements.count, 2, "Element count unchanged")
+    }
+
+    func testScrollCountTracking() {
+        let graph = NavigationGraph()
+        graph.start(
+            rootElements: makeElements(["Settings"]), icons: noIcons(),
+            hints: [], screenshot: "img", screenType: .settings
+        )
+        let fp = graph.currentFingerprint
+
+        XCTAssertEqual(graph.scrollCount(for: fp), 0, "Initial scroll count is 0")
+
+        graph.incrementScrollCount(for: fp)
+        XCTAssertEqual(graph.scrollCount(for: fp), 1)
+
+        graph.incrementScrollCount(for: fp)
+        XCTAssertEqual(graph.scrollCount(for: fp), 2)
+    }
+
+    func testScrollCountForUnknownFingerprint() {
+        let graph = NavigationGraph()
+        graph.start(
+            rootElements: makeElements(["Settings"]), icons: noIcons(),
+            hints: [], screenshot: "img", screenType: .settings
+        )
+
+        XCTAssertEqual(graph.scrollCount(for: "unknown"), 0)
+    }
+
+    func testMergeScrolledElementsForUnknownFingerprint() {
+        let graph = NavigationGraph()
+        graph.start(
+            rootElements: makeElements(["Settings"]), icons: noIcons(),
+            hints: [], screenshot: "img", screenType: .settings
+        )
+
+        let count = graph.mergeScrolledElements(
+            fingerprint: "nonexistent",
+            newElements: makeElements(["New"])
+        )
+        XCTAssertEqual(count, 0, "Should return 0 for unknown fingerprint")
+    }
+
+    // MARK: - Root and Unvisited Accessors
+
+    func testRootScreenType() {
+        let graph = NavigationGraph()
+        graph.start(
+            rootElements: makeElements(["Home", "Search", "Profile"]),
+            icons: noIcons(), hints: [], screenshot: "img", screenType: .tabRoot
+        )
+
+        XCTAssertEqual(graph.rootScreenType(), .tabRoot)
+    }
+
+    func testHasUnvisitedElements() {
+        let graph = NavigationGraph()
+        let elements = makeElements(["Settings", "General"])
+        graph.start(
+            rootElements: elements, icons: noIcons(), hints: [],
+            screenshot: "img", screenType: .settings
+        )
+        let fp = graph.currentFingerprint
+
+        XCTAssertTrue(graph.hasUnvisitedElements(for: fp))
+
+        graph.markElementVisited(fingerprint: fp, elementText: "Settings")
+        XCTAssertTrue(graph.hasUnvisitedElements(for: fp), "Still has General")
+
+        graph.markElementVisited(fingerprint: fp, elementText: "General")
+        XCTAssertFalse(graph.hasUnvisitedElements(for: fp), "All visited")
+    }
+
+    func testRootFingerprint() {
+        let graph = NavigationGraph()
+        graph.start(
+            rootElements: makeElements(["Settings"]), icons: noIcons(),
+            hints: [], screenshot: "img", screenType: .settings
+        )
+        let rootFP = graph.rootFingerprint
+
+        // Navigate away
+        _ = graph.recordTransition(
+            elements: makeElements(["About"]), icons: noIcons(), hints: [],
+            screenshot: "img2", actionType: "tap", elementText: "Settings",
+            screenType: .detail
+        )
+
+        // Root fingerprint should remain unchanged
+        XCTAssertEqual(graph.rootFingerprint, rootFP)
+        XCTAssertNotEqual(graph.currentFingerprint, rootFP)
+    }
+
     // MARK: - Edge Cases
 
     func testDuplicateDoesNotAddEdge() {
