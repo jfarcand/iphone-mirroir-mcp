@@ -326,4 +326,53 @@ final class ElementClassifierTests: XCTestCase {
         XCTAssertEqual(result.first?.role, .navigation,
             "Short label without context should remain fallback navigation")
     }
+
+    // MARK: - Time Patterns
+
+    func testTimePatternIsInfo() {
+        let elements = [point("15:02", x: 80, y: 200)]
+        let result = classify(elements)
+        XCTAssertEqual(result.first?.role, .info,
+            "Time pattern '15:02' should be .info")
+    }
+
+    func testTimePatternWithOCRArtifactIsInfo() {
+        // OCR sometimes appends an extra digit to the time
+        let elements = [point("14:391", x: 80, y: 200)]
+        let result = classify(elements)
+        XCTAssertEqual(result.first?.role, .info,
+            "Time pattern '14:391' (OCR artifact) should be .info")
+    }
+
+    func testSingleDigitHourTimeIsInfo() {
+        let elements = [point("9:41", x: 80, y: 200)]
+        let result = classify(elements)
+        XCTAssertEqual(result.first?.role, .info,
+            "Time pattern '9:41' should be .info")
+    }
+
+    // MARK: - Status Bar Zone
+
+    func testStatusBarElementIsDecoration() {
+        // Elements in the top 10% of the screen are status bar indicators
+        let elements = [point("Slack", x: 200, y: 30)]
+        let result = ElementClassifier.classify(elements, screenHeight: 898)
+        XCTAssertEqual(result.first?.role, .decoration,
+            "Element at y=30 in 898pt screen should be decoration (status bar zone)")
+    }
+
+    func testStatusBarZoneDisabledByDefault() {
+        // Without screenHeight, the zone filter is disabled
+        let elements = [point("Slack", x: 200, y: 30)]
+        let result = classify(elements)
+        XCTAssertEqual(result.first?.role, .navigation,
+            "Without screenHeight, element at y=30 should fall through to navigation")
+    }
+
+    func testElementBelowStatusBarNotAffected() {
+        let elements = [point("General", x: 200, y: 200)]
+        let result = ElementClassifier.classify(elements, screenHeight: 898)
+        XCTAssertEqual(result.first?.role, .navigation,
+            "Element at y=200 should not be affected by status bar zone filter")
+    }
 }

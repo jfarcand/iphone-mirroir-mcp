@@ -64,13 +64,23 @@ enum ElementClassifier {
         pattern: #"^\d+(\.\d+)?\s*(GB|MB|KB|TB|%)$"#, options: .caseInsensitive
     )
 
+    /// Regex matching time patterns like "15:02", "9:41", "15:011" (OCR artifacts).
+    static let timePattern = try! NSRegularExpression(
+        pattern: #"^\d{1,2}:\d{2}\d?$"#
+    )
+
+    /// Fraction of screen height defining the status bar zone at the top.
+    /// Elements in this zone are classified as decoration (clock, battery, signal).
+    static let statusBarZoneFraction: Double = 0.10
+
     // MARK: - Classification
 
     /// Classify all OCR elements using text patterns and spatial proximity.
     ///
     /// Priority order:
+    /// 0. Decoration: elements in the status bar zone (top ~10% of screen)
     /// 1. Decoration: chevrons, punctuation-only
-    /// 2. Info: standalone state words or value patterns (before short-text filter)
+    /// 2. Info: standalone state words, value patterns, or time patterns
     /// 3. Decoration: short text under 3 chars (that isn't an info word)
     /// 4. Destructive: matches skip patterns
     /// 5. State change: label on a row WITH a state indicator
@@ -80,10 +90,13 @@ enum ElementClassifier {
     /// - Parameters:
     ///   - elements: Raw OCR tap points.
     ///   - budget: Exploration budget for destructive pattern checks.
+    ///   - screenHeight: Height of the target window for status bar zone calculation.
+    ///     Pass 0 to disable zone filtering.
     /// - Returns: Classified elements preserving original order.
     static func classify(
         _ elements: [TapPoint],
-        budget: ExplorationBudget = .default
+        budget: ExplorationBudget = .default,
+        screenHeight: Double = 0
     ) -> [ClassifiedElement] {
         let rows = groupIntoRows(elements)
 
@@ -108,6 +121,7 @@ enum ElementClassifier {
         return elements.map { element in
             let (role, chevronContext) = classifySingle(
                 element, budget: budget,
+                screenHeight: screenHeight,
                 elementToRow: elementToRow,
                 rowHasChevron: rowHasChevron,
                 rowHasStateIndicator: rowHasStateIndicator
@@ -154,19 +168,27 @@ enum ElementClassifier {
     private static func classifySingle(
         _ element: TapPoint,
         budget: ExplorationBudget,
+        screenHeight: Double,
         elementToRow: [String: Int],
         rowHasChevron: [Int: Bool],
         rowHasStateIndicator: [Int: Bool]
     ) -> (ElementRole, Bool) {
         let text = element.text
 
+        // 0. Status bar zone: elements in the top portion of the screen are
+        //    clock, battery, and signal indicators — never navigation targets.
+        if screenHeight > 0 && element.tapY < screenHeight * statusBarZoneFraction {
+            return (.decoration, false)
+        }
+
         // 1. Decoration: chevrons, punctuation-only
         if isChevron(text) || LandmarkPicker.isPunctuationOnly(text) {
             return (.decoration, false)
         }
 
-        // 2. Info: standalone state/value words (checked before short-text filter
-        //    because "On"/"Off" are 2 chars but are meaningful state indicators)
+        // 2. Info: standalone state/value words, or time patterns like "15:02"
+        //    (checked before short-text filter because "On"/"Off" are 2 chars
+        //    but are meaningful state indicators)
         if isInfoText(text) {
             return (.info, false)
         }
@@ -226,14 +248,17 @@ enum ElementClassifier {
         stateIndicators.contains(text.lowercased().trimmingCharacters(in: .whitespaces))
     }
 
-    /// Check if text is an info/value string (state words or value patterns).
+    /// Check if text is an info/value string (state words, value patterns, or time patterns).
     private static func isInfoText(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         if infoWords.contains(trimmed.lowercased()) {
             return true
         }
         let range = NSRange(trimmed.startIndex..., in: trimmed)
-        return valuePattern.firstMatch(in: trimmed, range: range) != nil
+        if valuePattern.firstMatch(in: trimmed, range: range) != nil {
+            return true
+        }
+        return timePattern.firstMatch(in: trimmed, range: range) != nil
     }
 
     /// Generate a unique key for an element based on text and position.

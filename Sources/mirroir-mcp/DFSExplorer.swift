@@ -100,7 +100,9 @@ final class DFSExplorer: @unchecked Sendable {
         let screenType = strategy.classifyScreen(elements: result.elements, hints: result.hints)
 
         // Classify all OCR elements using spatial proximity before filtering
-        let classified = ElementClassifier.classify(result.elements, budget: budget)
+        let classified = ElementClassifier.classify(
+            result.elements, budget: budget, screenHeight: windowSize.height
+        )
         let navigationElements = classified.filter { $0.role == .navigation }.map(\.point)
 
         // Scout phase: on broad screens at shallow depth, scout elements before diving
