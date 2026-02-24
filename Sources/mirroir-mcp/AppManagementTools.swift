@@ -85,10 +85,13 @@ extension MirroirMCP {
                 // Drag up on the app card to force-quit.
                 // Uses drag (touch events) instead of swipe (scroll wheel) because
                 // scroll wheel events are misinterpreted after horizontal carousel navigation.
-                // OCR finds the app name label above the card preview, so offset
-                // downward into the card body before dragging, and clamp toY >= 0.
+                // OCR finds the app name label near the card preview, so offset
+                // downward into the card body before dragging. Clamp both endpoints
+                // to stay within window bounds — the label may appear near the
+                // bottom of the window when the card is off-center in the carousel.
+                let windowHeight = ctx.bridge.getWindowInfo().map { Double($0.size.height) } ?? 898.0
                 let cardX = match.element.tapX
-                let cardY = match.element.tapY + EnvConfig.appSwitcherCardOffset
+                let cardY = min(match.element.tapY + EnvConfig.appSwitcherCardOffset, windowHeight)
                 let toY = max(0, cardY - EnvConfig.appSwitcherSwipeDistance)
                 if let error = input.drag(fromX: cardX, fromY: cardY,
                                            toX: cardX, toY: toY, durationMs: EnvConfig.appSwitcherSwipeDurationMs) {
