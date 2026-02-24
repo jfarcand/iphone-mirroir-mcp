@@ -316,6 +316,9 @@ extension MirroirMCP {
         var responseText: String
         if bundle.skills.count > 1 {
             responseText = "Generated \(bundle.skills.count) skills from exploration:\n\n"
+            if let manifest = bundle.manifest {
+                responseText += manifest + "\n"
+            }
             for (i, skill) in bundle.skills.enumerated() {
                 responseText += "--- Skill \(i + 1): \(skill.name) ---\n\n"
                 responseText += skill.content
@@ -451,6 +454,9 @@ extension MirroirMCP {
                     responseText = "Exploration complete! Generated \(bundle.skills.count) skills "
                     responseText += "(\(stats.nodeCount) screens, \(stats.actionCount) actions, "
                     responseText += "\(stats.elapsedSeconds)s):\n\n"
+                    if let manifest = bundle.manifest {
+                        responseText += manifest + "\n"
+                    }
                     for (i, skill) in bundle.skills.enumerated() {
                         responseText += "--- Skill \(i + 1): \(skill.name) ---\n\n"
                         responseText += skill.content

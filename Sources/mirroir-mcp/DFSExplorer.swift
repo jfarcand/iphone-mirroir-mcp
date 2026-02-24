@@ -370,7 +370,7 @@ final class DFSExplorer: @unchecked Sendable {
 
     private func generateBundle() -> SkillBundle {
         guard let data = session.finalize() else {
-            return SkillBundle(appName: "", skills: [])
+            return SkillBundle(appName: "", skills: [], manifest: nil)
         }
         return SkillBundleGenerator.generate(
             appName: data.appName, goal: data.goal,

@@ -105,21 +105,33 @@ enum GraphPathFinder {
 
     // MARK: - Private
 
-    /// Find leaf nodes: screens with no outgoing edges to other screens.
+    /// Find leaf nodes: screens with no outgoing forward edges, plus depth-capped nodes.
+    /// Depth-capped nodes (at the graph's max depth) represent exploration boundaries
+    /// and produce valid test paths even if they have outgoing edges.
     private static func findLeafNodes(
         snapshot: GraphSnapshot,
         adjacency: [String: [NavigationEdge]]
     ) -> [String] {
         var leaves: [String] = []
+        let maxDepth = snapshot.nodes.values.map(\.depth).max() ?? 0
+
         for fp in snapshot.nodes.keys {
+            guard fp != snapshot.rootFingerprint else { continue }
+            let node = snapshot.nodes[fp]
             let outgoing = adjacency[fp] ?? []
-            // A leaf has no outgoing edges, or only self-loops / back-edges to parent
+
+            // True leaf: no outgoing forward edges
             let forwardEdges = outgoing.filter { edge in
                 let targetDepth = snapshot.nodes[edge.toFingerprint]?.depth ?? 0
-                let sourceDepth = snapshot.nodes[fp]?.depth ?? 0
+                let sourceDepth = node?.depth ?? 0
                 return targetDepth > sourceDepth
             }
-            if forwardEdges.isEmpty && fp != snapshot.rootFingerprint {
+            let isTrueLeaf = forwardEdges.isEmpty
+
+            // Depth-capped: at the maximum explored depth
+            let isDepthCapped = (node?.depth ?? 0) == maxDepth && maxDepth > 0
+
+            if isTrueLeaf || isDepthCapped {
                 leaves.append(fp)
             }
         }
@@ -184,7 +196,8 @@ enum GraphPathFinder {
         return longest
     }
 
-    /// Derive a human-readable name from a path's edge labels.
+    /// Derive a human-readable name from a path's edge labels and leaf node content.
+    /// Uses LandmarkPicker on the leaf node for more descriptive names when available.
     /// Short paths (≤2 labels) use full join; longer paths use "first to last" format.
     static func deriveName(
         from path: [NavigationEdge],
@@ -192,6 +205,15 @@ enum GraphPathFinder {
     ) -> String {
         let labels = path.map(\.elementText).filter { !$0.isEmpty }
         if labels.isEmpty { return "exploration" }
+
+        // Try landmark-based naming for longer paths
+        if labels.count > 2, let lastEdge = path.last,
+           let leafNode = snapshot.nodes[lastEdge.toFingerprint],
+           let landmark = LandmarkPicker.pickLandmark(from: leafNode.elements) {
+            let prefix = labels[0]
+            return "\(prefix) to \(landmark)".lowercased()
+        }
+
         if labels.count <= 2 {
             return labels.joined(separator: " > ").lowercased()
         }

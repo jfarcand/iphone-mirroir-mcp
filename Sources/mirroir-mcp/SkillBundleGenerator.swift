@@ -13,6 +13,8 @@ struct SkillBundle: Sendable {
     let appName: String
     /// Individual skills, each representing a distinct flow.
     let skills: [(name: String, content: String)]
+    /// Optional markdown manifest indexing all skills (generated when skills.count >= 2).
+    let manifest: String?
 }
 
 /// Generates a bundle of SKILL.md files from a graph snapshot.
@@ -43,7 +45,7 @@ enum SkillBundleGenerator {
                 appName: appName, goal: goal, screens: allScreens
             )
             let name = SkillMdGenerator.deriveName(appName: appName, goal: goal)
-            return SkillBundle(appName: appName, skills: [(name: name, content: content)])
+            return SkillBundle(appName: appName, skills: [(name: name, content: content)], manifest: nil)
         }
 
         // Generate one skill per interesting path
@@ -68,9 +70,14 @@ enum SkillBundleGenerator {
                 appName: appName, goal: goal, screens: allScreens
             )
             let name = SkillMdGenerator.deriveName(appName: appName, goal: goal)
-            return SkillBundle(appName: appName, skills: [(name: name, content: content)])
+            return SkillBundle(appName: appName, skills: [(name: name, content: content)], manifest: nil)
         }
 
-        return SkillBundle(appName: appName, skills: skills)
+        // Generate manifest index when multiple skills produced
+        let manifest = skills.count >= 2
+            ? SkillManifestGenerator.generate(appName: appName, skills: skills)
+            : nil
+
+        return SkillBundle(appName: appName, skills: skills, manifest: manifest)
     }
 }
