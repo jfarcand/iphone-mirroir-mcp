@@ -671,6 +671,203 @@ final class DFSExplorerTests: XCTestCase {
         }
     }
 
+    // MARK: - Tab Bar Fast-Backtrack
+
+    func testFastBacktrackTriggersOnDeepTabApp() {
+        let session = ExplorationSession()
+        session.start(appName: "TestApp", goal: "test")
+
+        // Root is a tab bar screen with multiple tabs
+        let rootElements: [TapPoint] = [
+            TapPoint(text: "Home", tapX: 56, tapY: 850, confidence: 0.95),
+            TapPoint(text: "Search", tapX: 158, tapY: 850, confidence: 0.95),
+            TapPoint(text: "Profile", tapX: 260, tapY: 850, confidence: 0.95),
+            TapPoint(text: "Featured", tapX: 205, tapY: 200, confidence: 0.95),
+        ]
+        session.capture(
+            elements: rootElements, hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
+        )
+
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 0,
+            skipPatterns: ExplorationBudget.default.skipPatterns
+        )
+
+        let explorer = DFSExplorer(session: session, budget: budget)
+        explorer.markStarted()
+
+        // Navigate deep: root -> level1 -> level2 -> level3
+        let level1 = makeElements(["Section A", "Item 1"])
+        let level2 = makeElements(["Detail X", "Info"])
+        let level3 = makeElements(["Deep Data", "Value"])
+
+        // Step 1: root -> level1
+        let desc1 = MockDescriber(screens: [
+            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
+            ScreenDescriber.DescribeResult(elements: level1, screenshotBase64: "img1"),
+        ])
+        let input = MockInput()
+        _ = explorer.step(describer: desc1, input: input, strategy: MobileAppStrategy.self)
+
+        // Step 2: level1 -> level2
+        let desc2 = MockDescriber(screens: [
+            ScreenDescriber.DescribeResult(elements: level1, screenshotBase64: "img1"),
+            ScreenDescriber.DescribeResult(elements: level2, screenshotBase64: "img2"),
+        ])
+        _ = explorer.step(describer: desc2, input: input, strategy: MobileAppStrategy.self)
+
+        // Step 3: level2 -> level3
+        let desc3 = MockDescriber(screens: [
+            ScreenDescriber.DescribeResult(elements: level2, screenshotBase64: "img2"),
+            ScreenDescriber.DescribeResult(elements: level3, screenshotBase64: "img3"),
+        ])
+        _ = explorer.step(describer: desc3, input: input, strategy: MobileAppStrategy.self)
+
+        // Mark all level3 elements as visited to trigger backtrack
+        let graph = session.currentGraph
+        let fp = graph.currentFingerprint
+        for el in level3 { graph.markElementVisited(fingerprint: fp, elementText: el.text) }
+
+        // Step 4: Should fast-backtrack to root (3 levels in one step)
+        let desc4 = MockDescriber(screens: [
+            ScreenDescriber.DescribeResult(elements: level3, screenshotBase64: "img3"),
+        ])
+
+        let result = explorer.step(
+            describer: desc4, input: input, strategy: MobileAppStrategy.self
+        )
+
+        if case .backtracked = result {
+            // Should have pressed Cmd+[ multiple times for fast backtrack
+            let backPresses = input.keys.filter { $0.key == "[" && $0.modifiers == ["command"] }
+            XCTAssertEqual(backPresses.count, 3,
+                "Fast backtrack from depth 3 should press back 3 times")
+        } else {
+            XCTFail("Expected .backtracked for fast backtrack, got \(result)")
+        }
+    }
+
+    func testFastBacktrackDoesNotTriggerForShallowStack() {
+        let session = ExplorationSession()
+        session.start(appName: "TestApp", goal: "test")
+
+        // Root is tabRoot
+        let rootElements: [TapPoint] = [
+            TapPoint(text: "Home", tapX: 56, tapY: 850, confidence: 0.95),
+            TapPoint(text: "Search", tapX: 158, tapY: 850, confidence: 0.95),
+            TapPoint(text: "Profile", tapX: 260, tapY: 850, confidence: 0.95),
+            TapPoint(text: "Featured", tapX: 205, tapY: 200, confidence: 0.95),
+        ]
+        session.capture(
+            elements: rootElements, hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
+        )
+
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 0,
+            skipPatterns: ExplorationBudget.default.skipPatterns
+        )
+        let explorer = DFSExplorer(session: session, budget: budget)
+        explorer.markStarted()
+
+        // Navigate just one level deep (stackDepth=2, which is <= 2)
+        let level1 = makeElements(["Detail Info", "Back"])
+        let desc1 = MockDescriber(screens: [
+            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
+            ScreenDescriber.DescribeResult(elements: level1, screenshotBase64: "img1"),
+        ])
+        let input = MockInput()
+        _ = explorer.step(describer: desc1, input: input, strategy: MobileAppStrategy.self)
+
+        // Mark all visited to trigger backtrack
+        let graph = session.currentGraph
+        let fp = graph.currentFingerprint
+        for el in level1 { graph.markElementVisited(fingerprint: fp, elementText: el.text) }
+
+        let desc2 = MockDescriber(screens: [
+            ScreenDescriber.DescribeResult(elements: level1, screenshotBase64: "img1"),
+        ])
+
+        let result = explorer.step(
+            describer: desc2, input: input, strategy: MobileAppStrategy.self
+        )
+
+        if case .backtracked = result {
+            // Normal single-step backtrack, not fast
+            let backPresses = input.keys.filter { $0.key == "[" && $0.modifiers == ["command"] }
+            // Should be 1 (normal backtrack) not multiple (fast backtrack)
+            XCTAssertEqual(backPresses.count, 1,
+                "Shallow stack should use normal backtrack (1 press)")
+        } else {
+            XCTFail("Expected .backtracked, got \(result)")
+        }
+    }
+
+    func testFastBacktrackDoesNotTriggerForNonTabApp() {
+        let session = ExplorationSession()
+        session.start(appName: "TestApp", goal: "test")
+
+        // Root is settings (not tabRoot)
+        let rootElements = makeElements(["Settings", "General", "Privacy"])
+        session.capture(
+            elements: rootElements, hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
+        )
+
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 0,
+            skipPatterns: ExplorationBudget.default.skipPatterns
+        )
+        let explorer = DFSExplorer(session: session, budget: budget)
+        explorer.markStarted()
+
+        // Navigate 3 levels deep
+        let l1 = makeElements(["Section A", "Item 1"])
+        let l2 = makeElements(["Detail X", "Info"])
+        let l3 = makeElements(["Deep Val", "Data"])
+
+        let desc1 = MockDescriber(screens: [
+            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
+            ScreenDescriber.DescribeResult(elements: l1, screenshotBase64: "img1"),
+        ])
+        let input = MockInput()
+        _ = explorer.step(describer: desc1, input: input, strategy: MobileAppStrategy.self)
+
+        let desc2 = MockDescriber(screens: [
+            ScreenDescriber.DescribeResult(elements: l1, screenshotBase64: "img1"),
+            ScreenDescriber.DescribeResult(elements: l2, screenshotBase64: "img2"),
+        ])
+        _ = explorer.step(describer: desc2, input: input, strategy: MobileAppStrategy.self)
+
+        let desc3 = MockDescriber(screens: [
+            ScreenDescriber.DescribeResult(elements: l2, screenshotBase64: "img2"),
+            ScreenDescriber.DescribeResult(elements: l3, screenshotBase64: "img3"),
+        ])
+        _ = explorer.step(describer: desc3, input: input, strategy: MobileAppStrategy.self)
+
+        // Mark all l3 visited
+        let graph = session.currentGraph
+        let fp = graph.currentFingerprint
+        for el in l3 { graph.markElementVisited(fingerprint: fp, elementText: el.text) }
+
+        let keysBefore = input.keys.count
+        let desc4 = MockDescriber(screens: [
+            ScreenDescriber.DescribeResult(elements: l3, screenshotBase64: "img3"),
+        ])
+        _ = explorer.step(describer: desc4, input: input, strategy: MobileAppStrategy.self)
+
+        // Non-tab app: should do normal single backtrack, not fast
+        let newBackPresses = input.keys[keysBefore...].filter {
+            $0.key == "[" && $0.modifiers == ["command"]
+        }
+        XCTAssertEqual(newBackPresses.count, 1,
+            "Non-tab app should use single backtrack")
+    }
+
     // MARK: - Depth Limit
 
     func testExplorerRespectsMaxDepth() {

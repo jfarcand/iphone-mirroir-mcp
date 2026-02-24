@@ -241,6 +241,11 @@ final class DFSExplorer: @unchecked Sendable {
             return .finished(bundle: generateBundle())
         }
 
+        // Fast-backtrack: skip multiple levels to reach tab root if beneficial
+        if let fastResult = performFastBacktrackIfNeeded(stackDepth: stackDepth, input: input) {
+            return fastResult
+        }
+
         let backtrackAction = strategy.backtrackMethod(
             currentHints: hints, depth: stackDepth - 1
         )
@@ -270,6 +275,40 @@ final class DFSExplorer: @unchecked Sendable {
 
         let toFP = graph.currentFingerprint
         return .backtracked(from: fromFP, to: toFP)
+    }
+
+    /// Fast-backtrack to root for tab-based apps when deep in a subtree.
+    /// Instead of pressing Cmd+[ once per level, presses it (depth-1) times in one step.
+    ///
+    /// Triggers when:
+    /// 1. Stack depth > 2 (at least 2 levels above root)
+    /// 2. Root screen is a tabRoot
+    /// 3. Root has unvisited elements (likely unexplored tabs)
+    private func performFastBacktrackIfNeeded(
+        stackDepth: Int,
+        input: InputProviding
+    ) -> ExploreStepResult? {
+        guard stackDepth > 2 else { return nil }
+        guard graph.rootScreenType() == .tabRoot else { return nil }
+        guard graph.hasUnvisitedElements(for: graph.rootFingerprint) else { return nil }
+
+        let stepsToRoot = stackDepth - 1
+        for _ in 0..<stepsToRoot {
+            _ = input.pressKey(keyName: "[", modifiers: ["command"])
+            usleep(EnvConfig.stepSettlingDelayMs * 1000)
+        }
+
+        lock.lock()
+        let previousFP = backtrackStack.last ?? ""
+        // Pop entire stack down to root
+        while backtrackStack.count > 1 {
+            backtrackStack.removeLast()
+        }
+        actionsOnCurrentScreen = 0
+        lock.unlock()
+
+        let rootFP = graph.rootFingerprint
+        return .backtracked(from: previousFP, to: rootFP)
     }
 
     /// Attempt to scroll the current screen to reveal hidden elements.
