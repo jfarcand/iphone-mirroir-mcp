@@ -93,6 +93,41 @@ final class ExplorationBudgetTests: XCTestCase {
         XCTAssertFalse(budget.shouldSkipElement(text: "Display & Brightness"))
     }
 
+    // MARK: - French Destructive Actions
+
+    func testSkipFrenchDestructiveActions() {
+        let budget = ExplorationBudget.default
+
+        XCTAssertTrue(budget.shouldSkipElement(text: "Supprimer le compte"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Déconnexion"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Se déconnecter"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Réinitialiser tous les réglages"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Effacer contenu et réglages"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Tout supprimer"))
+    }
+
+    // MARK: - Spanish Destructive Actions
+
+    func testSkipSpanishDestructiveActions() {
+        let budget = ExplorationBudget.default
+
+        XCTAssertTrue(budget.shouldSkipElement(text: "Eliminar cuenta"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Cerrar sesión"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Restablecer ajustes"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Borrar contenido"))
+    }
+
+    // MARK: - Network Toggles
+
+    func testSkipNetworkToggles() {
+        let budget = ExplorationBudget.default
+
+        XCTAssertTrue(budget.shouldSkipElement(text: "Airplane Mode"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Mode Avion"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Modo avión"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Flugmodus"))
+    }
+
     // MARK: - Ad/Sponsored Content
 
     func testSkipsAdContent() {
@@ -111,5 +146,16 @@ final class ExplorationBudgetTests: XCTestCase {
 
         XCTAssertTrue(budget.shouldSkipElement(text: "sponsored content"))
         XCTAssertTrue(budget.shouldSkipElement(text: "buy now button"))
+    }
+
+    // MARK: - Purchase Actions
+
+    func testSkipPurchaseActions() {
+        let budget = ExplorationBudget.default
+
+        XCTAssertTrue(budget.shouldSkipElement(text: "Subscribe Now"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Purchase"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "S'abonner"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "Acheter"))
     }
 }

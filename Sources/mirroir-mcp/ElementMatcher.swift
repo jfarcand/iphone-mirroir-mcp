@@ -48,9 +48,13 @@ enum ElementMatcher {
             return MatchResult(element: element, strategy: .substring)
         }
 
-        // Priority 4: Reverse substring — element text contained in label
+        // Priority 4: Reverse substring — element text contained in label.
+        // Requires the element text to cover at least half the label length
+        // (minimum 3 characters) to avoid false matches on short OCR fragments.
+        let minReverseLength = max(3, lowerLabel.count / 2)
         if let element = elements.first(where: {
-            lowerLabel.contains($0.text.lowercased()) && !$0.text.isEmpty
+            let lower = $0.text.lowercased()
+            return lower.count >= minReverseLength && lowerLabel.contains(lower)
         }) {
             return MatchResult(element: element, strategy: .substring)
         }

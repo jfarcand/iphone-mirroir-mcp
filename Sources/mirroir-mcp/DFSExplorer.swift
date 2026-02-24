@@ -97,23 +97,53 @@ final class DFSExplorer: @unchecked Sendable {
         }
 
         let currentFP = graph.currentFingerprint
-
-        // Get unvisited elements for current screen
-        let unvisited = graph.unvisitedElements(for: currentFP)
         let screenType = strategy.classifyScreen(elements: result.elements, hints: result.hints)
-        let ranked = strategy.rankElements(
-            elements: unvisited, icons: result.icons,
-            visitedElements: graph.node(for: currentFP)?.visitedElements ?? [],
-            depth: depth, screenType: screenType
-        )
-        let actionable = ranked.filter { !strategy.shouldSkip(elementText: $0.text) }
+
+        // Classify all OCR elements using spatial proximity before filtering
+        let classified = ElementClassifier.classify(result.elements, budget: budget)
+        let navigationElements = classified.filter { $0.role == .navigation }.map(\.point)
+
+        // Scout phase: on broad screens at shallow depth, scout elements before diving
+        let phase = graph.traversalPhase(for: currentFP)
+        let navCount = navigationElements.count
+
+        if phase == .scout && ScoutPhase.shouldScout(
+            screenType: screenType, depth: depth, navigationCount: navCount
+        ) {
+            let scouted = graph.scoutResults(for: currentFP)
+            if scouted.count < budget.maxScoutsPerScreen,
+               let target = ScoutPhase.nextScoutTarget(
+                   classified: classified, scouted: Set(scouted.keys)
+               ) {
+                return performScoutTap(
+                    target: target, currentFP: currentFP,
+                    input: input, describer: describer, strategy: strategy
+                )
+            }
+            // All scouted or budget reached — advance to dive phase
+            graph.setTraversalPhase(for: currentFP, phase: .dive)
+        }
+
+        // Dive phase: build or retrieve a scored exploration plan for this screen
+        let visitedElements = graph.node(for: currentFP)?.visitedElements ?? []
+        if graph.screenPlan(for: currentFP) == nil {
+            graph.setScreenPlan(for: currentFP, plan: ScreenPlanner.buildPlan(
+                classified: classified, visitedElements: visitedElements,
+                scoutResults: graph.scoutResults(for: currentFP),
+                screenHeight: windowSize.height
+            ))
+        }
+
+        // Get the next highest-scored unvisited element from the plan
+        let actionable: TapPoint? = if let ranked = graph.nextPlannedElement(for: currentFP),
+            !strategy.shouldSkip(elementText: ranked.point.text) { ranked.point } else { nil }
 
         lock.lock()
         let currentActions = actionsOnCurrentScreen
         lock.unlock()
 
         // Check if we should tap an element or backtrack
-        if let target = actionable.first, currentActions < budget.maxActionsPerScreen {
+        if let target = actionable, currentActions < budget.maxActionsPerScreen {
             return performTap(
                 target: target, currentFP: currentFP,
                 input: input, describer: describer, strategy: strategy,
@@ -222,6 +252,79 @@ final class DFSExplorer: @unchecked Sendable {
         }
     }
 
+    /// Scout a single element: tap, compare fingerprints, immediately backtrack if navigated.
+    /// Records the scout result in the graph for later use in dive-phase ranking.
+    private func performScoutTap<S: ExplorationStrategy>(
+        target: TapPoint,
+        currentFP: String,
+        input: InputProviding,
+        describer: ScreenDescribing,
+        strategy: S.Type
+    ) -> ExploreStepResult {
+        // Mark element as visited so it won't be scouted again
+        graph.markElementVisited(fingerprint: currentFP, elementText: target.text)
+
+        // Tap the element
+        _ = input.tap(x: target.tapX, y: target.tapY)
+        usleep(EnvConfig.stepSettlingDelayMs * 1000)
+
+        // OCR after tap, dismissing any alert
+        guard let afterResult = dismissAlertIfPresent(describer: describer, input: input) else {
+            return .paused(reason: "Failed to capture screen after scout tap")
+        }
+
+        // Compare fingerprints to determine if navigation occurred
+        let afterFP = StructuralFingerprint.compute(
+            elements: afterResult.elements, icons: afterResult.icons
+        )
+
+        let navigated = afterFP != currentFP
+        let scoutResult: ScoutResult = navigated ? .navigated : .noChange
+        graph.recordScoutResult(
+            fingerprint: currentFP, elementText: target.text, result: scoutResult
+        )
+
+        lock.lock()
+        actionCount += 1
+        lock.unlock()
+
+        if navigated {
+            // Record the transition in the graph so we know about this screen
+            let screenType = strategy.classifyScreen(
+                elements: afterResult.elements, hints: afterResult.hints
+            )
+            _ = graph.recordTransition(
+                elements: afterResult.elements, icons: afterResult.icons,
+                hints: afterResult.hints, screenshot: afterResult.screenshotBase64,
+                actionType: "tap", elementText: target.text, screenType: screenType
+            )
+            session.capture(
+                elements: afterResult.elements, hints: afterResult.hints,
+                icons: afterResult.icons, actionType: "tap",
+                arrivedVia: target.text, screenshotBase64: afterResult.screenshotBase64
+            )
+
+            // Immediately backtrack: swipe from left edge
+            _ = input.swipe(
+                fromX: 10, fromY: windowSize.height / 2,
+                toX: windowSize.width * 0.7, toY: windowSize.height / 2,
+                durationMs: 300
+            )
+            usleep(EnvConfig.stepSettlingDelayMs * 1000)
+
+            // Restore graph state to parent screen
+            graph.setCurrentFingerprint(currentFP)
+
+            return .continue(
+                description: "Scouted \"\(target.text)\" → navigates (will dive later)"
+            )
+        }
+
+        return .continue(
+            description: "Scouted \"\(target.text)\" → no navigation"
+        )
+    }
+
     private func performBacktrack<S: ExplorationStrategy>(
         currentFP: String,
         input: InputProviding,
@@ -251,10 +354,10 @@ final class DFSExplorer: @unchecked Sendable {
         )
 
         // Execute backtrack action
+        // Note: .pressBack falls through to swipeBack because Cmd+[ doesn't work
+        // reliably in iPhone Mirroring. Swipe-from-left-edge is the universal back gesture.
         switch backtrackAction {
-        case .pressBack:
-            _ = input.pressKey(keyName: "[", modifiers: ["command"])
-        case .swipeBack:
+        case .pressBack, .swipeBack:
             _ = input.swipe(fromX: 10, fromY: 400, toX: 300, toY: 400, durationMs: 300)
         case .pressHome:
             _ = input.pressKey(keyName: "h", modifiers: ["command", "shift"])
@@ -270,11 +373,14 @@ final class DFSExplorer: @unchecked Sendable {
 
         lock.lock()
         let fromFP = backtrackStack.removeLast()
+        let parentFP = backtrackStack.last ?? graph.rootFingerprint
         actionsOnCurrentScreen = 0
         lock.unlock()
 
-        let toFP = graph.currentFingerprint
-        return .backtracked(from: fromFP, to: toFP)
+        // Sync graph's current fingerprint to the screen we backtracked to
+        graph.setCurrentFingerprint(parentFP)
+
+        return .backtracked(from: fromFP, to: parentFP)
     }
 
     /// Fast-backtrack to root for tab-based apps when deep in a subtree.
@@ -294,9 +400,12 @@ final class DFSExplorer: @unchecked Sendable {
 
         let stepsToRoot = stackDepth - 1
         for _ in 0..<stepsToRoot {
-            _ = input.pressKey(keyName: "[", modifiers: ["command"])
+            // Swipe from left edge to go back (Cmd+[ doesn't work in iPhone Mirroring)
+            _ = input.swipe(fromX: 10, fromY: 400, toX: 300, toY: 400, durationMs: 300)
             usleep(EnvConfig.stepSettlingDelayMs * 1000)
         }
+
+        let rootFP = graph.rootFingerprint
 
         lock.lock()
         let previousFP = backtrackStack.last ?? ""
@@ -307,7 +416,9 @@ final class DFSExplorer: @unchecked Sendable {
         actionsOnCurrentScreen = 0
         lock.unlock()
 
-        let rootFP = graph.rootFingerprint
+        // Sync graph's current fingerprint to root
+        graph.setCurrentFingerprint(rootFP)
+
         return .backtracked(from: previousFP, to: rootFP)
     }
 
@@ -337,6 +448,8 @@ final class DFSExplorer: @unchecked Sendable {
         graph.incrementScrollCount(for: currentFP)
 
         if novelCount > 0 {
+            // New elements discovered — invalidate the plan so it rebuilds with them
+            graph.clearScreenPlan(for: currentFP)
             return .continue(description: "Scrolled, found \(novelCount) new elements")
         }
         // No new elements — scroll exhaustion, fall through to backtrack

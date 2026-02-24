@@ -368,7 +368,14 @@ extension MirroirMCP {
         if let launchError = ctx.input.launchApp(name: appName) {
             return .error("Failed to launch '\(appName)': \(launchError)")
         }
-        usleep(EnvConfig.stepSettlingDelayMs * 1000)
+
+        // Wait for Spotlight to dismiss and the app to become visible.
+        // launchApp uses Spotlight search which may linger after pressing Return.
+        guard let firstResult = SpotlightDetector.waitForDismissal(describer: ctx.describer) else {
+            return .error(
+                "'\(appName)' did not appear after launch — " +
+                "Spotlight search may still be visible. Try launching the app manually first.")
+        }
 
         // Parse budget overrides
         let maxDepth = args["max_depth"]?.asInt() ?? ExplorationBudget.default.maxDepth
@@ -393,11 +400,6 @@ extension MirroirMCP {
         )
         session.start(appName: appName, goal: goal)
         session.setStrategy(strategyChoice.rawValue)
-
-        // OCR first screen
-        guard let firstResult = ctx.describer.describe(skipOCR: false) else {
-            return .error("Failed to capture initial screen for '\(appName)'.")
-        }
 
         // Capture first screen
         session.capture(

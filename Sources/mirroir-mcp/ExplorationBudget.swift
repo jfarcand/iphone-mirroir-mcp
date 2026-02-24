@@ -26,8 +26,31 @@ struct ExplorationBudget: Sendable {
     /// Maximum scroll attempts per screen to reveal hidden content.
     let scrollLimit: Int
 
+    /// Maximum scout taps on a single screen before forcing transition to dive phase.
+    let maxScoutsPerScreen: Int
+
     /// Element text patterns that should never be tapped (destructive or dangerous actions).
     let skipPatterns: [String]
+
+    /// Memberwise init with a default value for `maxScoutsPerScreen` to preserve backward
+    /// compatibility at all existing call sites that predate the scout phase feature.
+    init(
+        maxDepth: Int,
+        maxScreens: Int,
+        maxTimeSeconds: Int,
+        maxActionsPerScreen: Int,
+        scrollLimit: Int,
+        maxScoutsPerScreen: Int = 8,
+        skipPatterns: [String]
+    ) {
+        self.maxDepth = maxDepth
+        self.maxScreens = maxScreens
+        self.maxTimeSeconds = maxTimeSeconds
+        self.maxActionsPerScreen = maxActionsPerScreen
+        self.scrollLimit = scrollLimit
+        self.maxScoutsPerScreen = maxScoutsPerScreen
+        self.skipPatterns = skipPatterns
+    }
 
     /// Default budget suitable for most mobile app explorations.
     static let `default` = ExplorationBudget(
@@ -36,9 +59,22 @@ struct ExplorationBudget: Sendable {
         maxTimeSeconds: 300,
         maxActionsPerScreen: 5,
         scrollLimit: 3,
+        maxScoutsPerScreen: 8,
         skipPatterns: [
+            // Destructive actions (English)
             "Delete", "Sign Out", "Log Out", "Reset", "Erase", "Remove All",
-            "Sponsored", "Promoted", "Advertisement", "ORDER NOW", "Buy Now", "Install Now",
+            "Factory", "Format", "Wipe",
+            // Destructive actions (French)
+            "Supprimer", "Déconnexion", "Se déconnecter", "Réinitialiser",
+            "Effacer", "Tout supprimer",
+            // Destructive actions (Spanish)
+            "Eliminar", "Cerrar sesión", "Restablecer", "Borrar",
+            // Network toggles — tapping these changes device connectivity
+            "Airplane", "Mode Avion", "Modo avión", "Flugmodus",
+            // Purchase/commercial — avoid accidental purchases or ad clicks
+            "Sponsored", "Promoted", "Advertisement",
+            "ORDER NOW", "Buy Now", "Install Now",
+            "Subscribe", "Purchase", "S'abonner", "Acheter",
         ]
     )
 

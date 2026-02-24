@@ -231,6 +231,14 @@ public enum EnvConfig {
         readDouble("appSwitcherCardOffset", default: TimingConstants.appSwitcherCardOffset)
     }
 
+    public static var appSwitcherCardXFraction: Double {
+        readDouble("appSwitcherCardXFraction", default: TimingConstants.appSwitcherCardXFraction)
+    }
+
+    public static var appSwitcherCardYFraction: Double {
+        readDouble("appSwitcherCardYFraction", default: TimingConstants.appSwitcherCardYFraction)
+    }
+
     public static var appSwitcherSwipeDistance: Double {
         readDouble("appSwitcherSwipeDistance", default: TimingConstants.appSwitcherSwipeDistance)
     }

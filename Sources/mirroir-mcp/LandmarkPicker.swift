@@ -72,4 +72,10 @@ enum LandmarkPicker {
         let range = NSRange(text.startIndex..., in: text)
         return bareNumberPattern.firstMatch(in: text, range: range) != nil
     }
+
+    /// Check if a string contains no alphanumeric characters (e.g. "...", "•••", "→", "+++").
+    /// These are typically UI indicators or action icons, not useful navigation targets.
+    static func isPunctuationOnly(_ text: String) -> Bool {
+        !text.unicodeScalars.contains { CharacterSet.alphanumerics.contains($0) }
+    }
 }

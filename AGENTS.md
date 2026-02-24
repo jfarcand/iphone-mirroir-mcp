@@ -162,6 +162,27 @@ swift build -c release
 swift test
 ```
 
+#### Tier 4: Real-Device Validation (REQUIRED before squash-merge to main)
+
+**CRITICAL: NEVER squash-merge a feature branch to main without real iPhone testing first.**
+
+This is an iPhone Mirroring tool. Unit tests with mocks prove logic correctness but cannot validate real-world behavior. OCR results, scroll physics, alert timing, and tap reliability all behave differently on a real device.
+
+**For any feature touching DFS exploration, input, OCR, or screen interaction:**
+1. Build and run: `swift build`
+2. Test with a real app on the connected iPhone using the MCP tools (e.g. `generate_skill(action: "explore", app_name: "Settings")`)
+3. Verify the feature works end-to-end: correct taps, correct OCR, correct output
+4. Only after real-device confirmation: squash-merge to main
+
+**What real-device testing catches that mocks miss:**
+- OCR element positions and text that differ from synthetic test data
+- Scroll settling times and scroll-exhaustion thresholds
+- Alert dialog appearance timing and dismiss button coordinates
+- Tab bar detection on real app layouts
+- Backtrack navigation (Cmd+[) behavior across iOS versions
+
+**Commit to feature branch first, test on device, then merge.** The feature branch is the staging area. Main is the release branch.
+
 ### Test Output Verification - MANDATORY
 
 **After running ANY test command, you MUST verify tests actually ran.**

@@ -446,60 +446,34 @@ final class StepExecutor {
                               durationSeconds: elapsed(startTime))
         }
 
-        // Open App Switcher
+        // Launch the app via Spotlight. This handles localization: typing
+        // "Settings" finds "Réglages" on a French iPhone, for example.
+        if let error = input.launchApp(name: appName) {
+            return StepResult(step: step, status: .failed,
+                              message: "Failed to launch '\(appName)': \(error)",
+                              durationSeconds: elapsed(startTime))
+        }
+        usleep(config.settlingDelayMs * 1000)
+
+        // Open the App Switcher. The just-launched app is guaranteed
+        // to be the centered (most-recently-used) card.
         guard menuBridge.triggerMenuAction(menu: "View", item: "App Switcher") else {
+            _ = menuBridge.triggerMenuAction(menu: "View", item: "Home Screen")
             return StepResult(step: step, status: .failed,
                               message: "Failed to open App Switcher",
                               durationSeconds: elapsed(startTime))
         }
-
         usleep(config.settlingDelayMs * 1000)
 
-        // Swipe left through the App Switcher carousel to find the app card.
-        // Only 2-3 cards are visible at a time; off-screen labels are clipped.
-        let maxSwipes = EnvConfig.appSwitcherMaxSwipes
-        var match: ElementMatcher.MatchResult?
-
-        for attempt in 0...maxSwipes {
-            guard let describeResult = describer.describe(skipOCR: false) else {
-                _ = menuBridge.triggerMenuAction(menu: "View", item: "Home Screen")
-                return StepResult(step: step, status: .failed,
-                                  message: "Failed to capture screen in App Switcher",
-                                  durationSeconds: elapsed(startTime))
-            }
-
-            if let found = ElementMatcher.findMatch(label: appName,
-                                                    in: describeResult.elements) {
-                match = found
-                break
-            }
-
-            // Swipe left to reveal more cards
-            if attempt < maxSwipes {
-                _ = input.swipe(fromX: 300, fromY: 400,
-                                toX: 100, toY: 400,
-                                durationMs: EnvConfig.defaultSwipeDurationMs)
-                usleep(config.settlingDelayMs * 1000)
-            }
-        }
-
-        guard let match else {
-            _ = menuBridge.triggerMenuAction(menu: "View", item: "Home Screen")
-            return StepResult(step: step, status: .passed,
-                              message: "App not in switcher (already quit)",
-                              durationSeconds: elapsed(startTime))
-        }
-
-        // Drag up on the app card to force-quit.
-        // Uses drag (touch events) instead of swipe (scroll wheel) because
-        // scroll wheel events are misinterpreted after horizontal carousel navigation.
-        // OCR finds the app name label above the card preview, so offset
-        // downward into the card body before dragging, and clamp toY >= 0.
-        let cardX = match.element.tapX
-        let cardY = match.element.tapY + EnvConfig.appSwitcherCardOffset
+        // Drag up on the centered card to dismiss it. No OCR needed —
+        // the target app is always the first card after launching it.
+        let windowSize = bridge.getWindowInfo()?.size
+        let cardX = (windowSize.map { Double($0.width) } ?? 410.0) * EnvConfig.appSwitcherCardXFraction
+        let cardY = (windowSize.map { Double($0.height) } ?? 890.0) * EnvConfig.appSwitcherCardYFraction
         let toY = max(0, cardY - EnvConfig.appSwitcherSwipeDistance)
         if let error = input.drag(fromX: cardX, fromY: cardY,
-                                   toX: cardX, toY: toY, durationMs: EnvConfig.appSwitcherSwipeDurationMs) {
+                                   toX: cardX, toY: toY,
+                                   durationMs: EnvConfig.appSwitcherSwipeDurationMs) {
             _ = menuBridge.triggerMenuAction(menu: "View", item: "Home Screen")
             return StepResult(step: step, status: .failed,
                               message: "Failed to swipe app card: \(error)",

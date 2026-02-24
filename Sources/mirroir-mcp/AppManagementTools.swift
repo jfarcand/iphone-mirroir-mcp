@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 //
 // ABOUTME: Registers the reset_app MCP tool for force-quitting apps via the App Switcher.
-// ABOUTME: Uses menu actions to open App Switcher, OCR to find the app, and swipe up to dismiss.
+// ABOUTME: Launches the app first via Spotlight (handles localization), then dismisses its card.
 
 import Foundation
 import HelperLib
@@ -38,63 +38,35 @@ extension MirroirMCP {
                     return .error("Target '\(ctx.name)' does not support reset_app")
                 }
                 let input = ctx.input
-                let describer = ctx.describer
 
                 guard let appName = args["name"]?.asString() else {
                     return .error("Missing required parameter: name (string)")
                 }
 
-                // Open App Switcher
-                guard menuBridge.triggerMenuAction(menu: "View", item: "App Switcher") else {
-                    return .error("Failed to open App Switcher. Is '\(ctx.name)' running?")
+                // Launch the app via Spotlight. This handles localization: typing
+                // "Settings" finds "Réglages" on a French iPhone, for example.
+                if let error = input.launchApp(name: appName) {
+                    return .error("Failed to launch '\(appName)': \(error)")
                 }
-
                 usleep(EnvConfig.toolSettlingDelayUs)
 
-                // Swipe left through the App Switcher carousel to find the app card.
-                // Only 2-3 cards are visible at a time; off-screen labels are clipped.
-                let maxSwipes = EnvConfig.appSwitcherMaxSwipes
-                var match: ElementMatcher.MatchResult?
-
-                for attempt in 0...maxSwipes {
-                    guard let describeResult = describer.describe(skipOCR: false) else {
-                        _ = menuBridge.triggerMenuAction(menu: "View", item: "Home Screen")
-                        return .error("Failed to capture screen in App Switcher")
-                    }
-
-                    if let found = ElementMatcher.findMatch(label: appName,
-                                                            in: describeResult.elements) {
-                        match = found
-                        break
-                    }
-
-                    // Swipe left to reveal more cards
-                    if attempt < maxSwipes {
-                        _ = input.swipe(fromX: 300, fromY: 400,
-                                        toX: 100, toY: 400,
-                                        durationMs: EnvConfig.defaultSwipeDurationMs)
-                        usleep(EnvConfig.toolSettlingDelayUs)
-                    }
-                }
-
-                guard let match else {
+                // Open the App Switcher. The just-launched app is guaranteed
+                // to be the centered (most-recently-used) card.
+                guard menuBridge.triggerMenuAction(menu: "View", item: "App Switcher") else {
                     _ = menuBridge.triggerMenuAction(menu: "View", item: "Home Screen")
-                    return .text("'\(appName)' not in App Switcher (already quit)")
+                    return .error("Failed to open App Switcher. Is '\(ctx.name)' running?")
                 }
+                usleep(EnvConfig.toolSettlingDelayUs)
 
-                // Drag up on the app card to force-quit.
-                // Uses drag (touch events) instead of swipe (scroll wheel) because
-                // scroll wheel events are misinterpreted after horizontal carousel navigation.
-                // OCR finds the app name label near the card preview, so offset
-                // downward into the card body before dragging. Clamp both endpoints
-                // to stay within window bounds — the label may appear near the
-                // bottom of the window when the card is off-center in the carousel.
-                let windowHeight = ctx.bridge.getWindowInfo().map { Double($0.size.height) } ?? 898.0
-                let cardX = match.element.tapX
-                let cardY = min(match.element.tapY + EnvConfig.appSwitcherCardOffset, windowHeight)
+                // Drag up on the centered card to dismiss it. No OCR needed —
+                // the target app is always the first card after launching it.
+                let windowSize = ctx.bridge.getWindowInfo()?.size
+                let cardX = (windowSize.map { Double($0.width) } ?? 410.0) * EnvConfig.appSwitcherCardXFraction
+                let cardY = (windowSize.map { Double($0.height) } ?? 890.0) * EnvConfig.appSwitcherCardYFraction
                 let toY = max(0, cardY - EnvConfig.appSwitcherSwipeDistance)
                 if let error = input.drag(fromX: cardX, fromY: cardY,
-                                           toX: cardX, toY: toY, durationMs: EnvConfig.appSwitcherSwipeDurationMs) {
+                                           toX: cardX, toY: toY,
+                                           durationMs: EnvConfig.appSwitcherSwipeDurationMs) {
                     _ = menuBridge.triggerMenuAction(menu: "View", item: "Home Screen")
                     return .error("Failed to swipe app card: \(error)")
                 }

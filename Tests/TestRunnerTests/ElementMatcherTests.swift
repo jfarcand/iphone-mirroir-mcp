@@ -72,6 +72,34 @@ final class ElementMatcherTests: XCTestCase {
         XCTAssertEqual(result?.strategy, .substring)
     }
 
+    func testReverseSubstringRejectsShortFragments() {
+        // "en" (2 chars) is too short to match "Settings" (8 chars, min = max(3, 4) = 4)
+        let elements = [makeTapPoint(text: "en"), makeTapPoint(text: "in")]
+        let result = ElementMatcher.findMatch(label: "Settings", in: elements)
+        XCTAssertNil(result)
+    }
+
+    func testReverseSubstringRejectsSingleCharacter() {
+        let elements = [makeTapPoint(text: "S"), makeTapPoint(text: ">")]
+        let result = ElementMatcher.findMatch(label: "Settings", in: elements)
+        XCTAssertNil(result)
+    }
+
+    func testReverseSubstringRequiresMinimumCoverage() {
+        // "set" (3 chars) doesn't meet the minimum for "Settings" (8 chars, min = 4)
+        let elements = [makeTapPoint(text: "set")]
+        let result = ElementMatcher.findMatch(label: "Settings", in: elements)
+        XCTAssertNil(result)
+    }
+
+    func testReverseSubstringAcceptsSufficientCoverage() {
+        // "Sett" (4 chars) meets the minimum for "Settings" (8 chars, min = 4)
+        let elements = [makeTapPoint(text: "Sett")]
+        let result = ElementMatcher.findMatch(label: "Settings", in: elements)
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?.element.text, "Sett")
+    }
+
     // MARK: - No Match
 
     func testNoMatch() {

@@ -226,7 +226,8 @@ enum ExplorationGuide {
             el.confidence >= LandmarkPicker.landmarkMinConfidence &&
             el.tapY >= LandmarkPicker.statusBarMaxY &&
             !LandmarkPicker.isTimePattern(el.text) &&
-            !LandmarkPicker.isBareNumber(el.text)
+            !LandmarkPicker.isBareNumber(el.text) &&
+            !LandmarkPicker.isPunctuationOnly(el.text)
         }
         .sorted(by: { $0.tapY < $1.tapY })
     }

@@ -97,6 +97,9 @@ final class NavigationGraph: @unchecked Sendable {
     private var rootFP: String = ""
     private var isStarted: Bool = false
     private var scrollCounts: [String: Int] = [:]
+    private var scoutResultsMap: [String: [String: ScoutResult]] = [:]
+    private var traversalPhases: [String: TraversalPhase] = [:]
+    private var screenPlans: [String: [RankedElement]] = [:]
     private let lock = NSLock()
 
     // MARK: - Lifecycle
@@ -122,6 +125,9 @@ final class NavigationGraph: @unchecked Sendable {
         nodes = [:]
         edges = []
         scrollCounts = [:]
+        scoutResultsMap = [:]
+        traversalPhases = [:]
+        screenPlans = [:]
 
         let fp = StructuralFingerprint.compute(elements: rootElements, icons: icons)
         let node = ScreenNode(
@@ -339,12 +345,90 @@ final class NavigationGraph: @unchecked Sendable {
         return rootFP
     }
 
+    /// Update the current fingerprint to reflect navigation after backtracking.
+    /// Called after Cmd+[ or fast-backtrack to sync graph state with the physical screen.
+    ///
+    /// - Parameter fingerprint: The fingerprint of the screen the explorer landed on.
+    func setCurrentFingerprint(_ fingerprint: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        currentFP = fingerprint
+    }
+
     /// Check if a screen has unvisited elements (elements not in the visited set).
     func hasUnvisitedElements(for fingerprint: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         guard let node = nodes[fingerprint] else { return false }
         return node.elements.contains { !node.visitedElements.contains($0.text) }
+    }
+
+    // MARK: - Scout Phase Support
+
+    /// Record the result of scouting an element on a screen.
+    ///
+    /// - Parameters:
+    ///   - fingerprint: The screen fingerprint where scouting occurred.
+    ///   - elementText: The text of the element that was scouted.
+    ///   - result: Whether tapping the element caused navigation.
+    func recordScoutResult(fingerprint: String, elementText: String, result: ScoutResult) {
+        lock.lock()
+        defer { lock.unlock() }
+        scoutResultsMap[fingerprint, default: [:]][elementText] = result
+    }
+
+    /// Get all scout results for a screen.
+    func scoutResults(for fingerprint: String) -> [String: ScoutResult] {
+        lock.lock()
+        defer { lock.unlock() }
+        return scoutResultsMap[fingerprint, default: [:]]
+    }
+
+    /// Get the current traversal phase for a screen. Defaults to `.scout`.
+    func traversalPhase(for fingerprint: String) -> TraversalPhase {
+        lock.lock()
+        defer { lock.unlock() }
+        return traversalPhases[fingerprint, default: .scout]
+    }
+
+    /// Set the traversal phase for a screen.
+    func setTraversalPhase(for fingerprint: String, phase: TraversalPhase) {
+        lock.lock()
+        defer { lock.unlock() }
+        traversalPhases[fingerprint] = phase
+    }
+
+    // MARK: - Screen Plan Support
+
+    /// Store a ranked exploration plan for a screen.
+    func setScreenPlan(for fingerprint: String, plan: [RankedElement]) {
+        lock.lock()
+        defer { lock.unlock() }
+        screenPlans[fingerprint] = plan
+    }
+
+    /// Get the exploration plan for a screen, if one has been built.
+    func screenPlan(for fingerprint: String) -> [RankedElement]? {
+        lock.lock()
+        defer { lock.unlock() }
+        return screenPlans[fingerprint]
+    }
+
+    /// Get the next unvisited element from the screen's exploration plan.
+    /// Returns the highest-scored element whose text is NOT in the visited set.
+    func nextPlannedElement(for fingerprint: String) -> RankedElement? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let plan = screenPlans[fingerprint],
+              let node = nodes[fingerprint] else { return nil }
+        return plan.first { !node.visitedElements.contains($0.point.text) }
+    }
+
+    /// Clear the exploration plan for a screen, forcing a rebuild on next access.
+    func clearScreenPlan(for fingerprint: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        screenPlans[fingerprint] = nil
     }
 
     // MARK: - Private

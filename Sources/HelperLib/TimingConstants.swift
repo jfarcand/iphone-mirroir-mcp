@@ -166,6 +166,14 @@ public enum TimingConstants {
     /// down into the card so the dismiss gesture registers reliably.
     public static let appSwitcherCardOffset: Double = 250.0
 
+    /// Horizontal position of the current app card in the App Switcher, as a fraction
+    /// of window width. iOS places the most-recently-used app to the right of center.
+    public static let appSwitcherCardXFraction: Double = 0.75
+
+    /// Vertical position for the drag start point in the App Switcher, as a fraction
+    /// of window height. Targets the middle of the card body.
+    public static let appSwitcherCardYFraction: Double = 0.55
+
     /// Swipe distance for dismissing app cards in the App Switcher (points).
     public static let appSwitcherSwipeDistance: Double = 300.0
 
