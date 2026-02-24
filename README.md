@@ -16,9 +16,9 @@ Give your AI eyes, hands, and a real iPhone. An MCP server that lets any AI agen
 
 ## What's Changed
 
+- **Reliable back navigation** — DFS explorer now taps the iOS back button directly instead of attempting edge-swipe gestures (which CGEvent cannot produce). Includes canonical position fallback when OCR misses the chevron.
 - **Autonomous app explorer** — `generate_skill` with `action: "explore"` does DFS graph traversal of any app, producing SKILL.md files automatically. Supports mobile, social, and desktop exploration strategies.
 - **CGEvent-only input** — All input (tap, swipe, type, press_key, shake) uses macOS CGEvent API directly. No kernel extensions, no root privileges, no helper daemons.
-- **Icon detection** — `describe_screen` detects unlabeled tab bar and toolbar icons via pixel clustering with Vision saliency fallback.
 
 ## Requirements
 
