@@ -210,18 +210,18 @@ if (!skillsAvailable) {
 ---
 
 <Layout
-  title="mirroir-mcp — Skill your agent to use your iPhone"
-  description="MCP server that controls iPhones through macOS iPhone Mirroring. Screenshot, tap, swipe, type — from any MCP client."
+  title="mirroir-mcp — Give your AI eyes, hands, and a real iPhone"
+  description="An MCP server that gives AI agents full control of a real iPhone through macOS iPhone Mirroring. Tell your AI what to do — it sees the screen, taps what it needs, and figures the rest out."
 >
   <!-- Hero -->
   <header>
     <img src={`${import.meta.env.BASE_URL}mirroir-wordmark.svg`} alt="mirroir-mcp" class="logo" width="80" height="100" />
     <h1>mirroir-mcp</h1>
     <p class="tagline">
-      Skill your agent to use your iPhone.
+      Give your AI eyes, hands, and a real iPhone.
     </p>
     <p class="subtitle">
-      An MCP server that controls iPhones through macOS iPhone Mirroring &mdash; screenshot, tap, swipe, type &mdash; from any MCP client. Automate your morning routine, test a login flow, or let the AI explore an app on its own.
+      Tell your AI to send a message, test a login flow, or explore an app &mdash; it sees the screen, taps what it needs, and figures the rest out. An MCP server for macOS iPhone Mirroring, compatible with any MCP client.
     </p>
   </header>
 
@@ -331,6 +331,34 @@ if (!skillsAvailable) {
     </script>
   </section>
 
+  <!-- How it works -->
+  <section>
+    <h2>How it works</h2>
+    <p>Every interaction follows the same loop &mdash; observe, reason, act.</p>
+
+    <div class="agent-loop">
+      <div class="agent-loop-step">
+        <div class="agent-loop-icon">&#x1F441;</div>
+        <h3>Eyes</h3>
+        <p><code>describe_screen</code> returns every text element on the iPhone screen with exact tap coordinates.</p>
+      </div>
+      <div class="agent-loop-step">
+        <div class="agent-loop-icon">&#x1F9E0;</div>
+        <h3>Brain</h3>
+        <p>Your LLM reads the screen, decides what to do next, and picks the right tool.</p>
+      </div>
+      <div class="agent-loop-step">
+        <div class="agent-loop-icon">&#x270B;</div>
+        <h3>Hands</h3>
+        <p><code>tap</code>, <code>type_text</code>, <code>swipe</code> &mdash; the AI executes the action, then loops back to observe.</p>
+      </div>
+    </div>
+
+    <div class="agent-walkthrough">
+      You say <em>"send Alice a message."</em> The AI screenshots the phone, reads the screen via OCR, taps Messages, finds Alice's conversation, types your message, and hits Send. No script. No coordinates. Just intent.
+    </div>
+  </section>
+
   <!-- Install -->
   <section id="install">
     <h2>Install mirroir-mcp <span class="version-badge">v{version}</span></h2>
@@ -354,11 +382,36 @@ if (!skillsAvailable) {
     </div>
   </section>
 
-  <!-- Generate → Write → Run → Test → Diagnose pipeline -->
+  <!-- Just tell your AI -->
   <section>
-    <h2>Generate, write, run, test, diagnose</h2>
+    <h2>Just tell your AI</h2>
+    <p>Paste any of these into Claude Code, ChatGPT, Cursor, or any MCP client.</p>
+
+    <div class="example-cards">
+      <div class="example-card">
+        <p class="example-prompt">"Open Calendar, create a Dentist event next Tuesday at 2pm"</p>
+        <p class="example-steps">The AI launches Calendar, taps "+", fills in title, date, and time, then saves. Handles confirmation dialogs automatically.</p>
+      </div>
+      <div class="example-card">
+        <p class="example-prompt">"Open Messages, find Alice, and send 'running 10 min late'"</p>
+        <p class="example-steps">The AI opens Messages, scrolls to find Alice's conversation, taps the text field, types the message, and hits Send.</p>
+      </div>
+      <div class="example-card">
+        <p class="example-prompt">"Test the login screen with test@example.com / password123"</p>
+        <p class="example-steps">The AI opens the app, taps Email, types the address, taps Password, types it, taps Sign In, and screenshots the result.</p>
+      </div>
+      <div class="example-card">
+        <p class="example-prompt">"Start recording, open Settings, scroll to General &gt; About, stop recording"</p>
+        <p class="example-steps">The AI starts a video capture, navigates through Settings menus, then stops recording and returns the file path.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- From exploration to CI -->
+  <section>
+    <h2>From exploration to CI</h2>
     <p>
-      Point mirroir at any app and it autonomously discovers every reachable screen using DFS graph traversal &mdash; screens are nodes, taps are edges. The output: a navigation graph and a bundle of ready-to-run SKILL.md files. Edit them, test them deterministically from the CLI, diagnose failures with <code>--agent</code>.
+      When you need deterministic, repeatable testing, mirroir provides a full pipeline. Point it at any app &mdash; it autonomously discovers every reachable screen using DFS graph traversal (screens are nodes, taps are edges), then outputs a bundle of ready-to-run SKILL.md files. Edit them, test them from the CLI, diagnose failures with <code>--agent</code>.
     </p>
 
     <div class="pipeline-grid">
@@ -412,12 +465,11 @@ if (!skillsAvailable) {
 
   <!-- Skills -->
   <section>
-    <h2>Skills: intents, not scripts</h2>
+    <h2>Repeatable flows: Skills</h2>
     <p>
-      Skills are SKILL.md files that describe what you want done &mdash; your AI agent reads them and drives the iPhone for you.
-      Steps like <code>Tap "Email"</code> use OCR, not coordinates &mdash; the AI finds
-      the element and adapts to unexpected dialogs and layout changes.
-      Automate your morning routine, test a login flow, or share them on the <a href="https://github.com/jfarcand/mirroir-skills" rel="noopener noreferrer">community repository</a>.
+      When you find yourself repeating the same agent workflow, capture it as a skill. Skills are SKILL.md files &mdash; numbered steps the AI follows, adapting to layout changes and unexpected dialogs.
+      Steps like <code>Tap "Email"</code> use OCR, not coordinates.
+      Share them on the <a href="https://github.com/jfarcand/mirroir-skills" rel="noopener noreferrer">community repository</a>.
     </p>
 
     <div class="carousel skill-carousel">

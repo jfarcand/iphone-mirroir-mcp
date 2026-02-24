@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)](https://support.apple.com/en-us/105071)
 
-An MCP server that controls iPhones through macOS iPhone Mirroring. Experimental support for macOS windows. [Screenshot, tap, swipe, type, scroll_to, measure](docs/tools.md) from any MCP client.
+Give your AI eyes, hands, and a real iPhone. An MCP server that lets any AI agent see the screen, tap what it needs, and figure the rest out — through macOS iPhone Mirroring. Experimental support for macOS windows. [31 tools](docs/tools.md), any MCP client.
 
 ## What's Changed
 
@@ -114,6 +114,10 @@ Use the full path to the binary in your `.mcp.json`: `<repo>/.build/release/mirr
 
 </details>
 
+## How it works
+
+Every interaction follows the same loop: **observe, reason, act**. `describe_screen` gives the AI every text element with tap coordinates (eyes). The LLM decides what to do next (brain). `tap`, `type_text`, `swipe` execute the action (hands) — then it loops back to observe. No scripts, no coordinates, just intent.
+
 ## Examples
 
 Paste any of these into Claude Code, Claude Desktop, ChatGPT, Cursor, or any MCP client:
@@ -137,7 +141,7 @@ Start recording, open Settings, scroll to General > About, stop recording.
 
 ## Skills
 
-Skills are SKILL.md files that describe what you want done — your AI agent reads them and drives the iPhone for you. Automate your morning routine, test a login flow, or let the AI explore an app on its own. Steps like `Tap "Email"` use OCR — no hardcoded coordinates.
+When you find yourself repeating the same agent workflow, capture it as a skill. Skills are SKILL.md files — numbered steps the AI follows, adapting to layout changes and unexpected dialogs. Steps like `Tap "Email"` use OCR — no hardcoded coordinates.
 
 Place files in `~/.mirroir-mcp/skills/` (global) or `<cwd>/.mirroir-mcp/skills/` (project-local).
 

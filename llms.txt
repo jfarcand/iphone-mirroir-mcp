@@ -1,10 +1,10 @@
 # mirroir-mcp
 
-> MCP server that controls iPhones through macOS iPhone Mirroring — and any macOS window. Provides 31 tools for screenshot, tap, swipe, type, scroll, measure, and skill automation from any MCP client (Claude Code, Cursor, Copilot, ChatGPT, Codex). Written in Swift. Apache 2.0 licensed.
+> Give your AI eyes, hands, and a real iPhone. An MCP server that lets any AI agent see the screen, tap what it needs, and figure the rest out — through macOS iPhone Mirroring. Also supports macOS windows. 31 tools, any MCP client (Claude Code, Cursor, Copilot, ChatGPT, Codex). Written in Swift. Apache 2.0 licensed.
 
 ## Overview
 
-mirroir-mcp bridges AI agents to real iPhones via the macOS iPhone Mirroring feature (macOS 15+). It exposes a JSON-RPC 2.0 MCP server over stdio. AI agents can screenshot the phone, read the screen via OCR, tap buttons, type text, swipe, scroll, launch apps, and run multi-step automation "skills" — all on a physical iPhone without jailbreaking or simulators.
+mirroir-mcp gives AI agents eyes and hands on a real iPhone. Any LLM with MCP support can screenshot the phone, read the screen via OCR, decide what to do, and execute taps, types, and swipes — no jailbreak, no simulator, no app SDK. The agent loop (observe, reason, act) runs on any model: Claude, GPT, Gemini, or local Ollama. For repeatable workflows, capture them as skills — numbered-step SKILL.md files the AI follows adaptively. It connects via the macOS iPhone Mirroring feature (macOS 15+) and exposes a JSON-RPC 2.0 MCP server over stdio.
 
 The name is the old French spelling of *miroir* (mirror).
 

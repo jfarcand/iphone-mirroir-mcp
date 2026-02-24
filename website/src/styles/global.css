@@ -647,6 +647,103 @@ section > p {
   margin-top: 0.15rem;
 }
 
+/* Agent loop — 3-column "Eyes / Brain / Hands" */
+.agent-loop {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  margin: 1.5rem 0;
+}
+
+.agent-loop-step {
+  background: var(--color-code-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1.25rem 1rem;
+  text-align: center;
+}
+
+.agent-loop-icon {
+  font-size: 2rem;
+  line-height: 1;
+  margin-bottom: 0.6rem;
+}
+
+.agent-loop-step h3 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-bottom: 0.4rem;
+  color: var(--color-text);
+}
+
+.agent-loop-step p {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  text-align: center;
+  margin-bottom: 0;
+  line-height: 1.45;
+}
+
+.agent-loop-step code {
+  font-size: 0.8rem;
+}
+
+@media (max-width: 700px) {
+  .agent-loop {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Agent walkthrough quote */
+.agent-walkthrough {
+  max-width: 640px;
+  margin: 1.25rem auto 0;
+  padding: 1rem 1.25rem;
+  background: var(--color-code-bg);
+  border-left: 3px solid var(--color-accent);
+  border-radius: 0 8px 8px 0;
+  font-size: 0.9rem;
+  color: var(--color-muted);
+  line-height: 1.55;
+}
+
+/* Example cards — "Just tell your AI" */
+.example-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.example-card {
+  background: var(--color-code-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem 1.15rem;
+}
+
+.example-card .example-prompt {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+
+.example-card .example-steps {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  margin-bottom: 0;
+  line-height: 1.5;
+  text-align: left;
+}
+
+@media (max-width: 700px) {
+  .example-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Pipeline grid (record → compile → test → diagnose) */
 .pipeline-grid {
   display: grid;
