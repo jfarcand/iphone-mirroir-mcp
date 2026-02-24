@@ -435,6 +435,98 @@ final class DFSExplorerTests: XCTestCase {
         XCTAssertEqual(input.taps.count, 0, "Should not tap dangerous elements")
     }
 
+    // MARK: - Alert Recovery
+
+    func testExplorerDismissesAlertBeforeExploring() {
+        let session = ExplorationSession()
+        session.start(appName: "TestApp", goal: "test")
+
+        let rootElements = makeElements(["Settings", "General", "About"])
+        session.capture(
+            elements: rootElements, hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
+        )
+
+        let budget = ExplorationBudget.default
+        let explorer = DFSExplorer(session: session, budget: budget)
+        explorer.markStarted()
+
+        // First OCR returns an alert, second returns clean screen after dismiss
+        let alertElements: [TapPoint] = [
+            TapPoint(text: "\"App\" would like to use your location", tapX: 205, tapY: 300, confidence: 0.95),
+            TapPoint(text: "Allow", tapX: 205, tapY: 420, confidence: 0.95),
+            TapPoint(text: "Don't Allow", tapX: 205, tapY: 480, confidence: 0.95),
+        ]
+        let afterTapElements = makeElements(["Version Info", "Build Number"])
+
+        let describer = MockDescriber(screens: [
+            // step() calls dismissAlertIfPresent: first OCR → alert
+            ScreenDescriber.DescribeResult(elements: alertElements, screenshotBase64: "alert_img"),
+            // After tapping dismiss → clean root screen
+            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
+            // performTap: after-tap OCR
+            ScreenDescriber.DescribeResult(elements: afterTapElements, screenshotBase64: "img1"),
+        ])
+        let input = MockInput()
+
+        let result = explorer.step(
+            describer: describer, input: input, strategy: MobileAppStrategy.self
+        )
+
+        // Should have tapped "Don't Allow" to dismiss alert, then continued exploring
+        if case .continue = result {
+            // Expected: explored after dismissing alert
+        } else {
+            XCTFail("Expected .continue after dismissing alert, got \(result)")
+        }
+
+        // First tap should be the dismiss (Don't Allow), second is the exploration tap
+        XCTAssertGreaterThanOrEqual(input.taps.count, 2,
+            "Should tap dismiss target + exploration target")
+    }
+
+    func testExplorerAlertDoesNotCreateGraphEdge() {
+        let session = ExplorationSession()
+        session.start(appName: "TestApp", goal: "test")
+
+        let rootElements = makeElements(["Settings", "General"])
+        session.capture(
+            elements: rootElements, hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
+        )
+
+        let budget = ExplorationBudget.default
+        let explorer = DFSExplorer(session: session, budget: budget)
+        explorer.markStarted()
+
+        let alertElements: [TapPoint] = [
+            TapPoint(text: "Rate this app", tapX: 205, tapY: 300, confidence: 0.95),
+            TapPoint(text: "Not Now", tapX: 205, tapY: 420, confidence: 0.95),
+            TapPoint(text: "OK", tapX: 205, tapY: 480, confidence: 0.95),
+        ]
+        let afterTapElements = makeElements(["Version Info", "Build Number"])
+
+        let describer = MockDescriber(screens: [
+            // Alert detected on initial OCR
+            ScreenDescriber.DescribeResult(elements: alertElements, screenshotBase64: "alert_img"),
+            // After dismiss → root
+            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
+            // After exploration tap → new screen
+            ScreenDescriber.DescribeResult(elements: afterTapElements, screenshotBase64: "img1"),
+        ])
+        let input = MockInput()
+
+        _ = explorer.step(
+            describer: describer, input: input, strategy: MobileAppStrategy.self
+        )
+
+        let graph = session.currentGraph
+        // The graph should have 2 nodes (root + tapped destination), not 3
+        // The alert should not have been recorded as a screen
+        XCTAssertLessThanOrEqual(graph.nodeCount, 2,
+            "Alert should not create a graph node")
+    }
+
     // MARK: - Depth Limit
 
     func testExplorerRespectsMaxDepth() {

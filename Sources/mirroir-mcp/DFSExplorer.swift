@@ -88,8 +88,8 @@ final class DFSExplorer: @unchecked Sendable {
             return .finished(bundle: generateBundle())
         }
 
-        // OCR current screen
-        guard let result = describer.describe(skipOCR: false) else {
+        // OCR current screen, dismissing any alert that may be present
+        guard let result = dismissAlertIfPresent(describer: describer, input: input) else {
             return .paused(reason: "Failed to capture screen")
         }
 
@@ -163,8 +163,8 @@ final class DFSExplorer: @unchecked Sendable {
         // Wait for screen to settle
         usleep(EnvConfig.stepSettlingDelayMs * 1000)
 
-        // OCR the new screen
-        guard let afterResult = describer.describe(skipOCR: false) else {
+        // OCR the new screen, dismissing any alert triggered by the tap
+        guard let afterResult = dismissAlertIfPresent(describer: describer, input: input) else {
             return .paused(reason: "Failed to capture screen after tap")
         }
 
@@ -260,6 +260,31 @@ final class DFSExplorer: @unchecked Sendable {
 
         let toFP = graph.currentFingerprint
         return .backtracked(from: fromFP, to: toFP)
+    }
+
+    /// OCR the screen and dismiss any detected iOS alert before returning the result.
+    /// If no alert is detected, the initial OCR result is returned directly (zero overhead).
+    /// Retries up to `AlertDetector.maxDismissAttempts` times for persistent alerts.
+    private func dismissAlertIfPresent(
+        describer: ScreenDescribing,
+        input: InputProviding
+    ) -> ScreenDescriber.DescribeResult? {
+        guard var result = describer.describe(skipOCR: false) else { return nil }
+
+        for _ in 0..<AlertDetector.maxDismissAttempts {
+            guard let alert = AlertDetector.detectAlert(elements: result.elements) else {
+                return result
+            }
+            // Tap the dismiss target
+            _ = input.tap(x: alert.dismissTarget.tapX, y: alert.dismissTarget.tapY)
+            usleep(EnvConfig.stepSettlingDelayMs * 1000)
+            // Re-OCR to get clean screen
+            guard let cleanResult = describer.describe(skipOCR: false) else { return nil }
+            result = cleanResult
+        }
+
+        // After max attempts, return whatever we have
+        return result
     }
 
     private func generateBundle() -> SkillBundle {
