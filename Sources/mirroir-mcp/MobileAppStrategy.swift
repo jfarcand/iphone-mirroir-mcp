@@ -99,10 +99,10 @@ enum MobileAppStrategy: ExplorationStrategy {
     ) -> BacktrackAction {
         let hasBackButton = currentHints.contains { $0.contains("Back navigation") }
         if hasBackButton {
-            return .swipeBack
+            return .tapBack
         }
         if depth > 0 {
-            return .swipeBack
+            return .tapBack
         }
         return .none
     }

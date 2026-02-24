@@ -284,8 +284,8 @@ enum ExplorationGuide {
                 suggestions.append("Press Back (Cmd+[) to backtrack.")
             case .pressHome:
                 suggestions.append("Press Home to return to app root.")
-            case .swipeBack:
-                suggestions.append("Swipe from left edge to go back.")
+            case .tapBack:
+                suggestions.append("Tap the back button to go back.")
             case .none:
                 suggestions.append("Consider finishing exploration.")
             }
@@ -330,8 +330,8 @@ enum ExplorationGuide {
                 suggestions.append("All elements visited \u{2014} Press Back (Cmd+[)")
             case .pressHome:
                 suggestions.append("All elements visited \u{2014} Press Home")
-            case .swipeBack:
-                suggestions.append("All elements visited \u{2014} Swipe back")
+            case .tapBack:
+                suggestions.append("All elements visited \u{2014} Tap back")
             case .none:
                 suggestions.append("All elements visited \u{2014} consider finishing")
             }

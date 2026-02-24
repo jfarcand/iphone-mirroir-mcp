@@ -138,13 +138,13 @@ final class MobileAppStrategyTests: XCTestCase {
 
         let result = MobileAppStrategy.backtrackMethod(currentHints: hints, depth: 2)
 
-        XCTAssertEqual(result, .swipeBack)
+        XCTAssertEqual(result, .tapBack)
     }
 
     func testBacktrackWithoutBackButtonAtDepth() {
         let result = MobileAppStrategy.backtrackMethod(currentHints: [], depth: 2)
 
-        XCTAssertEqual(result, .swipeBack)
+        XCTAssertEqual(result, .tapBack)
     }
 
     func testBacktrackAtRootDepth() {

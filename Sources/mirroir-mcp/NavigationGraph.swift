@@ -35,12 +35,12 @@ enum TransitionResult: Sendable {
 
 /// An action that can be taken to backtrack in the navigation stack.
 enum BacktrackAction: Sendable {
-    /// Press the back button (Cmd+[).
+    /// Send Cmd+[ keyboard shortcut (works for desktop apps, not iPhone Mirroring).
     case pressBack
     /// Press the home button to return to app root.
     case pressHome
-    /// Swipe from left edge to go back.
-    case swipeBack
+    /// Tap the "<" back button in the iOS navigation bar.
+    case tapBack
     /// No backtracking needed or possible.
     case none
 }

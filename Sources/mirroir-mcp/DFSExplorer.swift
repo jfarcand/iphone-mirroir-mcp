@@ -403,7 +403,7 @@ final class DFSExplorer: @unchecked Sendable {
         // so tapping the OCR-detected back chevron is the only reliable method.
         // tapBackButton always succeeds (falls back to canonical position if OCR misses the chevron).
         switch backtrackAction {
-        case .pressBack, .swipeBack:
+        case .pressBack, .tapBack:
             _ = tapBackButton(elements: elements, input: input)
         case .pressHome:
             _ = input.pressKey(keyName: "h", modifiers: ["command", "shift"])
