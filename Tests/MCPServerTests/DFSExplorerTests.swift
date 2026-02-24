@@ -746,10 +746,10 @@ final class DFSExplorerTests: XCTestCase {
         )
 
         if case .backtracked = result {
-            // Should have swiped back multiple times for fast backtrack
-            let backSwipes = input.swipes.filter { $0.fromX < 20 && $0.toX > 200 }
-            XCTAssertEqual(backSwipes.count, 3,
-                "Fast backtrack from depth 3 should swipe back 3 times")
+            // Should have tapped back button multiple times for fast backtrack
+            let backTaps = input.taps.filter { $0.x < 60 && $0.y < 140 }
+            XCTAssertEqual(backTaps.count, 3,
+                "Fast backtrack from depth 3 should tap back 3 times")
         } else {
             XCTFail("Expected .backtracked for fast backtrack, got \(result)")
         }
@@ -805,10 +805,10 @@ final class DFSExplorerTests: XCTestCase {
 
         if case .backtracked = result {
             // Normal single-step backtrack, not fast
-            let backSwipes = input.swipes.filter { $0.fromX < 20 && $0.toX > 200 }
+            let backTaps = input.taps.filter { $0.x < 60 && $0.y < 140 }
             // Should be 1 (normal backtrack) not multiple (fast backtrack)
-            XCTAssertEqual(backSwipes.count, 1,
-                "Shallow stack should use normal backtrack (1 swipe)")
+            XCTAssertEqual(backTaps.count, 1,
+                "Shallow stack should use normal backtrack (1 tap)")
         } else {
             XCTFail("Expected .backtracked, got \(result)")
         }
@@ -862,16 +862,16 @@ final class DFSExplorerTests: XCTestCase {
         let fp = graph.currentFingerprint
         for el in l3 { graph.markElementVisited(fingerprint: fp, elementText: el.text) }
 
-        let swipesBefore = input.swipes.count
+        let tapsBefore = input.taps.count
         let desc4 = MockDescriber(screens: [
             ScreenDescriber.DescribeResult(elements: l3, screenshotBase64: "img3"),
         ])
         _ = explorer.step(describer: desc4, input: input, strategy: MobileAppStrategy.self)
 
         // Non-tab app: should do normal single backtrack, not fast
-        let newBackSwipes = input.swipes.dropFirst(swipesBefore)
-        let leftEdgeSwipes = newBackSwipes.filter { $0.fromX < 20 && $0.toX > 200 }
-        XCTAssertEqual(leftEdgeSwipes.count, 1,
+        let newBackTaps = input.taps.dropFirst(tapsBefore)
+        let backButtonTaps = newBackTaps.filter { $0.x < 60 && $0.y < 140 }
+        XCTAssertEqual(backButtonTaps.count, 1,
             "Non-tab app should use single backtrack")
     }
 
@@ -1010,10 +1010,10 @@ final class DFSExplorerTests: XCTestCase {
             XCTFail("Expected .continue with scout, got \(result)")
         }
 
-        // Should have tapped once + swiped back once (scout backtrack)
-        XCTAssertEqual(input.taps.count, 1, "Scout should tap the element")
-        let backSwipes = input.swipes.filter { $0.fromX < 20 }
-        XCTAssertEqual(backSwipes.count, 1, "Scout should swipe back immediately")
+        // Should have tapped once (scout) + tapped back button once (backtrack)
+        XCTAssertEqual(input.taps.count, 2, "Scout should tap element + tap back button")
+        let backTaps = input.taps.filter { $0.x < 60 && $0.y < 140 }
+        XCTAssertEqual(backTaps.count, 1, "Scout should tap back button immediately")
     }
 
     func testExplorerAdvancesToDiveAfterScouting() {
@@ -1244,10 +1244,10 @@ final class DFSExplorerTests: XCTestCase {
         XCTAssertEqual(graph.currentFingerprint, graph.rootFingerprint,
             "After scout backtrack, graph should point to parent screen")
 
-        // Should have exactly 1 swipe (the backtrack) with fromX near left edge
-        let backSwipes = input.swipes.filter { $0.fromX < 20 }
-        XCTAssertEqual(backSwipes.count, 1,
-            "Scout should swipe back exactly once after navigation")
+        // Should have exactly 1 tap on the back button (the backtrack)
+        let backTaps = input.taps.filter { $0.x < 60 && $0.y < 140 }
+        XCTAssertEqual(backTaps.count, 1,
+            "Scout should tap back button exactly once after navigation")
     }
 
     // MARK: - Depth Limit
