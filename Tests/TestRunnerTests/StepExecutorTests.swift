@@ -357,56 +357,43 @@ final class StepExecutorTests: XCTestCase {
         XCTAssertEqual(input.dragCalls.count, 1)
     }
 
-    func testResetAppNotInSwitcher() {
-        // App not found — exhausts all horizontal search swipes before reporting "already quit"
+    func testResetAppLaunchesViaSpotlight() {
+        // The launch-first approach launches the app via Spotlight before
+        // opening the App Switcher, so the target is always the centered card.
         describer.describeResult = ScreenDescriber.DescribeResult(
-            elements: [TapPoint(text: "Other App", tapX: 200, tapY: 400, confidence: 0.95)],
-            screenshotBase64: ""
-        )
-
-        let result = executor.execute(
-            step: .resetApp(appName: "Settings"), stepIndex: 0, skillName: "test")
-        XCTAssertEqual(result.status, .passed)
-        XCTAssertTrue(result.message?.contains("already quit") ?? false)
-        // Should have swiped left through the carousel before giving up
-        XCTAssertEqual(input.swipeCalls.count, EnvConfig.appSwitcherMaxSwipes)
-    }
-
-    func testResetAppFindsAppAfterSwipe() {
-        // First OCR: only "Other App" visible. After one horizontal swipe: "Settings" appears.
-        let noMatch = ScreenDescriber.DescribeResult(
-            elements: [TapPoint(text: "Other App", tapX: 200, tapY: 400, confidence: 0.95)],
-            screenshotBase64: ""
-        )
-        let found = ScreenDescriber.DescribeResult(
             elements: [TapPoint(text: "Settings", tapX: 200, tapY: 400, confidence: 0.95)],
             screenshotBase64: ""
         )
-        describer.describeResults = [noMatch, found]
 
         let result = executor.execute(
             step: .resetApp(appName: "Settings"), stepIndex: 0, skillName: "test")
         XCTAssertEqual(result.status, .passed)
-        XCTAssertTrue(result.message?.contains("Force-quit") ?? false)
-        // 1 horizontal search swipe + 1 dismiss drag = 1 swipe + 1 drag
-        XCTAssertEqual(input.swipeCalls.count, 1)
-        XCTAssertEqual(input.dragCalls.count, 1)
+        XCTAssertEqual(input.launchAppCalls, ["Settings"])
     }
 
-    func testResetAppExhaustsSwipesReportsAlreadyQuit() {
-        // Target never appears across all carousel swipes
-        let noMatch = ScreenDescriber.DescribeResult(
-            elements: [TapPoint(text: "Other App", tapX: 200, tapY: 400, confidence: 0.95)],
+    func testResetAppLaunchFailure() {
+        // If Spotlight fails to launch the app, reset_app should fail gracefully.
+        input.launchAppResult = "App not found"
+
+        let result = executor.execute(
+            step: .resetApp(appName: "NonExistent"), stepIndex: 0, skillName: "test")
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertTrue(result.message?.contains("Failed to launch") ?? false)
+    }
+
+    func testResetAppNoCarouselSearch() {
+        // The launch-first approach never searches the carousel via OCR,
+        // so there should be zero horizontal swipes.
+        describer.describeResult = ScreenDescriber.DescribeResult(
+            elements: [TapPoint(text: "Settings", tapX: 200, tapY: 400, confidence: 0.95)],
             screenshotBase64: ""
         )
-        describer.describeResult = noMatch
 
         let result = executor.execute(
             step: .resetApp(appName: "Settings"), stepIndex: 0, skillName: "test")
         XCTAssertEqual(result.status, .passed)
-        XCTAssertTrue(result.message?.contains("already quit") ?? false)
-        // All swipes are horizontal search swipes, no dismiss swipe
-        XCTAssertEqual(input.swipeCalls.count, EnvConfig.appSwitcherMaxSwipes)
+        XCTAssertEqual(input.swipeCalls.count, 0, "Launch-first approach should not swipe the carousel")
+        XCTAssertEqual(input.dragCalls.count, 1, "Should drag up to dismiss the centered card")
     }
 
     func testResetAppSwitcherFailed() {

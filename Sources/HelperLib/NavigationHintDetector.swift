@@ -14,12 +14,12 @@
 public enum NavigationHintDetector {
     /// Fraction of window height that defines the top navigation zone.
     /// Elements in the top 15% are considered nav bar candidates.
-    static let topZoneFraction = 0.15
+    public static let topZoneFraction = 0.15
     /// Fraction of window height that defines the bottom toolbar zone.
     /// Elements in the bottom 15% are considered toolbar candidates.
-    static let bottomZoneFraction = 0.85
+    public static let bottomZoneFraction = 0.85
     /// Text patterns that indicate a back button.
-    static let backChevronPatterns: Set<String> = ["<", "‹", "〈"]
+    public static let backChevronPatterns: Set<String> = ["<", "‹", "〈"]
 
     /// Detect navigation patterns and return human-readable hint strings.
     ///
