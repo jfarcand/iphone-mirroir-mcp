@@ -317,16 +317,16 @@ final class MigrateCommandTests: XCTestCase {
 
     func testMigrateNetworkModes() {
         XCTAssertEqual(
-            MigrateCommand.formatSimpleStep(key: "set_network", value: "airplane_on"),
+            MigrateStepFormatter.formatSimpleStep(key: "set_network", value: "airplane_on"),
             "Turn on Airplane Mode")
         XCTAssertEqual(
-            MigrateCommand.formatSimpleStep(key: "set_network", value: "airplane_off"),
+            MigrateStepFormatter.formatSimpleStep(key: "set_network", value: "airplane_off"),
             "Turn off Airplane Mode")
         XCTAssertEqual(
-            MigrateCommand.formatSimpleStep(key: "set_network", value: "wifi_on"),
+            MigrateStepFormatter.formatSimpleStep(key: "set_network", value: "wifi_on"),
             "Turn on Wi-Fi")
         XCTAssertEqual(
-            MigrateCommand.formatSimpleStep(key: "set_network", value: "cellular_off"),
+            MigrateStepFormatter.formatSimpleStep(key: "set_network", value: "cellular_off"),
             "Turn off Cellular")
     }
 
