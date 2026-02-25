@@ -1,33 +1,23 @@
 // Copyright 2026 jfarcand@apache.org
 // Licensed under the Apache License, Version 2.0
 //
-// ABOUTME: Discovers and loads COMPONENT.md files from disk, merging with built-in catalog.
+// ABOUTME: Discovers and loads COMPONENT.md files from disk search paths.
 // ABOUTME: Search paths follow the same convention as skill files: project-local overrides global.
 
 import Foundation
 import HelperLib
 
-/// Discovers and loads component definitions from disk and built-in catalog.
-/// User-defined COMPONENT.md files override built-in definitions by name.
+/// Discovers and loads component definitions from COMPONENT.md files on disk.
+/// Project-local files override global files with the same name.
 enum ComponentLoader {
 
-    /// Load all component definitions: built-in catalog merged with any on-disk overrides.
+    /// Load all component definitions from disk search paths.
     ///
-    /// Disk files override built-in definitions with the same name.
     /// Project-local files override global files with the same name.
     ///
-    /// - Returns: All component definitions, deduplicated by name.
+    /// - Returns: All component definitions found, deduplicated by name.
     static func loadAll() -> [ComponentDefinition] {
-        let diskDefinitions = loadFromDisk()
-        let diskNames = Set(diskDefinitions.map { $0.name })
-
-        // Start with disk definitions (they take priority), then add built-ins not overridden
-        var result = diskDefinitions
-        for builtIn in ComponentCatalog.definitions where !diskNames.contains(builtIn.name) {
-            result.append(builtIn)
-        }
-
-        return result
+        loadFromDisk()
     }
 
     /// Search paths for COMPONENT.md files, in resolution order.

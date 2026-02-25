@@ -58,7 +58,7 @@ final class ComponentLoaderTests: XCTestCase {
         let navBar = definitions.first { $0.name == "navigation-bar" }
 
         XCTAssertNotNil(navBar)
-        XCTAssertFalse(navBar?.interaction.clickable ?? true)
+        XCTAssertTrue(navBar?.interaction.clickable ?? false)
         XCTAssertEqual(navBar?.matchRules.zone, .navBar)
     }
 

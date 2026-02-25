@@ -30,6 +30,8 @@ struct ComponentMatchRules: Sendable {
     let maxRowHeightPt: Double
     /// Whether the row must contain a numeric value. nil = don't care.
     let hasNumericValue: Bool?
+    /// Whether the row must contain long text (50+ chars). nil = don't care.
+    let hasLongText: Bool?
     /// Screen zone where this component typically appears.
     let zone: ScreenZone
 }
@@ -211,6 +213,7 @@ enum ComponentSkillParser {
             maxElements: parseInt(kv["max_elements"]) ?? 10,
             maxRowHeightPt: parseDouble(kv["max_row_height_pt"]) ?? 100,
             hasNumericValue: parseBool(kv["has_numeric_value"]),
+            hasLongText: parseBool(kv["has_long_text"]),
             zone: ScreenZone(rawValue: kv["zone"] ?? "content") ?? .content
         )
     }

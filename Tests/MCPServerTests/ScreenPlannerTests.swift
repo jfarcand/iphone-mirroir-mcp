@@ -304,7 +304,7 @@ final class ScreenPlannerTests: XCTestCase {
         let elements = [
             TapPoint(text: "General", tapX: 100, tapY: 400, confidence: 0.9),
             TapPoint(text: ">", tapX: 370, tapY: 400, confidence: 0.9),
-            TapPoint(text: "This is explanatory text for the section above",
+            TapPoint(text: "This is explanatory text for the section above that describes the setting",
                      tapX: 200, tapY: 500, confidence: 0.9),
         ]
 
@@ -325,7 +325,7 @@ final class ScreenPlannerTests: XCTestCase {
         XCTAssertTrue(planTexts.contains("General"),
             "Clickable disclosure row should appear in component plan")
         XCTAssertFalse(
-            planTexts.contains("This is explanatory text for the section above"),
+            planTexts.contains("This is explanatory text for the section above that describes the setting"),
             "Non-clickable explanation text should be excluded from plan"
         )
     }

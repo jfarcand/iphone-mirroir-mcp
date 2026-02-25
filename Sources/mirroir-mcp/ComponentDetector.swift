@@ -260,6 +260,14 @@ enum ComponentDetector {
             score += 2.0
         }
 
+        // Hard constraint: long text requirement
+        if let requireLongText = rules.hasLongText {
+            if requireLongText != rowProps.hasLongText {
+                return nil
+            }
+            score += 2.0
+        }
+
         // Specificity bonuses: tighter ranges score higher
         let elementRange = rules.maxElements - rules.minElements
         if elementRange < 3 {
@@ -338,7 +346,7 @@ enum ComponentDetector {
             visualPattern: [],
             matchRules: ComponentMatchRules(
                 rowHasChevron: nil, minElements: 1, maxElements: 1,
-                maxRowHeightPt: 100, hasNumericValue: nil, zone: .content
+                maxRowHeightPt: 100, hasNumericValue: nil, hasLongText: nil, zone: .content
             ),
             interaction: ComponentInteraction(
                 clickable: isClickable,
