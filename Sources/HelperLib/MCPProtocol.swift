@@ -178,6 +178,89 @@ public struct JSONRPCError: Encodable, Sendable {
     }
 }
 
+// MARK: - MCP Sampling Types
+
+/// Parameters for a sampling/createMessage server-to-client request.
+public struct SamplingParams: Codable, Sendable {
+    public let messages: [SamplingMessage]
+    public let maxTokens: Int
+    public let systemPrompt: String?
+
+    public init(messages: [SamplingMessage], maxTokens: Int, systemPrompt: String? = nil) {
+        self.messages = messages
+        self.maxTokens = maxTokens
+        self.systemPrompt = systemPrompt
+    }
+}
+
+/// A message in a sampling conversation.
+public struct SamplingMessage: Codable, Sendable {
+    public let role: String
+    public let content: SamplingContent
+
+    public init(role: String, content: SamplingContent) {
+        self.role = role
+        self.content = content
+    }
+}
+
+/// Content for a sampling message — either plain text or mixed content parts.
+public enum SamplingContent: Codable, Sendable {
+    case text(String)
+    case mixed([SamplingContentPart])
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let parts = try? container.decode([SamplingContentPart].self) {
+            self = .mixed(parts)
+        } else if let obj = try? container.decode(SamplingContentPart.self) {
+            if obj.type == "text", let text = obj.text {
+                self = .text(text)
+            } else {
+                self = .mixed([obj])
+            }
+        } else {
+            throw DecodingError.typeMismatch(
+                SamplingContent.self,
+                DecodingError.Context(codingPath: decoder.codingPath,
+                                      debugDescription: "Expected text or content parts")
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .text(let text):
+            try container.encode(SamplingContentPart(type: "text", text: text))
+        case .mixed(let parts):
+            try container.encode(parts)
+        }
+    }
+}
+
+/// A single content part in a sampling message.
+public struct SamplingContentPart: Codable, Sendable {
+    public let type: String
+    public let text: String?
+    public let data: String?
+    public let mimeType: String?
+
+    public init(type: String, text: String? = nil, data: String? = nil, mimeType: String? = nil) {
+        self.type = type
+        self.text = text
+        self.data = data
+        self.mimeType = mimeType
+    }
+}
+
+/// Response from a sampling/createMessage request.
+public struct SamplingResponse: Codable, Sendable {
+    public let model: String?
+    public let role: String
+    public let content: SamplingContentPart
+}
+
 // MARK: - MCP Tool Definition
 
 public struct MCPToolDefinition: Sendable {

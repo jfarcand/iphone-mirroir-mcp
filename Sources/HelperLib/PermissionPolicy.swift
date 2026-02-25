@@ -21,11 +21,17 @@ public struct PermissionConfig: Codable, Sendable {
     public var deny: [String]?
     /// App names that launch_app should refuse to open (case-insensitive).
     public var blockedApps: [String]?
+    /// Element text patterns the explorer should never tap (case-insensitive containment).
+    public var skipElements: [String]?
 
-    public init(allow: [String]? = nil, deny: [String]? = nil, blockedApps: [String]? = nil) {
+    public init(
+        allow: [String]? = nil, deny: [String]? = nil,
+        blockedApps: [String]? = nil, skipElements: [String]? = nil
+    ) {
         self.allow = allow
         self.deny = deny
         self.blockedApps = blockedApps
+        self.skipElements = skipElements
     }
 }
 

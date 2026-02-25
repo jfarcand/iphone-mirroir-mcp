@@ -297,4 +297,115 @@ final class ScreenPlannerTests: XCTestCase {
                 "\(item.point.text) should have chevron in reason")
         }
     }
+
+    // MARK: - Component-Based Plan Building
+
+    func testBuildComponentPlanFiltersNonClickable() {
+        let elements = [
+            TapPoint(text: "General", tapX: 100, tapY: 400, confidence: 0.9),
+            TapPoint(text: ">", tapX: 370, tapY: 400, confidence: 0.9),
+            TapPoint(text: "This is explanatory text for the section above",
+                     tapX: 200, tapY: 500, confidence: 0.9),
+        ]
+
+        let classified = ElementClassifier.classify(elements, screenHeight: screenHeight)
+        let components = ComponentDetector.detect(
+            classified: classified,
+            definitions: ComponentCatalog.definitions,
+            screenHeight: screenHeight
+        )
+        let plan = ScreenPlanner.buildComponentPlan(
+            components: components,
+            visitedElements: [],
+            scoutResults: [:],
+            screenHeight: screenHeight
+        )
+
+        let planTexts = Set(plan.map(\.point.text))
+        XCTAssertTrue(planTexts.contains("General"),
+            "Clickable disclosure row should appear in component plan")
+        XCTAssertFalse(
+            planTexts.contains("This is explanatory text for the section above"),
+            "Non-clickable explanation text should be excluded from plan"
+        )
+    }
+
+    func testBuildComponentPlanExcludesVisited() {
+        let elements = [
+            TapPoint(text: "General", tapX: 100, tapY: 300, confidence: 0.9),
+            TapPoint(text: ">", tapX: 370, tapY: 300, confidence: 0.9),
+            TapPoint(text: "Privacy", tapX: 100, tapY: 400, confidence: 0.9),
+            TapPoint(text: ">", tapX: 370, tapY: 400, confidence: 0.9),
+        ]
+
+        let classified = ElementClassifier.classify(elements, screenHeight: screenHeight)
+        let components = ComponentDetector.detect(
+            classified: classified,
+            definitions: ComponentCatalog.definitions,
+            screenHeight: screenHeight
+        )
+        let plan = ScreenPlanner.buildComponentPlan(
+            components: components,
+            visitedElements: ["General"],
+            scoutResults: [:],
+            screenHeight: screenHeight
+        )
+
+        let planTexts = plan.map(\.point.text)
+        XCTAssertFalse(planTexts.contains("General"),
+            "Visited elements should be excluded")
+        XCTAssertTrue(planTexts.contains("Privacy"),
+            "Non-visited elements should be included")
+    }
+
+    func testBuildComponentPlanSortedByDescendingScore() {
+        let elements = [
+            TapPoint(text: "Low", tapX: 100, tapY: 100, confidence: 0.9),
+            TapPoint(text: "High", tapX: 100, tapY: 450, confidence: 0.9),
+            TapPoint(text: ">", tapX: 370, tapY: 450, confidence: 0.9),
+        ]
+
+        let classified = ElementClassifier.classify(elements, screenHeight: screenHeight)
+        let components = ComponentDetector.detect(
+            classified: classified,
+            definitions: ComponentCatalog.definitions,
+            screenHeight: screenHeight
+        )
+        let plan = ScreenPlanner.buildComponentPlan(
+            components: components,
+            visitedElements: [],
+            scoutResults: [:],
+            screenHeight: screenHeight
+        )
+
+        for i in 0..<(plan.count - 1) {
+            XCTAssertGreaterThanOrEqual(plan[i].score, plan[i + 1].score,
+                "Component plan should be sorted by descending score")
+        }
+    }
+
+    func testBuildComponentPlanRespectsScoutResults() {
+        let elements = [
+            TapPoint(text: "Works", tapX: 100, tapY: 300, confidence: 0.9),
+            TapPoint(text: ">", tapX: 370, tapY: 300, confidence: 0.9),
+            TapPoint(text: "Broken", tapX: 100, tapY: 400, confidence: 0.9),
+            TapPoint(text: ">", tapX: 370, tapY: 400, confidence: 0.9),
+        ]
+
+        let classified = ElementClassifier.classify(elements, screenHeight: screenHeight)
+        let components = ComponentDetector.detect(
+            classified: classified,
+            definitions: ComponentCatalog.definitions,
+            screenHeight: screenHeight
+        )
+        let plan = ScreenPlanner.buildComponentPlan(
+            components: components,
+            visitedElements: [],
+            scoutResults: ["Broken": .noChange, "Works": .navigated],
+            screenHeight: screenHeight
+        )
+
+        XCTAssertEqual(plan[0].point.text, "Works",
+            "Scout-confirmed navigation should rank first")
+    }
 }

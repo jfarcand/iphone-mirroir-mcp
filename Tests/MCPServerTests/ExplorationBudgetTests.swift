@@ -19,7 +19,7 @@ final class ExplorationBudgetTests: XCTestCase {
         XCTAssertEqual(budget.maxTimeSeconds, 300)
         XCTAssertEqual(budget.maxActionsPerScreen, 5)
         XCTAssertEqual(budget.scrollLimit, 3)
-        XCTAssertFalse(budget.skipPatterns.isEmpty)
+        XCTAssertTrue(budget.skipPatterns.isEmpty, "Default skip patterns come from permissions.json")
     }
 
     // MARK: - isExhausted

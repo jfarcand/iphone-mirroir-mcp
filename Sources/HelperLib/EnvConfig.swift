@@ -398,6 +398,21 @@ public enum EnvConfig {
         readString("keyboardLayout", envVar: "IPHONE_KEYBOARD_LAYOUT", default: "")
     }
 
+    // MARK: - Component Detection
+
+    /// Component detection mode for BFS exploration.
+    /// Controls how OCR elements are grouped into UI components.
+    ///
+    /// Values:
+    /// - `heuristic`: Phase 1 only — component.md match rules, no LLM calls.
+    /// - `llm_first_screen`: (DEFAULT) LLM classifies first screen, heuristics for rest.
+    /// - `llm_every_screen`: LLM classifies every new screen.
+    /// - `llm_fallback`: Heuristics first, LLM when no confident match.
+    public static var componentDetection: String {
+        readString("componentDetection", envVar: "MIRROIR_COMPONENT_DETECTION",
+                   default: "llm_first_screen")
+    }
+
     // MARK: - App Identity
 
     public static var mirroringBundleID: String {

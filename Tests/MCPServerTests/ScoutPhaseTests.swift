@@ -27,16 +27,17 @@ final class ScoutPhaseTests: XCTestCase {
 
     // MARK: - shouldScout
 
-    func testShouldScoutListScreen() {
-        XCTAssertTrue(
+    func testShouldNotScoutListScreen() {
+        XCTAssertFalse(
             ScoutPhase.shouldScout(screenType: .list, depth: 0, navigationCount: 5),
-            "List screen at root with 5 nav elements should scout"
+            "List screen should not scout — chevrons already indicate navigation"
         )
     }
 
-    func testShouldScoutSettingsScreen() {
-        XCTAssertTrue(
-            ScoutPhase.shouldScout(screenType: .settings, depth: 0, navigationCount: 6)
+    func testShouldNotScoutSettingsScreen() {
+        XCTAssertFalse(
+            ScoutPhase.shouldScout(screenType: .settings, depth: 0, navigationCount: 6),
+            "Settings screen should not scout — chevrons already indicate navigation"
         )
     }
 
@@ -75,8 +76,8 @@ final class ScoutPhaseTests: XCTestCase {
 
     func testShouldScoutExactMinimum() {
         XCTAssertTrue(
-            ScoutPhase.shouldScout(screenType: .settings, depth: 1, navigationCount: 4),
-            "Exactly 4 navigation elements at depth 1 should scout"
+            ScoutPhase.shouldScout(screenType: .tabRoot, depth: 1, navigationCount: 4),
+            "Exactly 4 navigation elements at depth 1 on tabRoot should scout"
         )
     }
 

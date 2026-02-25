@@ -53,6 +53,7 @@ struct ExplorationBudget: Sendable {
     }
 
     /// Default budget suitable for most mobile app explorations.
+    /// Skip patterns are empty — they come from permissions.json `skipElements` field.
     static let `default` = ExplorationBudget(
         maxDepth: 6,
         maxScreens: 30,
@@ -60,22 +61,7 @@ struct ExplorationBudget: Sendable {
         maxActionsPerScreen: 5,
         scrollLimit: 3,
         maxScoutsPerScreen: 8,
-        skipPatterns: [
-            // Destructive actions (English)
-            "Delete", "Sign Out", "Log Out", "Reset", "Erase", "Remove All",
-            "Factory", "Format", "Wipe",
-            // Destructive actions (French)
-            "Supprimer", "Déconnexion", "Se déconnecter", "Réinitialiser",
-            "Effacer", "Tout supprimer",
-            // Destructive actions (Spanish)
-            "Eliminar", "Cerrar sesión", "Restablecer", "Borrar",
-            // Network toggles — tapping these changes device connectivity
-            "Airplane", "Mode Avion", "Modo avión", "Flugmodus",
-            // Purchase/commercial — avoid accidental purchases or ad clicks
-            "Sponsored", "Promoted", "Advertisement",
-            "ORDER NOW", "Buy Now", "Install Now",
-            "Subscribe", "Purchase", "S'abonner", "Acheter",
-        ]
+        skipPatterns: []
     )
 
     /// Check if the exploration budget is exhausted based on current state.

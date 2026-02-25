@@ -32,32 +32,47 @@ final class SocialAppStrategyTests: XCTestCase {
     // MARK: - Skip Patterns
 
     func testSkipsSocialEngagementElements() {
-        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Sponsored Post"))
-        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Promoted"))
-        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Follow"))
-        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Unfollow"))
-        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Share"))
-        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Repost"))
-        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Upvote"))
-        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Downvote"))
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 0, skipPatterns: []
+        )
+        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Sponsored Post", budget: budget))
+        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Promoted", budget: budget))
+        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Follow", budget: budget))
+        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Unfollow", budget: budget))
+        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Share", budget: budget))
+        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Repost", budget: budget))
+        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Upvote", budget: budget))
+        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Downvote", budget: budget))
     }
 
     func testSkipsSocialPatternsCaseInsensitive() {
-        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "SPONSORED"))
-        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "stories"))
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 0, skipPatterns: []
+        )
+        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "SPONSORED", budget: budget))
+        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "stories", budget: budget))
     }
 
     func testSkipInheritsBasePatterns() {
-        // Base budget patterns should still be skipped
-        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Delete Account"))
-        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Sign Out"))
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 0, skipPatterns: ["Delete", "Sign Out"]
+        )
+        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Delete Account", budget: budget))
+        XCTAssertTrue(SocialAppStrategy.shouldSkip(elementText: "Sign Out", budget: budget))
     }
 
     func testDoesNotSkipSafeNavElements() {
-        XCTAssertFalse(SocialAppStrategy.shouldSkip(elementText: "Home"))
-        XCTAssertFalse(SocialAppStrategy.shouldSkip(elementText: "Search"))
-        XCTAssertFalse(SocialAppStrategy.shouldSkip(elementText: "Profile"))
-        XCTAssertFalse(SocialAppStrategy.shouldSkip(elementText: "Settings"))
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 0, skipPatterns: ["Delete"]
+        )
+        XCTAssertFalse(SocialAppStrategy.shouldSkip(elementText: "Home", budget: budget))
+        XCTAssertFalse(SocialAppStrategy.shouldSkip(elementText: "Search", budget: budget))
+        XCTAssertFalse(SocialAppStrategy.shouldSkip(elementText: "Profile", budget: budget))
+        XCTAssertFalse(SocialAppStrategy.shouldSkip(elementText: "Settings", budget: budget))
     }
 
     // MARK: - Ranking Filters

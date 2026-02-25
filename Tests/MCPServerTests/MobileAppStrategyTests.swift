@@ -156,15 +156,24 @@ final class MobileAppStrategyTests: XCTestCase {
     // MARK: - Skip Patterns
 
     func testShouldSkipDestructive() {
-        XCTAssertTrue(MobileAppStrategy.shouldSkip(elementText: "Delete Account"))
-        XCTAssertTrue(MobileAppStrategy.shouldSkip(elementText: "Sign Out"))
-        XCTAssertTrue(MobileAppStrategy.shouldSkip(elementText: "Reset All Settings"))
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 0,
+            skipPatterns: ["Delete", "Sign Out", "Reset"]
+        )
+        XCTAssertTrue(MobileAppStrategy.shouldSkip(elementText: "Delete Account", budget: budget))
+        XCTAssertTrue(MobileAppStrategy.shouldSkip(elementText: "Sign Out", budget: budget))
+        XCTAssertTrue(MobileAppStrategy.shouldSkip(elementText: "Reset All Settings", budget: budget))
     }
 
     func testShouldNotSkipSafeElements() {
-        XCTAssertFalse(MobileAppStrategy.shouldSkip(elementText: "General"))
-        XCTAssertFalse(MobileAppStrategy.shouldSkip(elementText: "About"))
-        XCTAssertFalse(MobileAppStrategy.shouldSkip(elementText: "Privacy"))
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 0, skipPatterns: ["Delete", "Sign Out"]
+        )
+        XCTAssertFalse(MobileAppStrategy.shouldSkip(elementText: "General", budget: budget))
+        XCTAssertFalse(MobileAppStrategy.shouldSkip(elementText: "About", budget: budget))
+        XCTAssertFalse(MobileAppStrategy.shouldSkip(elementText: "Privacy", budget: budget))
     }
 
     // MARK: - Terminal Detection

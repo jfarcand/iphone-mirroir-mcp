@@ -36,8 +36,11 @@ enum ScoutPhase {
     static let maxScoutDepth = 1
 
     /// Screen types that benefit from scout-then-dive.
+    /// Settings/list screens are excluded because chevron indicators (">" disclosure
+    /// arrows) already identify navigation elements reliably via ElementClassifier.
+    /// Scouting those screens doubles every tap for zero information gain.
     static let scoutableScreenTypes: Set<ScreenType> = [
-        .list, .settings, .tabRoot,
+        .tabRoot,
     ]
 
     // MARK: - Decision Logic

@@ -77,7 +77,108 @@ enum ScreenPlanner {
             .sorted { $0.score > $1.score }
     }
 
+    // MARK: - Component-Based Plan Building
+
+    /// Build a ranked exploration plan from detected screen components.
+    ///
+    /// Filters to clickable components with unvisited tap targets, scores using existing
+    /// weights plus component-level bonuses. Components marked as non-clickable are excluded
+    /// entirely, preventing wasted taps on explanatory text and section headers.
+    ///
+    /// - Parameters:
+    ///   - components: Detected screen components with grouped elements.
+    ///   - visitedElements: Element texts already tapped on this screen.
+    ///   - scoutResults: Map of element text to scout result (may be empty).
+    ///   - screenHeight: Height of the target window for mid-screen calculation.
+    /// - Returns: Ranked elements sorted by descending score, with visited elements excluded.
+    static func buildComponentPlan(
+        components: [ScreenComponent],
+        visitedElements: Set<String>,
+        scoutResults: [String: ScoutResult],
+        screenHeight: Double
+    ) -> [RankedElement] {
+        components
+            .compactMap { component -> RankedElement? in
+                // Skip non-clickable components
+                guard component.definition.interaction.clickable,
+                      let tapTarget = component.tapTarget,
+                      !visitedElements.contains(tapTarget.text) else {
+                    return nil
+                }
+
+                let (score, reason) = computeComponentScore(
+                    component: component,
+                    tapTarget: tapTarget,
+                    scoutResults: scoutResults,
+                    screenHeight: screenHeight
+                )
+                return RankedElement(point: tapTarget, score: score, reason: reason)
+            }
+            .sorted { $0.score > $1.score }
+    }
+
     // MARK: - Private
+
+    /// Compute the exploration priority score for a component's tap target.
+    private static func computeComponentScore(
+        component: ScreenComponent,
+        tapTarget: TapPoint,
+        scoutResults: [String: ScoutResult],
+        screenHeight: Double
+    ) -> (Double, String) {
+        var score: Double = 0
+        var reasons: [String] = []
+        let text = tapTarget.text
+
+        // Component-level navigation signal
+        if component.definition.interaction.clickResult == .navigates {
+            if component.hasChevron {
+                score += chevronContextWeight
+                reasons.append("chevron +\(Int(chevronContextWeight))")
+            } else {
+                score += 1.0
+                reasons.append("nav +1")
+            }
+        } else {
+            score += fallbackPenalty
+            reasons.append("no nav \(Int(fallbackPenalty))")
+        }
+
+        // Label length signals (same as element-level)
+        let trimmedLength = text.trimmingCharacters(in: .whitespaces).count
+        let isSingleWord = !text.contains(" ")
+        if isSingleWord && trimmedLength <= shortLabelMaxLength {
+            score += shortLabelWeight
+            reasons.append("short +\(Int(shortLabelWeight))")
+        }
+        if trimmedLength > longLabelThreshold {
+            score += longLabelPenalty
+            reasons.append("long \(Int(longLabelPenalty))")
+        }
+
+        // Mid-screen position bonus
+        let y = tapTarget.tapY
+        let lowerBound = screenHeight * 0.25
+        let upperBound = screenHeight * 0.75
+        if y >= lowerBound && y <= upperBound {
+            score += midScreenWeight
+            reasons.append("mid +\(Int(midScreenWeight))")
+        }
+
+        // Scout results
+        if let scoutResult = scoutResults[text] {
+            switch scoutResult {
+            case .navigated:
+                score += scoutNavigatedWeight
+                reasons.append("scout:nav +\(Int(scoutNavigatedWeight))")
+            case .noChange:
+                score += scoutNoChangeWeight
+                reasons.append("scout:none \(Int(scoutNoChangeWeight))")
+            }
+        }
+
+        return (score, reasons.joined(separator: ", "))
+    }
 
     /// Compute the exploration priority score for a single navigation element.
     private static func computeScore(

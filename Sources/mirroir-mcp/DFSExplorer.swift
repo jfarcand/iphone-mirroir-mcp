@@ -25,16 +25,16 @@ enum ExploreStepResult: Sendable {
 /// Follows the Session Accumulator pattern with NSLock protection.
 final class DFSExplorer: @unchecked Sendable {
 
-    private let graph: NavigationGraph
-    private let session: ExplorationSession
-    private let budget: ExplorationBudget
-    private let windowSize: CGSize
-    private var backtrackStack: [String] = []
+    let graph: NavigationGraph
+    let session: ExplorationSession
+    let budget: ExplorationBudget
+    let windowSize: CGSize
+    var backtrackStack: [String] = []
     private var startTime: Date = Date()
-    private var actionCount: Int = 0
-    private var actionsOnCurrentScreen: Int = 0
-    private var isFinished: Bool = false
-    private let lock = NSLock()
+    var actionCount: Int = 0
+    var actionsOnCurrentScreen: Int = 0
+    var isFinished: Bool = false
+    let lock = NSLock()
 
     /// Initialize the DFS explorer.
     ///
@@ -138,7 +138,7 @@ final class DFSExplorer: @unchecked Sendable {
 
         // Get the next highest-scored unvisited element from the plan
         let actionable: TapPoint? = if let ranked = graph.nextPlannedElement(for: currentFP),
-            !strategy.shouldSkip(elementText: ranked.point.text) { ranked.point } else { nil }
+            !strategy.shouldSkip(elementText: ranked.point.text, budget: budget) { ranked.point } else { nil }
 
         lock.lock()
         let currentActions = actionsOnCurrentScreen
@@ -187,50 +187,6 @@ final class DFSExplorer: @unchecked Sendable {
         )
     }
 
-    // MARK: - Back Navigation
-
-    /// Fraction of window width for the canonical back button X position.
-    /// iOS UINavigationBar back buttons sit at roughly 11% from the left edge.
-    static let backButtonXFraction = 0.112
-
-    /// Fraction of window height for the canonical back button Y position.
-    /// iOS UINavigationBar back buttons sit at roughly 13.5% from the top.
-    static let backButtonYFraction = 0.135
-
-    /// Find and tap the "<" back button on the current screen.
-    /// iPhone Mirroring does not support iOS edge-swipe-back gestures (neither
-    /// scroll wheel nor touch-drag triggers UIScreenEdgePanGestureRecognizer).
-    /// Tapping the OCR-detected back chevron is the only reliable backtrack method.
-    ///
-    /// First attempts to find the "<" chevron via OCR elements. If OCR misses the
-    /// back button (which happens on some screen types), falls back to tapping at
-    /// the canonical iOS navigation bar back button position.
-    ///
-    /// - Parameters:
-    ///   - elements: OCR elements from the current screen (avoids redundant OCR call).
-    ///   - input: Input provider for tap actions.
-    /// - Returns: `true` if a back button was found and tapped (always true with fallback).
-    private func tapBackButton(elements: [TapPoint], input: InputProviding) -> Bool {
-        let topZone = windowSize.height * NavigationHintDetector.topZoneFraction
-        if let backButton = elements.first(where: { element in
-            let trimmed = element.text.trimmingCharacters(in: .whitespaces)
-            return NavigationHintDetector.backChevronPatterns.contains(trimmed)
-                && element.tapY <= topZone
-        }) {
-            _ = input.tap(x: backButton.tapX, y: backButton.tapY)
-            usleep(EnvConfig.stepSettlingDelayMs * 1000)
-            return true
-        }
-
-        // OCR sometimes fails to detect the "<" chevron, but the back button is
-        // at a predictable position in the iOS navigation bar. Tap there as fallback.
-        let fallbackX = windowSize.width * Self.backButtonXFraction
-        let fallbackY = windowSize.height * Self.backButtonYFraction
-        _ = input.tap(x: fallbackX, y: fallbackY)
-        usleep(EnvConfig.stepSettlingDelayMs * 1000)
-        return true
-    }
-
     // MARK: - Private Actions
 
     private func performTap<S: ExplorationStrategy>(
@@ -266,11 +222,13 @@ final class DFSExplorer: @unchecked Sendable {
             actionType: "tap", elementText: target.text, screenType: screenType
         )
 
-        // Also record in session for flat screen list
+        // Also record in session for flat screen list.
+        // Skip graph transition since the explorer manages the graph directly above.
         session.capture(
             elements: afterResult.elements, hints: afterResult.hints,
             icons: afterResult.icons, actionType: "tap",
-            arrivedVia: target.text, screenshotBase64: afterResult.screenshotBase64
+            arrivedVia: target.text, screenshotBase64: afterResult.screenshotBase64,
+            skipGraphTransition: true
         )
 
         lock.lock()
@@ -308,8 +266,9 @@ final class DFSExplorer: @unchecked Sendable {
         describer: ScreenDescribing,
         strategy: S.Type
     ) -> ExploreStepResult {
-        // Mark element as visited so it won't be scouted again
-        graph.markElementVisited(fingerprint: currentFP, elementText: target.text)
+        // Scout deduplication is handled by scoutResultsMap (nextScoutTarget checks
+        // scouted.contains), NOT visitedElements. Marking visited here would starve
+        // the dive phase by filtering out scouted elements from the dive plan.
 
         // Tap the element
         _ = input.tap(x: target.tapX, y: target.tapY)
@@ -320,12 +279,19 @@ final class DFSExplorer: @unchecked Sendable {
             return .paused(reason: "Failed to capture screen after scout tap")
         }
 
-        // Compare fingerprints to determine if navigation occurred
-        let afterFP = StructuralFingerprint.compute(
-            elements: afterResult.elements, icons: afterResult.icons
-        )
-
-        let navigated = afterFP != currentFP
+        // Compare using structural similarity (not exact hash) for consistency
+        // with NavigationGraph's Jaccard-based node matching.
+        let navigated: Bool
+        if let currentNode = graph.node(for: currentFP) {
+            navigated = !StructuralFingerprint.areEquivalent(
+                currentNode.elements, afterResult.elements
+            )
+        } else {
+            let afterFP = StructuralFingerprint.compute(
+                elements: afterResult.elements, icons: afterResult.icons
+            )
+            navigated = afterFP != currentFP
+        }
         let scoutResult: ScoutResult = navigated ? .navigated : .noChange
         graph.recordScoutResult(
             fingerprint: currentFP, elementText: target.text, result: scoutResult
@@ -345,17 +311,25 @@ final class DFSExplorer: @unchecked Sendable {
                 hints: afterResult.hints, screenshot: afterResult.screenshotBase64,
                 actionType: "tap", elementText: target.text, screenType: screenType
             )
+            // Record in session for flat screen list.
+            // Skip graph transition since the explorer manages the graph directly above.
             session.capture(
                 elements: afterResult.elements, hints: afterResult.hints,
                 icons: afterResult.icons, actionType: "tap",
-                arrivedVia: target.text, screenshotBase64: afterResult.screenshotBase64
+                arrivedVia: target.text, screenshotBase64: afterResult.screenshotBase64,
+                skipGraphTransition: true
             )
 
-            // Immediately backtrack: tap the "<" back button
+            // Immediately backtrack: tap the "<" back button and verify
             _ = tapBackButton(elements: afterResult.elements, input: input)
 
-            // Restore graph state to parent screen
-            graph.setCurrentFingerprint(currentFP)
+            // Verify we returned to the parent screen. If the back tap missed,
+            // retry once to avoid graph desync.
+            let resolvedFP = verifyBacktrack(
+                expectedFP: currentFP, fromFP: currentFP,
+                elements: afterResult.elements, input: input, describer: describer
+            )
+            graph.setCurrentFingerprint(resolvedFP)
 
             return .continue(
                 description: "Scouted \"\(target.text)\" → navigates (will dive later)"
@@ -365,110 +339,6 @@ final class DFSExplorer: @unchecked Sendable {
         return .continue(
             description: "Scouted \"\(target.text)\" → no navigation"
         )
-    }
-
-    private func performBacktrack<S: ExplorationStrategy>(
-        currentFP: String,
-        input: InputProviding,
-        describer: ScreenDescribing,
-        strategy: S.Type,
-        hints: [String],
-        elements: [TapPoint]
-    ) -> ExploreStepResult {
-        lock.lock()
-        let stackDepth = backtrackStack.count
-        lock.unlock()
-
-        // Can't backtrack past root
-        guard stackDepth > 1 else {
-            lock.lock()
-            isFinished = true
-            lock.unlock()
-            return .finished(bundle: generateBundle())
-        }
-
-        // Fast-backtrack: skip multiple levels to reach tab root if beneficial
-        if let fastResult = performFastBacktrackIfNeeded(
-            stackDepth: stackDepth, input: input, describer: describer, elements: elements
-        ) {
-            return fastResult
-        }
-
-        let backtrackAction = strategy.backtrackMethod(
-            currentHints: hints, depth: stackDepth - 1
-        )
-
-        // Execute backtrack action by tapping the "<" back button.
-        // iPhone Mirroring does not support iOS edge-swipe-back gestures,
-        // so tapping the OCR-detected back chevron is the only reliable method.
-        // tapBackButton always succeeds (falls back to canonical position if OCR misses the chevron).
-        switch backtrackAction {
-        case .pressBack, .tapBack:
-            _ = tapBackButton(elements: elements, input: input)
-        case .pressHome:
-            _ = input.pressKey(keyName: "h", modifiers: ["command", "shift"])
-        case .none:
-            lock.lock()
-            isFinished = true
-            lock.unlock()
-            return .finished(bundle: generateBundle())
-        }
-
-        lock.lock()
-        let fromFP = backtrackStack.removeLast()
-        let parentFP = backtrackStack.last ?? graph.rootFingerprint
-        actionsOnCurrentScreen = 0
-        lock.unlock()
-
-        // Sync graph's current fingerprint to the screen we backtracked to
-        graph.setCurrentFingerprint(parentFP)
-
-        return .backtracked(from: fromFP, to: parentFP)
-    }
-
-    /// Fast-backtrack to root for tab-based apps when deep in a subtree.
-    /// Taps the back button at each level to navigate up to the root.
-    ///
-    /// Triggers when:
-    /// 1. Stack depth > 2 (at least 2 levels above root)
-    /// 2. Root screen is a tabRoot
-    /// 3. Root has unvisited elements (likely unexplored tabs)
-    private func performFastBacktrackIfNeeded(
-        stackDepth: Int,
-        input: InputProviding,
-        describer: ScreenDescribing,
-        elements: [TapPoint]
-    ) -> ExploreStepResult? {
-        guard stackDepth > 2 else { return nil }
-        guard graph.rootScreenType() == .tabRoot else { return nil }
-        guard graph.hasUnvisitedElements(for: graph.rootFingerprint) else { return nil }
-
-        let stepsToRoot = stackDepth - 1
-        var currentElements = elements
-        for _ in 0..<stepsToRoot {
-            // Tap the back button to go back one level
-            guard tapBackButton(elements: currentElements, input: input) else { break }
-            // OCR the new screen for the next level's back button
-            if let result = describer.describe(skipOCR: false) {
-                currentElements = result.elements
-            }
-        }
-
-        let rootFP = graph.rootFingerprint
-
-        lock.lock()
-        let previousFP = backtrackStack.last ?? ""
-        // Pop entire stack down to root
-        while backtrackStack.count > 1 {
-            backtrackStack.removeLast()
-        }
-        actionsOnCurrentScreen = 0
-        lock.unlock()
-
-        // Sync graph's current fingerprint to root
-        graph.setCurrentFingerprint(rootFP)
-
-        return .backtracked(from: previousFP, to: rootFP)
     }
 
     /// Attempt to scroll the current screen to reveal hidden elements.
@@ -530,7 +400,7 @@ final class DFSExplorer: @unchecked Sendable {
         return result
     }
 
-    private func generateBundle() -> SkillBundle {
+    func generateBundle() -> SkillBundle {
         guard let data = session.finalize() else {
             return SkillBundle(appName: "", skills: [], manifest: nil)
         }

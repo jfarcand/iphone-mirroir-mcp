@@ -107,8 +107,8 @@ enum MobileAppStrategy: ExplorationStrategy {
         return .none
     }
 
-    static func shouldSkip(elementText: String) -> Bool {
-        ExplorationBudget.default.shouldSkipElement(text: elementText)
+    static func shouldSkip(elementText: String, budget: ExplorationBudget) -> Bool {
+        budget.shouldSkipElement(text: elementText)
     }
 
     static func isTerminal(

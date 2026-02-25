@@ -32,9 +32,11 @@ final class DFSExplorerFastBacktrackTests: XCTestCase {
             actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
         )
 
+        // Disable scouting — this test is about fast backtrack behavior
         let budget = ExplorationBudget(
             maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
             maxActionsPerScreen: 5, scrollLimit: 0,
+            maxScoutsPerScreen: 0,
             skipPatterns: ExplorationBudget.default.skipPatterns
         )
 
@@ -134,6 +136,8 @@ final class DFSExplorerFastBacktrackTests: XCTestCase {
 
         let desc2 = MockExplorerDescriber(screens: [
             ScreenDescriber.DescribeResult(elements: level1, screenshotBase64: "img1"),
+            // Backtrack verification: back at root
+            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
         ])
 
         let result = explorer.step(
@@ -162,9 +166,11 @@ final class DFSExplorerFastBacktrackTests: XCTestCase {
             actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
         )
 
+        // Disable scouting — this test is about backtrack behavior
         let budget = ExplorationBudget(
             maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
             maxActionsPerScreen: 5, scrollLimit: 0,
+            maxScoutsPerScreen: 0,
             skipPatterns: ExplorationBudget.default.skipPatterns
         )
         let explorer = DFSExplorer(session: session, budget: budget)
@@ -202,6 +208,8 @@ final class DFSExplorerFastBacktrackTests: XCTestCase {
         let tapsBefore = input.taps.count
         let desc4 = MockExplorerDescriber(screens: [
             ScreenDescriber.DescribeResult(elements: l3, screenshotBase64: "img3"),
+            // Backtrack verification: back at l2 (parent)
+            ScreenDescriber.DescribeResult(elements: l2, screenshotBase64: "img2"),
         ])
         _ = explorer.step(describer: desc4, input: input, strategy: MobileAppStrategy.self)
 
@@ -256,6 +264,8 @@ final class DFSExplorerFastBacktrackTests: XCTestCase {
         // MobileAppStrategy.isTerminal checks depth >= budget.maxDepth
         let describer2 = MockExplorerDescriber(screens: [
             ScreenDescriber.DescribeResult(elements: deepElements, screenshotBase64: "img1"),
+            // Backtrack verification: back at root
+            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
         ])
 
         // Mark elements visited so it backtracks

@@ -119,21 +119,34 @@ final class DesktopAppStrategyTests: XCTestCase {
     // MARK: - Skip Patterns
 
     func testSkipsDesktopDestructiveActions() {
-        XCTAssertTrue(DesktopAppStrategy.shouldSkip(elementText: "Quit App"))
-        XCTAssertTrue(DesktopAppStrategy.shouldSkip(elementText: "Force Quit"))
-        XCTAssertTrue(DesktopAppStrategy.shouldSkip(elementText: "Format Disk"))
-        XCTAssertTrue(DesktopAppStrategy.shouldSkip(elementText: "Uninstall"))
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 0, skipPatterns: []
+        )
+        // Desktop-specific patterns are built into the strategy
+        XCTAssertTrue(DesktopAppStrategy.shouldSkip(elementText: "Quit App", budget: budget))
+        XCTAssertTrue(DesktopAppStrategy.shouldSkip(elementText: "Force Quit", budget: budget))
+        XCTAssertTrue(DesktopAppStrategy.shouldSkip(elementText: "Format Disk", budget: budget))
+        XCTAssertTrue(DesktopAppStrategy.shouldSkip(elementText: "Uninstall", budget: budget))
     }
 
     func testSkipInheritsBasePatterns() {
-        XCTAssertTrue(DesktopAppStrategy.shouldSkip(elementText: "Delete"))
-        XCTAssertTrue(DesktopAppStrategy.shouldSkip(elementText: "Sign Out"))
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 0, skipPatterns: ["Delete", "Sign Out"]
+        )
+        XCTAssertTrue(DesktopAppStrategy.shouldSkip(elementText: "Delete", budget: budget))
+        XCTAssertTrue(DesktopAppStrategy.shouldSkip(elementText: "Sign Out", budget: budget))
     }
 
     func testDoesNotSkipSafeDesktopElements() {
-        XCTAssertFalse(DesktopAppStrategy.shouldSkip(elementText: "General"))
-        XCTAssertFalse(DesktopAppStrategy.shouldSkip(elementText: "Preferences"))
-        XCTAssertFalse(DesktopAppStrategy.shouldSkip(elementText: "About"))
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 0, skipPatterns: ["Delete"]
+        )
+        XCTAssertFalse(DesktopAppStrategy.shouldSkip(elementText: "General", budget: budget))
+        XCTAssertFalse(DesktopAppStrategy.shouldSkip(elementText: "Preferences", budget: budget))
+        XCTAssertFalse(DesktopAppStrategy.shouldSkip(elementText: "About", budget: budget))
     }
 
     // MARK: - Terminal Conditions

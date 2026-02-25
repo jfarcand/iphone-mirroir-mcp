@@ -431,11 +431,12 @@ final class NavigationGraph: @unchecked Sendable {
         screenPlans[fingerprint] = nil
     }
 
-    // MARK: - Private
+    // MARK: - Node Matching
 
     /// Find an existing node whose structural elements are similar to the given elements.
     /// Returns the fingerprint of the matching node, or nil if no match found.
-    private func findMatchingNode(elements: [TapPoint]) -> String? {
+    /// Used internally for transition recording and externally for backtrack verification.
+    func findMatchingNode(elements: [TapPoint]) -> String? {
         let newStructural = StructuralFingerprint.extractStructural(from: elements)
         for (fp, node) in nodes {
             let existingStructural = StructuralFingerprint.extractStructural(from: node.elements)

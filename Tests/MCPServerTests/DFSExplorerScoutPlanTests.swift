@@ -14,14 +14,23 @@ final class DFSExplorerScoutPlanTests: XCTestCase {
         makeExplorerElements(texts, startY: startY)
     }
 
+    /// Tab bar items placed at the bottom of the screen. Adding these to a root
+    /// screen's elements causes MobileAppStrategy.classifyScreen to return .tabRoot,
+    /// which is the only screen type that triggers the scout phase.
+    private let tabBarItems: [TapPoint] = [
+        TapPoint(text: "Home", tapX: 56, tapY: 850, confidence: 0.95),
+        TapPoint(text: "Search", tapX: 158, tapY: 850, confidence: 0.95),
+        TapPoint(text: "Profile", tapX: 260, tapY: 850, confidence: 0.95),
+    ]
+
     // MARK: - Scout Phase
 
     func testExplorerScoutsBeforeDiving() {
         let session = ExplorationSession()
         session.start(appName: "TestApp", goal: "test")
 
-        // Settings-style screen with enough navigation elements to trigger scouting
-        // Each label is paired with ">" on the same Y to classify as navigation
+        // Tab root screen with enough navigation elements to trigger scouting.
+        // Tab bar items at bottom cause classifyScreen to return .tabRoot.
         let rootElements: [TapPoint] = [
             TapPoint(text: "General", tapX: 100, tapY: 200, confidence: 0.95),
             TapPoint(text: ">", tapX: 370, tapY: 200, confidence: 0.95),
@@ -31,7 +40,7 @@ final class DFSExplorerScoutPlanTests: XCTestCase {
             TapPoint(text: ">", tapX: 370, tapY: 360, confidence: 0.95),
             TapPoint(text: "Storage", tapX: 100, tapY: 440, confidence: 0.95),
             TapPoint(text: ">", tapX: 370, tapY: 440, confidence: 0.95),
-        ]
+        ] + tabBarItems
         session.capture(
             elements: rootElements, hints: [], icons: [],
             actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
@@ -48,11 +57,16 @@ final class DFSExplorerScoutPlanTests: XCTestCase {
 
         // After tapping "General", we arrive at a new screen
         let detailElements = makeElements(["About Phone", "iOS Version"])
+        let rootScreen = ScreenDescriber.DescribeResult(
+            elements: rootElements, screenshotBase64: "img0"
+        )
         let describer = MockExplorerDescriber(screens: [
             // step() OCR: root screen
-            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
+            rootScreen,
             // After scout tap: new screen
             ScreenDescriber.DescribeResult(elements: detailElements, screenshotBase64: "img1"),
+            // Backtrack verification: back at root
+            rootScreen,
         ])
         let input = MockExplorerInput()
 
@@ -77,7 +91,7 @@ final class DFSExplorerScoutPlanTests: XCTestCase {
         let session = ExplorationSession()
         session.start(appName: "TestApp", goal: "test")
 
-        // Minimal scoutable screen: 4 navigation elements
+        // Tab root screen with 4 navigation elements to trigger scouting
         let rootElements: [TapPoint] = [
             TapPoint(text: "Item A", tapX: 100, tapY: 200, confidence: 0.95),
             TapPoint(text: ">", tapX: 370, tapY: 200, confidence: 0.95),
@@ -87,7 +101,10 @@ final class DFSExplorerScoutPlanTests: XCTestCase {
             TapPoint(text: ">", tapX: 370, tapY: 360, confidence: 0.95),
             TapPoint(text: "Item D", tapX: 100, tapY: 440, confidence: 0.95),
             TapPoint(text: ">", tapX: 370, tapY: 440, confidence: 0.95),
-        ]
+        ] + tabBarItems
+        let rootScreen = ScreenDescriber.DescribeResult(
+            elements: rootElements, screenshotBase64: "img0"
+        )
         session.capture(
             elements: rootElements, hints: [], icons: [],
             actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
@@ -109,21 +126,15 @@ final class DFSExplorerScoutPlanTests: XCTestCase {
             elements: makeElements(["Detail Info"]), screenshotBase64: "img_detail"
         )
 
-        // Scout 1: Item A navigates
-        let desc1 = MockExplorerDescriber(screens: [
-            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
-            detailScreen,
-        ])
+        // Scout 1: Item A navigates (root → detail → backtrack verify → root)
+        let desc1 = MockExplorerDescriber(screens: [rootScreen, detailScreen, rootScreen])
         let step1 = explorer.step(describer: desc1, input: input, strategy: MobileAppStrategy.self)
         if case .continue(let desc) = step1 {
             XCTAssertTrue(desc.contains("Scouted"), "Step 1 should scout. Got: \(desc)")
         }
 
-        // Scout 2: Item B navigates (maxScoutsPerScreen reached after this)
-        let desc2 = MockExplorerDescriber(screens: [
-            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
-            detailScreen,
-        ])
+        // Scout 2: Item B navigates (root → detail → backtrack verify → root)
+        let desc2 = MockExplorerDescriber(screens: [rootScreen, detailScreen, rootScreen])
         let step2 = explorer.step(describer: desc2, input: input, strategy: MobileAppStrategy.self)
         if case .continue(let desc) = step2 {
             XCTAssertTrue(desc.contains("Scouted"), "Step 2 should scout. Got: \(desc)")
@@ -132,7 +143,7 @@ final class DFSExplorerScoutPlanTests: XCTestCase {
         // Step 3: Should now be in dive phase (maxScoutsPerScreen=2 reached)
         let diveDetail = makeElements(["Dive Content", "More Info"])
         let desc3 = MockExplorerDescriber(screens: [
-            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
+            rootScreen,
             ScreenDescriber.DescribeResult(elements: diveDetail, screenshotBase64: "img_dive"),
         ])
         let step3 = explorer.step(describer: desc3, input: input, strategy: MobileAppStrategy.self)
@@ -197,7 +208,10 @@ final class DFSExplorerScoutPlanTests: XCTestCase {
             TapPoint(text: ">", tapX: 370, tapY: 360, confidence: 0.95),
             TapPoint(text: "Storage", tapX: 100, tapY: 440, confidence: 0.95),
             TapPoint(text: ">", tapX: 370, tapY: 440, confidence: 0.95),
-        ]
+        ] + tabBarItems
+        let rootScreen = ScreenDescriber.DescribeResult(
+            elements: rootElements, screenshotBase64: "img0"
+        )
         session.capture(
             elements: rootElements, hints: [], icons: [],
             actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
@@ -210,8 +224,10 @@ final class DFSExplorerScoutPlanTests: XCTestCase {
         // After scout tap → new screen (different elements = different fingerprint)
         let newScreen = makeElements(["About Phone", "Model Name"])
         let describer = MockExplorerDescriber(screens: [
-            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
+            rootScreen,
             ScreenDescriber.DescribeResult(elements: newScreen, screenshotBase64: "img1"),
+            // Backtrack verification: back at root
+            rootScreen,
         ])
         let input = MockExplorerInput()
 
@@ -238,7 +254,7 @@ final class DFSExplorerScoutPlanTests: XCTestCase {
             TapPoint(text: ">", tapX: 370, tapY: 360, confidence: 0.95),
             TapPoint(text: "Storage", tapX: 100, tapY: 440, confidence: 0.95),
             TapPoint(text: ">", tapX: 370, tapY: 440, confidence: 0.95),
-        ]
+        ] + tabBarItems
         session.capture(
             elements: rootElements, hints: [], icons: [],
             actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
@@ -277,7 +293,10 @@ final class DFSExplorerScoutPlanTests: XCTestCase {
             TapPoint(text: ">", tapX: 370, tapY: 360, confidence: 0.95),
             TapPoint(text: "Storage", tapX: 100, tapY: 440, confidence: 0.95),
             TapPoint(text: ">", tapX: 370, tapY: 440, confidence: 0.95),
-        ]
+        ] + tabBarItems
+        let rootScreen = ScreenDescriber.DescribeResult(
+            elements: rootElements, screenshotBase64: "img0"
+        )
         session.capture(
             elements: rootElements, hints: [], icons: [],
             actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
@@ -289,8 +308,10 @@ final class DFSExplorerScoutPlanTests: XCTestCase {
 
         let newScreen = makeElements(["Detail View", "Content"])
         let describer = MockExplorerDescriber(screens: [
-            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
+            rootScreen,
             ScreenDescriber.DescribeResult(elements: newScreen, screenshotBase64: "img1"),
+            // Backtrack verification: back at root
+            rootScreen,
         ])
         let input = MockExplorerInput()
 
@@ -453,4 +474,5 @@ final class DFSExplorerScoutPlanTests: XCTestCase {
             XCTFail("Expected .continue, got \(result)")
         }
     }
+
 }

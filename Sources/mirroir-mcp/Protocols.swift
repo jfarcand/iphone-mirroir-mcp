@@ -110,7 +110,8 @@ protocol ExplorationStrategy: Sendable {
     static func backtrackMethod(currentHints: [String], depth: Int) -> BacktrackAction
 
     /// Check if an element should be skipped during exploration.
-    static func shouldSkip(elementText: String) -> Bool
+    /// Skip patterns are loaded from the budget (sourced from permissions.json).
+    static func shouldSkip(elementText: String, budget: ExplorationBudget) -> Bool
 
     /// Check if a screen is a terminal node (no further exploration needed).
     static func isTerminal(
@@ -125,6 +126,23 @@ protocol ExplorationStrategy: Sendable {
         elements: [TapPoint],
         icons: [IconDetector.DetectedIcon]
     ) -> String
+}
+
+/// Classifies OCR elements into UI components for exploration planning.
+/// Abstracts the boundary between heuristic and LLM-based component detection.
+protocol ComponentClassifying: Sendable {
+    /// Classify OCR elements into screen components.
+    ///
+    /// - Parameters:
+    ///   - classified: Pre-classified OCR elements.
+    ///   - definitions: Available component definitions.
+    ///   - screenHeight: Height of the target window.
+    /// - Returns: Detected screen components, or nil if classification failed.
+    func classify(
+        classified: [ClassifiedElement],
+        definitions: [ComponentDefinition],
+        screenHeight: Double
+    ) -> [ScreenComponent]?
 }
 
 // MARK: - Conformances

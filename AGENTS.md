@@ -1,3 +1,21 @@
+## CRITICAL: Keyboard Commands DO NOT Work in iOS Apps
+
+**ALL keyboard commands (Cmd+[, Cmd+L, Cmd+T, Cmd+R, etc.) DO NOT WORK with iOS apps via iPhone Mirroring.**
+
+iPhone Mirroring only passes through to iOS apps:
+- **tap** — touch at coordinates
+- **swipe** — scroll gestures
+- **drag** — touch-and-drag (rearranging, sliders)
+- **long press** — context menus
+- **double tap** — zoom, text selection
+- **type_text** — character input (ONLY when a text field is active on the iPhone)
+
+**Back navigation**: The ONLY way to go back in an iOS app is to OCR-detect the "<" back chevron in the top 15% of screen and tap it. `press_key(key: "[", modifiers: ["command"])` does NOT work. The explorers use `tapBackButton()` for this.
+
+**press_key with modifiers**: Only works for Mac-level actions (e.g., shake via Ctrl+Cmd+Z). iOS apps do not receive keyboard shortcuts through iPhone Mirroring.
+
+---
+
 ## Sibling Repositories
 
 This project has companion repos on the same machine. Reference them when needed:
@@ -179,7 +197,7 @@ This is an iPhone Mirroring tool. Unit tests with mocks prove logic correctness 
 - Scroll settling times and scroll-exhaustion thresholds
 - Alert dialog appearance timing and dismiss button coordinates
 - Tab bar detection on real app layouts
-- Backtrack navigation (Cmd+[) behavior across iOS versions
+- Backtrack navigation (OCR back-chevron tap) behavior across iOS versions
 
 **Commit to feature branch first, test on device, then merge.** The feature branch is the staging area. Main is the release branch.
 

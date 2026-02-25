@@ -21,7 +21,16 @@ extension MirroirMCP {
                 (1) action="start" \u{2014} launch app, OCR first screen, begin session. \
                 (2) Use tap/swipe/type_text to navigate, then action="capture" to OCR each screen. \
                 (3) action="finish" \u{2014} assemble captured screens into a SKILL.md and return it. \
-                Alternatively, use action="explore" for autonomous DFS exploration.
+                Alternatively, use action="explore" for autonomous BFS exploration. \
+                \
+                WARNING: During exploration, the Mac cursor and keyboard are hijacked. \
+                Every tap/swipe physically moves the system cursor to the iPhone Mirroring \
+                window and steals keyboard focus. The user cannot use their Mac until \
+                exploration completes. This is a macOS limitation \u{2014} there is no way to \
+                send mouse events to a window without moving the system cursor. \
+                SECURITY: Exploration may navigate into sensitive screens (accounts, \
+                passwords, payment). Do not run unattended on devices with sensitive \
+                data visible in the target app.
                 """,
             inputSchema: [
                 "type": .string("object"),
@@ -32,7 +41,7 @@ extension MirroirMCP {
                             "Session action: \"start\" to launch app and begin, " +
                             "\"capture\" to OCR current screen and append, " +
                             "\"finish\" to generate SKILL.md from all captures, " +
-                            "\"explore\" for autonomous DFS exploration."),
+                            "\"explore\" for autonomous BFS exploration."),
                         "enum": .array([
                             .string("start"),
                             .string("capture"),
@@ -74,7 +83,7 @@ extension MirroirMCP {
                     "max_depth": .object([
                         "type": .string("integer"),
                         "description": .string(
-                            "Maximum DFS depth for explore action (default: 6)."),
+                            "Maximum BFS depth for explore action (default: 6)."),
                     ]),
                     "max_screens": .object([
                         "type": .string("integer"),
@@ -115,7 +124,7 @@ extension MirroirMCP {
                 case "finish":
                     return handleFinish(session: session)
                 case "explore":
-                    return handleExplore(args: args, session: session, registry: registry)
+                    return handleExplore(args: args, session: session, registry: registry, server: server)
                 default:
                     return .error("Unknown action '\(action)'. Use: start, capture, finish, explore.")
                 }
@@ -313,35 +322,17 @@ extension MirroirMCP {
             allScreens: data.screens
         )
 
-        var responseText: String
-        if bundle.skills.count > 1 {
-            responseText = "Generated \(bundle.skills.count) skills from exploration:\n\n"
-            if let manifest = bundle.manifest {
-                responseText += manifest + "\n"
-            }
-            for (i, skill) in bundle.skills.enumerated() {
-                responseText += "--- Skill \(i + 1): \(skill.name) ---\n\n"
-                responseText += skill.content
-                if i < bundle.skills.count - 1 {
-                    responseText += "\n\n"
-                }
-            }
-        } else {
-            responseText = bundle.skills.first?.content ?? ""
-        }
+        var text = formatBundle(bundle, preamble: "Generated \(bundle.skills.count) skills from exploration:")
         if !remaining.isEmpty {
-            responseText += "\n\n---\n"
-            responseText += "Goal \(goalNum)/\(totalGoals) complete. "
-            responseText += "Next goal: \"\(remaining[0])\". "
-            responseText += "Session auto-advanced \u{2014} call capture to continue, "
-            responseText += "or finish again when done."
+            text += "\n\n---\nGoal \(goalNum)/\(totalGoals) complete. "
+            text += "Next goal: \"\(remaining[0])\". "
+            text += "Session auto-advanced \u{2014} call capture to continue, or finish again when done."
             if remaining.count > 1 {
-                let queued = remaining.dropFirst().map { "\"\($0)\"" }.joined(separator: ", ")
-                responseText += "\nRemaining after next: \(queued)"
+                text += "\nRemaining after next: " +
+                    remaining.dropFirst().map { "\"\($0)\"" }.joined(separator: ", ")
             }
         }
-
-        return .text(responseText)
+        return .text(text)
     }
 
     // MARK: - Explore Handler
@@ -349,7 +340,8 @@ extension MirroirMCP {
     private static func handleExplore(
         args: [String: JSONValue],
         session: ExplorationSession,
-        registry: TargetRegistry
+        registry: TargetRegistry,
+        server: MCPServer
     ) -> MCPToolResult {
         guard let appName = args["app_name"]?.asString(), !appName.isEmpty else {
             return .error("Missing required parameter: app_name (for explore action)")
@@ -377,17 +369,18 @@ extension MirroirMCP {
                 "Spotlight search may still be visible. Try launching the app manually first.")
         }
 
-        // Parse budget overrides
+        // Parse budget overrides; skip patterns come from permissions.json
         let maxDepth = args["max_depth"]?.asInt() ?? ExplorationBudget.default.maxDepth
         let maxScreens = args["max_screens"]?.asInt() ?? ExplorationBudget.default.maxScreens
         let maxTime = args["max_time"]?.asInt() ?? ExplorationBudget.default.maxTimeSeconds
+        let skipPatterns = PermissionPolicy.loadConfig()?.skipElements ?? []
         let budget = ExplorationBudget(
             maxDepth: maxDepth,
             maxScreens: maxScreens,
             maxTimeSeconds: maxTime,
             maxActionsPerScreen: ExplorationBudget.default.maxActionsPerScreen,
             scrollLimit: ExplorationBudget.default.scrollLimit,
-            skipPatterns: ExplorationBudget.default.skipPatterns
+            skipPatterns: skipPatterns
         )
 
         let goal = args["goal"]?.asString() ?? ""
@@ -408,9 +401,16 @@ extension MirroirMCP {
             screenshotBase64: firstResult.screenshotBase64
         )
 
-        // Create DFS explorer and run exploration loop
+        // Create BFS explorer and run exploration loop
         let windowSize = ctx.bridge.getWindowInfo()?.size ?? CGSize(width: 410, height: 890)
-        let explorer = DFSExplorer(session: session, budget: budget, windowSize: windowSize)
+        let componentDefinitions = ComponentLoader.loadAll()
+        let detectionMode = ComponentDetectionMode(rawValue: EnvConfig.componentDetection) ?? .llmFirstScreen
+        let classifier = detectionMode.buildClassifier(server: server)
+        let explorer = BFSExplorer(
+            session: session, budget: budget, windowSize: windowSize,
+            componentDefinitions: componentDefinitions,
+            classifier: classifier
+        )
         explorer.markStarted()
 
         var stepResults: [String] = [
@@ -418,7 +418,7 @@ extension MirroirMCP {
             "Budget: depth=\(maxDepth), screens=\(maxScreens), time=\(maxTime)s",
         ]
 
-        // Run DFS loop using detected strategy
+        // Run BFS loop using detected strategy
         while !explorer.completed {
             let result: ExploreStepResult
             switch strategyChoice {
@@ -439,8 +439,10 @@ extension MirroirMCP {
             switch result {
             case .continue(let desc):
                 stepResults.append(desc)
+                DebugLog.log("explore", "step \(stepResults.count): \(desc)")
             case .backtracked(_, _):
                 stepResults.append("Backtracked to parent screen.")
+                DebugLog.log("explore", "step \(stepResults.count): backtracked")
             case .paused(let reason):
                 stepResults.append("Paused: \(reason)")
                 // Return intermediate results so AI can handle the situation
@@ -450,36 +452,41 @@ extension MirroirMCP {
                     "\(summary)\n\nExploration paused after \(stats.actionCount) actions, " +
                     "\(stats.nodeCount) screens in \(stats.elapsedSeconds)s.")
             case .finished(let bundle):
-                let stats = explorer.stats
-                var responseText: String
-                if bundle.skills.count > 1 {
-                    responseText = "Exploration complete! Generated \(bundle.skills.count) skills "
-                    responseText += "(\(stats.nodeCount) screens, \(stats.actionCount) actions, "
-                    responseText += "\(stats.elapsedSeconds)s):\n\n"
-                    if let manifest = bundle.manifest {
-                        responseText += manifest + "\n"
-                    }
-                    for (i, skill) in bundle.skills.enumerated() {
-                        responseText += "--- Skill \(i + 1): \(skill.name) ---\n\n"
-                        responseText += skill.content
-                        if i < bundle.skills.count - 1 {
-                            responseText += "\n\n"
-                        }
-                    }
-                } else if let skill = bundle.skills.first {
-                    responseText = "Exploration complete "
-                    responseText += "(\(stats.nodeCount) screens, \(stats.actionCount) actions, "
-                    responseText += "\(stats.elapsedSeconds)s):\n\n"
-                    responseText += skill.content
-                } else {
-                    responseText = "Exploration finished but no skills were generated."
-                }
-                return .text(responseText)
+                return .text(formatExploreResult(bundle: bundle, stats: explorer.stats))
             }
         }
 
         // Should not reach here, but just in case
         return .text(stepResults.joined(separator: "\n"))
+    }
+
+    /// Format a skill bundle into display text.
+    private static func formatBundle(_ bundle: SkillBundle, preamble: String) -> String {
+        if bundle.skills.count > 1 {
+            var text = preamble + "\n\n"
+            if let manifest = bundle.manifest { text += manifest + "\n" }
+            for (i, skill) in bundle.skills.enumerated() {
+                text += "--- Skill \(i + 1): \(skill.name) ---\n\n" + skill.content
+                if i < bundle.skills.count - 1 { text += "\n\n" }
+            }
+            return text
+        }
+        return bundle.skills.first?.content ?? ""
+    }
+
+    /// Format the final exploration result with stats and skill content.
+    private static func formatExploreResult(
+        bundle: SkillBundle,
+        stats: (nodeCount: Int, edgeCount: Int, actionCount: Int, elapsedSeconds: Int)
+    ) -> String {
+        let statLine = "(\(stats.nodeCount) screens, \(stats.actionCount) actions, \(stats.elapsedSeconds)s)"
+        guard !bundle.skills.isEmpty else {
+            return "Exploration finished but no skills were generated."
+        }
+        let preamble = bundle.skills.count > 1
+            ? "Exploration complete! Generated \(bundle.skills.count) skills \(statLine):"
+            : "Exploration complete \(statLine):"
+        return formatBundle(bundle, preamble: preamble)
     }
 
 }

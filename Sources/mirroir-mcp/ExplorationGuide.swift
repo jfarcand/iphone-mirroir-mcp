@@ -298,7 +298,7 @@ enum ExplorationGuide {
             elements: elements, icons: icons,
             visitedElements: visitedElements, depth: depth, screenType: screenType
         )
-        let actionable = ranked.filter { !strategy.shouldSkip(elementText: $0.text) }
+        let actionable = ranked.filter { !strategy.shouldSkip(elementText: $0.text, budget: budget) }
 
         var suggestions: [String] = []
         var goalProgress: String?

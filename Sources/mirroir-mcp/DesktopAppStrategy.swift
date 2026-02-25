@@ -95,8 +95,8 @@ enum DesktopAppStrategy: ExplorationStrategy {
         return .none
     }
 
-    static func shouldSkip(elementText: String) -> Bool {
-        if ExplorationBudget.default.shouldSkipElement(text: elementText) {
+    static func shouldSkip(elementText: String, budget: ExplorationBudget) -> Bool {
+        if budget.shouldSkipElement(text: elementText) {
             return true
         }
         let lowered = elementText.lowercased()

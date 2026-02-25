@@ -98,6 +98,10 @@ final class ExplorationSession: @unchecked Sendable {
 
     /// Extended capture that includes icon data for NavigationGraph population.
     /// Returns `false` if the screen is a duplicate.
+    ///
+    /// - Parameter skipGraphTransition: When `true`, skip the `graph.recordTransition()` call.
+    ///   Set this when the caller (e.g. DFSExplorer) manages the graph directly to avoid
+    ///   redundant double-recording on the shared NavigationGraph instance.
     @discardableResult
     func capture(
         elements: [TapPoint],
@@ -105,7 +109,8 @@ final class ExplorationSession: @unchecked Sendable {
         icons: [IconDetector.DetectedIcon],
         actionType: String?,
         arrivedVia: String?,
-        screenshotBase64: String
+        screenshotBase64: String,
+        skipGraphTransition: Bool = false
     ) -> Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -123,19 +128,22 @@ final class ExplorationSession: @unchecked Sendable {
             startElements = elements
         }
 
-        // Populate NavigationGraph alongside flat screen list
-        let screenType = classifyScreenWithStrategy(elements: elements, hints: hints)
-        if !graph.started {
-            graph.start(
-                rootElements: elements, icons: icons, hints: hints,
-                screenshot: screenshotBase64, screenType: screenType
-            )
-        } else if let actionType, let arrivedVia {
-            _ = graph.recordTransition(
-                elements: elements, icons: icons, hints: hints,
-                screenshot: screenshotBase64, actionType: actionType,
-                elementText: arrivedVia, screenType: screenType
-            )
+        // Populate NavigationGraph alongside flat screen list.
+        // Skip when the caller manages the graph directly (DFS explorer).
+        if !skipGraphTransition {
+            let screenType = classifyScreenWithStrategy(elements: elements, hints: hints)
+            if !graph.started {
+                graph.start(
+                    rootElements: elements, icons: icons, hints: hints,
+                    screenshot: screenshotBase64, screenType: screenType
+                )
+            } else if let actionType, let arrivedVia {
+                _ = graph.recordTransition(
+                    elements: elements, icons: icons, hints: hints,
+                    screenshot: screenshotBase64, actionType: actionType,
+                    elementText: arrivedVia, screenType: screenType
+                )
+            }
         }
 
         let screen = ExploredScreen(

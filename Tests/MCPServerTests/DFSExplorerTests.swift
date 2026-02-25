@@ -149,9 +149,10 @@ final class DFSExplorerTests: XCTestCase {
             actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
         )
 
+        // Disable scrolling — this test is about backtrack behavior
         let budget = ExplorationBudget(
             maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
-            maxActionsPerScreen: 5, scrollLimit: 3,
+            maxActionsPerScreen: 5, scrollLimit: 0,
             skipPatterns: ExplorationBudget.default.skipPatterns
         )
 
@@ -186,6 +187,8 @@ final class DFSExplorerTests: XCTestCase {
 
         let describer2 = MockExplorerDescriber(screens: [
             ScreenDescriber.DescribeResult(elements: detailElements, screenshotBase64: "img1"),
+            // Backtrack verification: back at root
+            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
         ])
 
         let step2 = explorer.step(
@@ -385,6 +388,8 @@ final class DFSExplorerTests: XCTestCase {
         // Step 2: All visited on detail → backtrack to root
         let desc2 = MockExplorerDescriber(screens: [
             ScreenDescriber.DescribeResult(elements: detailElements, screenshotBase64: "img1"),
+            // Backtrack verification: back at root
+            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
         ])
         let step2 = explorer.step(describer: desc2, input: input, strategy: MobileAppStrategy.self)
         guard case .backtracked = step2 else {
@@ -421,5 +426,72 @@ final class DFSExplorerTests: XCTestCase {
         XCTAssertFalse(LandmarkPicker.isPunctuationOnly("More..."))
         XCTAssertFalse(LandmarkPicker.isPunctuationOnly("General"))
         XCTAssertFalse(LandmarkPicker.isPunctuationOnly("1+1"))
+    }
+
+    // MARK: - Backtrack Verification (Bug 2 regression)
+
+    func testBacktrackVerifiesScreenChange() {
+        let session = ExplorationSession()
+        session.start(appName: "TestApp", goal: "test")
+
+        let rootElements = makeElements(["Settings", "General"])
+        session.capture(
+            elements: rootElements, hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
+        )
+
+        let budget = ExplorationBudget(
+            maxDepth: 6, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 0,
+            skipPatterns: ExplorationBudget.default.skipPatterns
+        )
+
+        let explorer = DFSExplorer(session: session, budget: budget)
+        explorer.markStarted()
+
+        // Step 1: Tap → navigate to detail
+        let detailElements = makeElements(["About", "Version"])
+        let desc1 = MockExplorerDescriber(screens: [
+            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
+            ScreenDescriber.DescribeResult(elements: detailElements, screenshotBase64: "img1"),
+        ])
+        let input = MockExplorerInput()
+        let step1 = explorer.step(describer: desc1, input: input, strategy: MobileAppStrategy.self)
+        guard case .continue = step1 else {
+            XCTFail("Expected .continue for step 1, got \(step1)")
+            return
+        }
+
+        // Mark detail elements visited to trigger backtrack
+        let graph = session.currentGraph
+        let detailFP = graph.currentFingerprint
+        graph.markElementVisited(fingerprint: detailFP, elementText: "About")
+        graph.markElementVisited(fingerprint: detailFP, elementText: "Version")
+
+        // Step 2: Backtrack, but first OCR returns detail screen (back tap failed).
+        // Verification should retry and succeed on second attempt.
+        let desc2 = MockExplorerDescriber(screens: [
+            // OCR of current screen (detail)
+            ScreenDescriber.DescribeResult(elements: detailElements, screenshotBase64: "img1"),
+            // First verification OCR: still on detail (back tap failed)
+            ScreenDescriber.DescribeResult(elements: detailElements, screenshotBase64: "img1"),
+            // Retry verification OCR: now on root (second back tap worked)
+            ScreenDescriber.DescribeResult(elements: rootElements, screenshotBase64: "img0"),
+        ])
+        let step2 = explorer.step(describer: desc2, input: input, strategy: MobileAppStrategy.self)
+
+        guard case .backtracked(_, let toFP) = step2 else {
+            XCTFail("Expected .backtracked for step 2, got \(step2)")
+            return
+        }
+
+        // Verify we resolved to the correct parent
+        XCTAssertEqual(toFP, graph.rootFingerprint,
+            "Backtrack verification should resolve to root after retry")
+
+        // Verify the back button was tapped twice (initial + retry)
+        let backTaps = input.taps.filter { $0.x < 60 && $0.y < 140 }
+        XCTAssertEqual(backTaps.count, 2,
+            "Should tap back button twice: once for backtrack + once for retry")
     }
 }

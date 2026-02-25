@@ -15,6 +15,8 @@ final class MCPServer: Sendable {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
     private let policy: PermissionPolicy
+    /// Counter for server-initiated request IDs (sampling, etc.).
+    private let requestCounter = OSAllocatedUnfairLock(initialState: 0)
     init(policy: PermissionPolicy) {
         self.policy = policy
         encoder = JSONEncoder()
@@ -94,6 +96,7 @@ final class MCPServer: Sendable {
             "protocolVersion": .string(negotiatedVersion),
             "capabilities": .object([
                 "tools": .object([:]),
+                "sampling": .object([:]),
             ]),
             "serverInfo": .object([
                 "name": .string("mirroir-mcp"),
@@ -158,6 +161,88 @@ final class MCPServer: Sendable {
             "isError": .bool(toolResult.isError),
         ])
         return JSONRPCResponse(id: request.id, result: result, error: nil)
+    }
+
+    // MARK: - Server-to-Client Sampling
+
+    /// Send a sampling/createMessage request to the MCP client and wait for the response.
+    ///
+    /// This is a server-initiated request: we write a JSON-RPC request to stdout and read
+    /// the client's response from stdin. Safe to call from within a tool handler because
+    /// the server's main loop is blocked waiting for the handler to return.
+    ///
+    /// - Parameter params: Sampling parameters (messages, max tokens, system prompt).
+    /// - Returns: The sampling response text, or nil if the client doesn't support sampling.
+    func sendSamplingRequest(_ params: SamplingParams) -> String? {
+        let requestId = requestCounter.withLock { counter -> Int in
+            counter += 1
+            return counter
+        }
+
+        // Build JSON-RPC request for sampling/createMessage
+        let request: [String: Any] = [
+            "jsonrpc": "2.0",
+            "id": requestId,
+            "method": "sampling/createMessage",
+            "params": encodeSamplingParams(params),
+        ]
+
+        guard let data = try? JSONSerialization.data(withJSONObject: request),
+              let jsonString = String(data: data, encoding: .utf8) else {
+            DebugLog.log("sampling", "Failed to encode sampling request")
+            return nil
+        }
+
+        // Send request to client
+        print(jsonString)
+        fflush(stdout)
+
+        // Read response from client
+        guard let responseLine = readLine(strippingNewline: true),
+              let responseData = responseLine.data(using: .utf8) else {
+            DebugLog.log("sampling", "No response from client for sampling request")
+            return nil
+        }
+
+        // Parse JSON-RPC response
+        guard let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+              let result = json["result"] as? [String: Any],
+              let content = result["content"] as? [String: Any],
+              let text = content["text"] as? String else {
+            DebugLog.log("sampling", "Failed to parse sampling response")
+            return nil
+        }
+
+        return text
+    }
+
+    /// Encode SamplingParams to a dictionary for JSON serialization.
+    private func encodeSamplingParams(_ params: SamplingParams) -> [String: Any] {
+        var dict: [String: Any] = [
+            "maxTokens": params.maxTokens,
+        ]
+        if let systemPrompt = params.systemPrompt {
+            dict["systemPrompt"] = systemPrompt
+        }
+
+        dict["messages"] = params.messages.map { message -> [String: Any] in
+            var msgDict: [String: Any] = ["role": message.role]
+            switch message.content {
+            case .text(let text):
+                msgDict["content"] = ["type": "text", "text": text]
+            case .mixed(let parts):
+                msgDict["content"] = parts.map { part -> [String: Any] in
+                    var partDict: [String: Any] = ["type": part.type]
+                    if let text = part.text { partDict["text"] = text }
+                    if let data = part.data { partDict["data"] = data }
+                    if let mime = part.mimeType { partDict["mimeType"] = mime }
+                    return partDict
+                }
+            }
+            return msgDict
+        }
+
+        return dict
     }
 
     private func writeResponse(_ response: JSONRPCResponse) {

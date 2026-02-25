@@ -55,8 +55,8 @@ enum SocialAppStrategy: ExplorationStrategy {
         MobileAppStrategy.backtrackMethod(currentHints: currentHints, depth: depth)
     }
 
-    static func shouldSkip(elementText: String) -> Bool {
-        if MobileAppStrategy.shouldSkip(elementText: elementText) {
+    static func shouldSkip(elementText: String, budget: ExplorationBudget) -> Bool {
+        if MobileAppStrategy.shouldSkip(elementText: elementText, budget: budget) {
             return true
         }
         return isSocialSkipElement(elementText)
