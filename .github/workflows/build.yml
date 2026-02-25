@@ -179,30 +179,3 @@ jobs:
           else:
               print('Server dropped invalid JSON (acceptable)')
           "
-
-  release:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: macos-15
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build release binaries
-        run: swift build -c release
-
-      - name: Create release archive
-        run: |
-          cd .build/release
-          tar czf $GITHUB_WORKSPACE/mirroir-mcp-darwin-arm64.tar.gz mirroir-mcp
-
-      - name: Generate checksums
-        run: shasum -a 256 mirroir-mcp-darwin-arm64.tar.gz > SHA256SUMS
-
-      - name: Upload release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            mirroir-mcp-darwin-arm64.tar.gz
-            SHA256SUMS

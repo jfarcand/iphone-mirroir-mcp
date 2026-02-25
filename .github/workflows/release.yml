@@ -1,0 +1,205 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 0.22.0)'
+        required: true
+        type: string
+
+jobs:
+  release:
+    runs-on: macos-15
+    permissions:
+      contents: write
+    steps:
+      - name: Validate version format
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: Version must match X.Y.Z (got '$VERSION')"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Determine current version
+        id: current
+        run: |
+          OLD=$(python3 -c "import json; print(json.load(open('server.json'))['version'])")
+          echo "version=$OLD" >> "$GITHUB_OUTPUT"
+
+      - name: Guard against duplicate release
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+          OLD_VERSION: ${{ steps.current.outputs.version }}
+        run: |
+          if [ "$OLD_VERSION" = "$VERSION" ]; then
+            echo "ERROR: Version $VERSION is already the current version"
+            exit 1
+          fi
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "ERROR: Tag v$VERSION already exists"
+            exit 1
+          fi
+
+      - name: Bump version in mirroir-mcp files
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+          OLD_VERSION: ${{ steps.current.outputs.version }}
+        run: |
+          sed -i '' "s/\"version\": \"$OLD_VERSION\"/\"version\": \"$VERSION\"/" npm/package.json
+          sed -i '' "s/const VERSION = \"$OLD_VERSION\"/const VERSION = \"$VERSION\"/" npm/install.js
+          sed -i '' "s/\"version\": \"$OLD_VERSION\"/\"version\": \"$VERSION\"/g" server.json
+          sed -i '' "s/\.string(\"$OLD_VERSION\")/.string(\"$VERSION\")/" Sources/mirroir-mcp/MCPServer.swift
+          sed -i '' "s/\.string(\"$OLD_VERSION\")/.string(\"$VERSION\")/" Tests/MCPServerTests/MCPServerRoutingTests.swift
+
+      - name: Verify no stale version references
+        env:
+          OLD_VERSION: ${{ steps.current.outputs.version }}
+        run: |
+          FILES="npm/package.json npm/install.js server.json Sources/mirroir-mcp/MCPServer.swift Tests/MCPServerTests/MCPServerRoutingTests.swift"
+          if grep -l "$OLD_VERSION" $FILES; then
+            echo "ERROR: Stale version references remain in the files above"
+            exit 1
+          fi
+
+      - name: Clone skills repo
+        run: git clone https://github.com/jfarcand/mirroir-skills.git .mirroir-mcp/skills
+
+      - name: Build release
+        run: swift build -c release
+
+      - name: Run tests
+        run: swift test --skip IntegrationTests
+
+      - name: Commit version bump and tag
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add npm/package.json npm/install.js server.json \
+            Sources/mirroir-mcp/MCPServer.swift \
+            Tests/MCPServerTests/MCPServerRoutingTests.swift
+          git commit -m "chore: bump version to $VERSION"
+          git tag "v$VERSION"
+          git push origin main --tags
+
+      - name: Create tarball and checksums
+        run: |
+          cd .build/release
+          tar czf "$GITHUB_WORKSPACE/mirroir-mcp-darwin-arm64.tar.gz" mirroir-mcp
+          cd "$GITHUB_WORKSPACE"
+          shasum -a 256 mirroir-mcp-darwin-arm64.tar.gz > SHA256SUMS
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          gh release create "v$VERSION" \
+            mirroir-mcp-darwin-arm64.tar.gz \
+            SHA256SUMS \
+            --title "v$VERSION" \
+            --generate-notes
+
+  update-homebrew:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout homebrew-tap
+        uses: actions/checkout@v4
+        with:
+          repository: jfarcand/homebrew-tap
+          token: ${{ secrets.RELEASE_PAT }}
+
+      - name: Download source tarball and compute SHA256
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          curl -sL "https://github.com/jfarcand/mirroir-mcp/archive/refs/tags/v${VERSION}.tar.gz" -o /tmp/source.tar.gz
+          echo "SHA=$(sha256sum /tmp/source.tar.gz | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - name: Update Formula
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          sed -i "s|url \"https://github.com/jfarcand/mirroir-mcp/archive/refs/tags/v.*\.tar\.gz\"|url \"https://github.com/jfarcand/mirroir-mcp/archive/refs/tags/v${VERSION}.tar.gz\"|" Formula/mirroir-mcp.rb
+          sed -i "s/sha256 \"[a-f0-9]\{64\}\"/sha256 \"${SHA}\"/" Formula/mirroir-mcp.rb
+
+      - name: Update index.md
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          sed -i "s/| [0-9]\+\.[0-9]\+\.[0-9]\+ |/| ${VERSION} |/" index.md
+
+      - name: Commit and push
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/mirroir-mcp.rb index.md
+          git commit -m "chore: bump mirroir-mcp to ${VERSION}"
+          git push
+
+  update-skills:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout mirroir-scenarios
+        uses: actions/checkout@v4
+        with:
+          repository: jfarcand/mirroir-scenarios
+          token: ${{ secrets.RELEASE_PAT }}
+
+      - name: Bump version in marketplace.json files
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          sed -i "s/\"version\": \"[0-9]\+\.[0-9]\+\.[0-9]\+\"/\"version\": \"${VERSION}\"/g" \
+            .claude-plugin/marketplace.json \
+            .github/plugin/marketplace.json
+
+      - name: Commit and push
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .claude-plugin/marketplace.json .github/plugin/marketplace.json
+          git commit -m "chore: bump version to ${VERSION}"
+          git push
+
+  publish-npm:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v${{ github.event.inputs.version }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish to npm
+        working-directory: npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
+
+      - name: Verify published version
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          sleep 10
+          PUBLISHED=$(npm view mirroir-mcp version)
+          if [ "$PUBLISHED" != "$VERSION" ]; then
+            echo "WARNING: npm shows $PUBLISHED, expected $VERSION (may need propagation time)"
+          fi
+          echo "npm version: $PUBLISHED"
