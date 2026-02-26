@@ -29,7 +29,14 @@ enum DebugLog {
     static func reset() {
         let dir = PermissionPolicy.globalConfigDir
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        FileManager.default.createFile(atPath: logPath, contents: nil)
+        // Truncate in-place so `tail -f` keeps following the same file descriptor.
+        // createFile replaces the inode, which orphans any existing tail process.
+        if let fh = FileHandle(forWritingAtPath: logPath) {
+            fh.truncateFile(atOffset: 0)
+            fh.closeFile()
+        } else {
+            FileManager.default.createFile(atPath: logPath, contents: nil)
+        }
     }
 
     /// Write a tagged line to the log file and stderr unconditionally.
