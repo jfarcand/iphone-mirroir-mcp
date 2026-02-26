@@ -444,12 +444,13 @@ final class BFSExplorer: @unchecked Sendable {
                 classified: classified, visitedElements: visitedElements,
                 scoutResults: [:], screenHeight: windowSize.height)
         }
-        let components = classifier?.classify(
+        let rawComponents = classifier?.classify(
             classified: classified, definitions: componentDefinitions,
             screenHeight: windowSize.height
         ) ?? ComponentDetector.detect(
             classified: classified, definitions: componentDefinitions,
             screenHeight: windowSize.height)
+        let components = ComponentDetector.applyAbsorption(rawComponents)
         return ScreenPlanner.buildComponentPlan(
             components: components, visitedElements: visitedElements,
             scoutResults: [:], screenHeight: windowSize.height)

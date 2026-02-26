@@ -336,6 +336,51 @@ enum ComponentDetector {
 
     // MARK: - Absorption
 
+    /// Post-process components by applying absorption rules.
+    /// Components with `absorbsBelowWithinPt > 0` absorb nearby components below them.
+    /// This ensures multi-row cards (e.g., Health app summary cards) are treated as
+    /// single tappable units regardless of which classifier produced them.
+    static func applyAbsorption(_ components: [ScreenComponent]) -> [ScreenComponent] {
+        let sorted = components.sorted { $0.topY < $1.topY }
+        var consumed = Set<Int>()
+        var result: [ScreenComponent] = []
+
+        for (i, component) in sorted.enumerated() {
+            guard !consumed.contains(i) else { continue }
+
+            let absorbRange = component.definition.grouping.absorbsBelowWithinPt
+            guard absorbRange > 0 else {
+                result.append(component)
+                continue
+            }
+
+            let maxY = component.bottomY + absorbRange
+            var mergedElements = component.elements
+
+            for j in (i + 1)..<sorted.count {
+                guard !consumed.contains(j) else { continue }
+                let below = sorted[j]
+                guard below.topY <= maxY else { break }
+
+                if shouldAbsorb(below.elements, condition: component.definition.grouping.absorbCondition) {
+                    mergedElements.append(contentsOf: below.elements)
+                    consumed.insert(j)
+                }
+            }
+
+            if mergedElements.count > component.elements.count {
+                result.append(buildComponent(
+                    kind: component.kind, definition: component.definition,
+                    elements: mergedElements
+                ))
+            } else {
+                result.append(component)
+            }
+        }
+
+        return result
+    }
+
     /// Check whether a row of elements should be absorbed into a multi-row component.
     private static func shouldAbsorb(
         _ row: [ClassifiedElement],
