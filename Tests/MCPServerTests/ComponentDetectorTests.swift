@@ -67,8 +67,7 @@ final class ComponentDetectorTests: XCTestCase {
         let disclosureRows = components.filter { $0.kind == "table-row-disclosure" }
         XCTAssertEqual(disclosureRows.count, 1,
             "Should detect one table-row-disclosure component")
-
-        let row = disclosureRows[0]
+        guard let row = disclosureRows.first else { return }
         XCTAssertTrue(row.hasChevron)
         XCTAssertNotNil(row.tapTarget,
             "Disclosure row should have a tap target")
@@ -443,8 +442,8 @@ final class ComponentDetectorTests: XCTestCase {
         let modalSheets = components.filter { $0.kind == "modal-sheet" }
         XCTAssertEqual(modalSheets.count, 1,
             "Should detect modal sheet from title + X dismiss button")
+        guard let sheet = modalSheets.first else { return }
 
-        let sheet = modalSheets[0]
         XCTAssertNotNil(sheet.tapTarget,
             "Modal sheet should have a tap target (the dismiss button)")
         XCTAssertEqual(sheet.tapTarget?.text, "X",
@@ -496,7 +495,8 @@ final class ComponentDetectorTests: XCTestCase {
         let modalSheets = components.filter { $0.kind == "modal-sheet" }
         XCTAssertEqual(modalSheets.count, 1,
             "Should detect modal sheet with unicode dismiss button")
-        XCTAssertEqual(modalSheets[0].tapTarget?.text, "✕",
+        guard let sheet = modalSheets.first else { return }
+        XCTAssertEqual(sheet.tapTarget?.text, "✕",
             "Tap target should be the unicode dismiss button")
     }
 
