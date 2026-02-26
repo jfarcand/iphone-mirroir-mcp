@@ -304,6 +304,10 @@ final class BFSExplorer: @unchecked Sendable {
             if let scrollResult = performScrollIfAvailable(
                 currentFP: currentFP, input: input, describer: describer
             ) {
+                DebugLog.log("bfs", "scroll revealed new elements, resetting action counter")
+                lock.lock()
+                actionsOnCurrentScreen = 0
+                lock.unlock()
                 return scrollResult
             }
 

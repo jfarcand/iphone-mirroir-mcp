@@ -157,6 +157,10 @@ final class DFSExplorer: @unchecked Sendable {
         if let scrollResult = performScrollIfAvailable(
             currentFP: currentFP, input: input, describer: describer
         ) {
+            DebugLog.log("dfs", "scroll revealed new elements, resetting action counter")
+            lock.lock()
+            actionsOnCurrentScreen = 0
+            lock.unlock()
             return scrollResult
         }
 
