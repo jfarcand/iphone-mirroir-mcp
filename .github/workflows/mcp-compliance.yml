@@ -40,6 +40,8 @@ jobs:
       - name: Clone skills repo
         run: |
           git clone https://github.com/jfarcand/mirroir-skills.git ../mirroir-skills
+          mkdir -p .mirroir-mcp
+          ln -s "$(cd ../mirroir-skills && pwd)" .mirroir-mcp/skills
 
       - name: Setup Python
         uses: actions/setup-python@v5
