@@ -32,6 +32,8 @@ struct ComponentMatchRules: Sendable {
     let hasNumericValue: Bool?
     /// Whether the row must contain long text (50+ chars). nil = don't care.
     let hasLongText: Bool?
+    /// Whether the row must contain a dismiss button (X, ✕, ×). nil = don't care.
+    let hasDismissButton: Bool?
     /// Screen zone where this component typically appears.
     let zone: ScreenZone
 }
@@ -68,6 +70,7 @@ enum ScreenZone: String, Sendable {
 /// Rules for selecting which element to tap within a component.
 enum ClickTargetRule: String, Sendable {
     case firstNavigation = "first_navigation_element"
+    case firstDismissButton = "first_dismiss_button"
     case centered = "centered_element"
     case none
 }
@@ -214,6 +217,7 @@ enum ComponentSkillParser {
             maxRowHeightPt: parseDouble(kv["max_row_height_pt"]) ?? 100,
             hasNumericValue: parseBool(kv["has_numeric_value"]),
             hasLongText: parseBool(kv["has_long_text"]),
+            hasDismissButton: parseBool(kv["has_dismiss_button"]),
             zone: ScreenZone(rawValue: kv["zone"] ?? "content") ?? .content
         )
     }

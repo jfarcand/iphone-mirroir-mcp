@@ -375,4 +375,85 @@ final class ElementClassifierTests: XCTestCase {
         XCTAssertEqual(result.first?.role, .navigation,
             "Element at y=200 should not be affected by status bar zone filter")
     }
+
+    // MARK: - Paragraph Fragment Detection
+
+    func testParagraphFragmentsReclassifiedAsInfo() {
+        // 4 consecutive rows of paragraph text from Santé "Partage" screen
+        let elements = [
+            point("Tenez vos amis et vos proches au", x: 200, y: 300),
+            point("courant de vos donnees de sante.", x: 200, y: 330),
+            point("Les personnes avec qui vous partagez", x: 200, y: 360),
+            point("peuvent consulter vos donnees dans Sante.", x: 200, y: 390),
+        ]
+        let result = classify(elements)
+
+        for classified in result {
+            XCTAssertEqual(classified.role, .info,
+                "Paragraph line '\(classified.point.text)' should be reclassified as .info")
+        }
+    }
+
+    func testSingleShortTextNotReclassified() {
+        // One isolated multi-word line should remain navigation (not enough consecutive rows)
+        let elements = [
+            point("General", x: 100, y: 200),
+            point(">", x: 370, y: 200),
+            point("Some descriptive text here", x: 200, y: 300),
+            point("Privacy", x: 100, y: 400),
+            point(">", x: 370, y: 400),
+        ]
+        let result = classify(elements)
+        XCTAssertEqual(role(of: "Some descriptive text here", in: result), .navigation,
+            "Isolated multi-word line should stay as navigation fallback")
+    }
+
+    func testParagraphAdjacentToChevronRowNotAffected() {
+        // Paragraph fragment rows interspersed with a chevron row:
+        // the chevron row breaks the consecutive run
+        let elements = [
+            point("Some paragraph text line one", x: 200, y: 300),
+            point("Some paragraph text line two", x: 200, y: 330),
+            point("Settings Row", x: 100, y: 360),
+            point(">", x: 370, y: 360),
+            point("Some paragraph text line three", x: 200, y: 390),
+        ]
+        let result = classify(elements)
+
+        // The chevron row breaks the run at 2 rows (below threshold of 3)
+        XCTAssertEqual(role(of: "Some paragraph text line one", in: result), .navigation,
+            "Fragment in run of 2 should stay navigation (below threshold)")
+        XCTAssertEqual(role(of: "Settings Row", in: result), .navigation,
+            "Chevron-context row should stay navigation")
+    }
+
+    func testParagraphRunExactlyThreeRows() {
+        // Exactly 3 consecutive rows — minimum threshold, should reclassify
+        let elements = [
+            point("First line of paragraph text", x: 200, y: 300),
+            point("Second line of paragraph text", x: 200, y: 330),
+            point("Third line of paragraph text", x: 200, y: 360),
+        ]
+        let result = classify(elements)
+
+        for classified in result {
+            XCTAssertEqual(classified.role, .info,
+                "3 consecutive paragraph lines should be reclassified as .info")
+        }
+    }
+
+    func testSingleWordLinesNotTreatedAsParagraph() {
+        // Single-word labels (no spaces) are not paragraph fragments
+        let elements = [
+            point("General", x: 200, y: 300),
+            point("Privacy", x: 200, y: 330),
+            point("About", x: 200, y: 360),
+        ]
+        let result = classify(elements)
+
+        for classified in result {
+            XCTAssertEqual(classified.role, .navigation,
+                "Single-word lines should not be treated as paragraph fragments")
+        }
+    }
 }

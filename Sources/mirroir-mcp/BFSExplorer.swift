@@ -281,6 +281,11 @@ final class BFSExplorer: @unchecked Sendable {
             graph.setScreenPlan(for: currentFP, plan: plan)
         }
 
+        if let plan = graph.screenPlan(for: currentFP) {
+            let planTexts = plan.map { "\($0.point.text)(score=\(String(format: "%.1f", $0.score)))" }
+            DebugLog.log("bfs", "plan: \(planTexts)")
+        }
+
         // Get the next unvisited element from the plan
         let actionable: TapPoint? = if let ranked = graph.nextPlannedElement(for: currentFP),
             !strategy.shouldSkip(elementText: ranked.point.text, budget: budget) { ranked.point } else { nil }

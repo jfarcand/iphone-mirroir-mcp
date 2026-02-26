@@ -65,7 +65,8 @@ enum ScreenPlanner {
         screenHeight: Double
     ) -> [RankedElement] {
         classified
-            .filter { $0.role == .navigation && !visitedElements.contains($0.point.text) }
+            .filter { $0.role == .navigation && !visitedElements.contains($0.point.text)
+                && $0.point.tapY < screenHeight - TimingConstants.safeBottomMarginPt }
             .map { element in
                 let (score, reason) = computeScore(
                     element: element,
@@ -103,6 +104,11 @@ enum ScreenPlanner {
                 guard component.definition.interaction.clickable,
                       let tapTarget = component.tapTarget,
                       !visitedElements.contains(tapTarget.text) else {
+                    return nil
+                }
+
+                // Exclude elements in the home gesture zone at the bottom of the screen
+                guard tapTarget.tapY < screenHeight - TimingConstants.safeBottomMarginPt else {
                     return nil
                 }
 

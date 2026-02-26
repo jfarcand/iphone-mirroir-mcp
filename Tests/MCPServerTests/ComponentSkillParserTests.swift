@@ -285,6 +285,43 @@ final class ComponentSkillParserTests: XCTestCase {
         XCTAssertEqual(definition.matchRules.rowHasChevron, false)
     }
 
+    // MARK: - Dismiss Button Parsing
+
+    func testParseDismissButtonMatchRule() {
+        let content = """
+            ---
+            name: modal-sheet
+            ---
+
+            # Modal Sheet
+
+            ## Match Rules
+
+            - has_dismiss_button: true
+            - row_has_chevron: false
+            - min_elements: 2
+            - max_elements: 4
+            - zone: content
+
+            ## Interaction
+
+            - clickable: true
+            - click_target: first_dismiss_button
+            - click_result: dismisses
+            - back_after_click: false
+            """
+
+        let definition = ComponentSkillParser.parse(
+            content: content, fallbackName: "fallback"
+        )
+
+        XCTAssertEqual(definition.matchRules.hasDismissButton, true)
+        XCTAssertEqual(definition.matchRules.rowHasChevron, false)
+        XCTAssertEqual(definition.interaction.clickTarget, .firstDismissButton)
+        XCTAssertEqual(definition.interaction.clickResult, .dismisses)
+        XCTAssertFalse(definition.interaction.backAfterClick)
+    }
+
     // MARK: - Visual Pattern Extraction
 
     func testVisualPatternExtraction() {

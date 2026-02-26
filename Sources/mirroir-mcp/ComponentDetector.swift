@@ -142,6 +142,7 @@ enum ComponentDetector {
         let zone: ScreenZone
         let hasStateIndicator: Bool
         let hasLongText: Bool
+        let hasDismissButton: Bool
     }
 
     /// Compute properties for a row of classified elements.
@@ -182,6 +183,12 @@ enum ComponentDetector {
         let longTextThreshold = 50
         let hasLongText = row.contains { $0.point.text.count > longTextThreshold }
 
+        let hasDismissButton = row.contains { element in
+            ElementClassifier.dismissCharacters.contains(
+                element.point.text.trimmingCharacters(in: .whitespaces)
+            )
+        }
+
         return RowProperties(
             elementCount: row.count,
             hasChevron: hasChevron,
@@ -191,7 +198,8 @@ enum ComponentDetector {
             bottomY: bottomY,
             zone: zone,
             hasStateIndicator: hasStateIndicator,
-            hasLongText: hasLongText
+            hasLongText: hasLongText,
+            hasDismissButton: hasDismissButton
         )
     }
 
@@ -266,6 +274,14 @@ enum ComponentDetector {
                 return nil
             }
             score += 2.0
+        }
+
+        // Hard constraint: dismiss button requirement
+        if let requireDismiss = rules.hasDismissButton {
+            if requireDismiss != rowProps.hasDismissButton {
+                return nil
+            }
+            score += 3.0
         }
 
         // Specificity bonuses: tighter ranges score higher
@@ -346,7 +362,8 @@ enum ComponentDetector {
             visualPattern: [],
             matchRules: ComponentMatchRules(
                 rowHasChevron: nil, minElements: 1, maxElements: 1,
-                maxRowHeightPt: 100, hasNumericValue: nil, hasLongText: nil, zone: .content
+                maxRowHeightPt: 100, hasNumericValue: nil, hasLongText: nil,
+                hasDismissButton: nil, zone: .content
             ),
             interaction: ComponentInteraction(
                 clickable: isClickable,
@@ -385,6 +402,17 @@ enum ComponentDetector {
             // Prefer navigation-classified elements, then any non-decoration element
             if let nav = elements.first(where: { $0.role == .navigation }) {
                 return nav.point
+            }
+            return elements.first(where: { $0.role != .decoration })?.point
+
+        case .firstDismissButton:
+            // Find the dismiss button (X, ✕, ×) in the component's elements
+            if let dismiss = elements.first(where: { element in
+                ElementClassifier.dismissCharacters.contains(
+                    element.point.text.trimmingCharacters(in: .whitespaces)
+                )
+            }) {
+                return dismiss.point
             }
             return elements.first(where: { $0.role != .decoration })?.point
 

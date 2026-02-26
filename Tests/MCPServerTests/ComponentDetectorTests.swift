@@ -274,7 +274,8 @@ final class ComponentDetectorTests: XCTestCase {
             bottomY: 405,
             zone: .content,
             hasStateIndicator: false,
-            hasLongText: false
+            hasLongText: false,
+            hasDismissButton: false
         )
 
         let match = ComponentDetector.bestMatch(
@@ -297,7 +298,8 @@ final class ComponentDetectorTests: XCTestCase {
             bottomY: 405,
             zone: .content,
             hasStateIndicator: false,
-            hasLongText: false
+            hasLongText: false,
+            hasDismissButton: false
         )
 
         let navBarDef = definitions.first { $0.name == "navigation-bar" }
@@ -415,5 +417,80 @@ final class ComponentDetectorTests: XCTestCase {
         XCTAssertTrue(tapTexts.contains("General"))
         XCTAssertTrue(tapTexts.contains("Notifications"))
         XCTAssertTrue(tapTexts.contains("Privacy"))
+    }
+
+    // MARK: - Modal Sheet Detection
+
+    func testModalSheetDetectedByDismissButton() {
+        // Simulate a "Partager avec" (Share with) modal sheet header
+        let classified = [
+            classifiedNav("Partager avec", x: 150, y: 150),
+            classifiedDeco("X", x: 370, y: 150),
+        ]
+
+        let components = ComponentDetector.detect(
+            classified: classified,
+            definitions: definitions,
+            screenHeight: screenHeight
+        )
+
+        let modalSheets = components.filter { $0.kind == "modal-sheet" }
+        XCTAssertEqual(modalSheets.count, 1,
+            "Should detect modal sheet from title + X dismiss button")
+
+        let sheet = modalSheets[0]
+        XCTAssertNotNil(sheet.tapTarget,
+            "Modal sheet should have a tap target (the dismiss button)")
+        XCTAssertEqual(sheet.tapTarget?.text, "X",
+            "Tap target should be the dismiss button, not the title")
+        XCTAssertEqual(sheet.definition.interaction.clickResult, .dismisses)
+    }
+
+    func testRowPropertiesDetectDismissButton() {
+        let classified = [
+            classifiedNav("Share", x: 150, y: 300),
+            classifiedDeco("X", x: 370, y: 300),
+        ]
+
+        let rowProps = ComponentDetector.computeRowProperties(
+            classified, screenHeight: screenHeight
+        )
+
+        XCTAssertTrue(rowProps.hasDismissButton,
+            "Row with X should have hasDismissButton = true")
+    }
+
+    func testRowWithoutDismissButtonFlagIsFalse() {
+        let classified = [
+            classifiedNav("General", x: 100, y: 400, hasChevron: true),
+            classifiedDeco(">", x: 370, y: 400),
+        ]
+
+        let rowProps = ComponentDetector.computeRowProperties(
+            classified, screenHeight: screenHeight
+        )
+
+        XCTAssertFalse(rowProps.hasDismissButton,
+            "Row without dismiss button should have hasDismissButton = false")
+    }
+
+    func testModalSheetDismissTargetingWithUnicodeX() {
+        // Test with unicode multiplication sign (×), common in iOS
+        let classified = [
+            classifiedNav("Options", x: 150, y: 200),
+            classifiedDeco("✕", x: 370, y: 200),
+        ]
+
+        let components = ComponentDetector.detect(
+            classified: classified,
+            definitions: definitions,
+            screenHeight: screenHeight
+        )
+
+        let modalSheets = components.filter { $0.kind == "modal-sheet" }
+        XCTAssertEqual(modalSheets.count, 1,
+            "Should detect modal sheet with unicode dismiss button")
+        XCTAssertEqual(modalSheets[0].tapTarget?.text, "✕",
+            "Tap target should be the unicode dismiss button")
     }
 }

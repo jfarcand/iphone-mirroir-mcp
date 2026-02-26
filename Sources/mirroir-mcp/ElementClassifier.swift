@@ -53,6 +53,11 @@ enum ElementClassifier {
         "on", "off",
     ]
 
+    /// Dismiss button characters that indicate a modal sheet close target.
+    static let dismissCharacters: Set<String> = [
+        "x", "X", "✕", "×", "✖", "xmark",
+    ]
+
     /// Standalone info words that are not navigation targets.
     static let infoWords: Set<String> = [
         "on", "off", "none", "auto", "connected", "enabled", "disabled",
@@ -118,7 +123,7 @@ enum ElementClassifier {
             }
         }
 
-        return elements.map { element in
+        var result = elements.map { element in
             let (role, chevronContext) = classifySingle(
                 element, budget: budget,
                 screenHeight: screenHeight,
@@ -128,6 +133,15 @@ enum ElementClassifier {
             )
             return ClassifiedElement(point: element, role: role, hasChevronContext: chevronContext)
         }
+
+        // Second pass: reclassify paragraph fragments (consecutive rows of short
+        // fallback-nav text that OCR split into individual lines).
+        reclassifyParagraphFragments(
+            &result, rows: rows, elementToRow: elementToRow,
+            rowHasChevron: rowHasChevron, rowHasStateIndicator: rowHasStateIndicator
+        )
+
+        return result
     }
 
     /// Group elements into rows by Y-coordinate proximity.
@@ -159,6 +173,86 @@ enum ElementClassifier {
         }
         rows.append(currentRow)
         return rows
+    }
+
+    // MARK: - Paragraph Fragment Detection
+
+    /// Minimum consecutive rows of qualifying text to be considered a paragraph run.
+    static let paragraphRunMinRows: Int = 3
+
+    /// Reclassify paragraph fragments: consecutive rows of short fallback-nav text
+    /// without structural signals (no chevron, no toggle, no button).
+    ///
+    /// OCR splits paragraph text into individual lines (~30-40 chars each). Each line
+    /// bypasses the >50 char threshold and the comma+conjunction check, falling through
+    /// to the `navigation` fallback. This second pass detects runs of 3+ consecutive rows
+    /// where every element is a multi-word fallback-nav fragment, and reclassifies them
+    /// as `.info` to prevent BFS from wasting actions on paragraph text.
+    ///
+    /// A qualifying element must:
+    /// - Be classified as `.navigation` without chevron context (fallback)
+    /// - Contain spaces (multi-word — not a single-word button label)
+    /// - Be on a row with no chevron and no state indicator
+    static func reclassifyParagraphFragments(
+        _ classified: inout [ClassifiedElement],
+        rows: [[TapPoint]],
+        elementToRow: [String: Int],
+        rowHasChevron: [Int: Bool],
+        rowHasStateIndicator: [Int: Bool]
+    ) {
+        // Build a set of element keys per row that qualify as paragraph fragments
+        var qualifyingKeysByRow: [Int: Set<String>] = [:]
+        for element in classified {
+            let key = elementKey(element.point)
+            guard let rowIndex = elementToRow[key] else { continue }
+            guard element.role == .navigation && !element.hasChevronContext else { continue }
+            guard element.point.text.contains(" ") else { continue }
+            guard rowHasChevron[rowIndex] != true else { continue }
+            guard rowHasStateIndicator[rowIndex] != true else { continue }
+
+            qualifyingKeysByRow[rowIndex, default: []].insert(key)
+        }
+
+        // Find runs of consecutive row indices where every row has qualifying elements
+        let sortedRowIndices = qualifyingKeysByRow.keys.sorted()
+        var runs: [[Int]] = []
+        var currentRun: [Int] = []
+
+        for rowIndex in sortedRowIndices {
+            if let last = currentRun.last, rowIndex == last + 1 {
+                currentRun.append(rowIndex)
+            } else {
+                if currentRun.count >= paragraphRunMinRows {
+                    runs.append(currentRun)
+                }
+                currentRun = [rowIndex]
+            }
+        }
+        if currentRun.count >= paragraphRunMinRows {
+            runs.append(currentRun)
+        }
+
+        guard !runs.isEmpty else { return }
+
+        // Collect all qualifying keys in paragraph runs
+        var keysToReclassify = Set<String>()
+        for run in runs {
+            for rowIndex in run {
+                if let keys = qualifyingKeysByRow[rowIndex] {
+                    keysToReclassify.formUnion(keys)
+                }
+            }
+        }
+
+        // Reclassify matching elements as .info
+        for i in classified.indices {
+            let key = elementKey(classified[i].point)
+            if keysToReclassify.contains(key) {
+                classified[i] = ClassifiedElement(
+                    point: classified[i].point, role: .info, hasChevronContext: false
+                )
+            }
+        }
     }
 
     // MARK: - Private

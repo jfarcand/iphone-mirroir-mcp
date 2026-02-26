@@ -113,6 +113,12 @@ public enum TimingConstants {
     /// to handle in-app tab bars where content sits close above the tab labels.
     public static let tapBottomZoneFraction: Double = 0.90
 
+    // MARK: - Safe Area
+
+    /// Elements below `screenHeight - safeBottomMarginPt` trigger iOS home gestures
+    /// when tapped, so they are excluded from exploration plans.
+    public static let safeBottomMarginPt: Double = 62
+
     // MARK: - Grid Overlay
 
     /// Points between grid lines in the mirroring window's coordinate space.

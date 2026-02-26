@@ -14,8 +14,8 @@ final class ComponentLoaderTests: XCTestCase {
     func testLoadAllReturnsBuiltInDefinitions() {
         let definitions = ComponentLoader.loadAll()
 
-        // Should include all 16 built-in definitions at minimum
-        XCTAssertGreaterThanOrEqual(definitions.count, 16,
+        // Should include all 18 built-in definitions at minimum
+        XCTAssertGreaterThanOrEqual(definitions.count, 18,
             "Should load all built-in component definitions")
     }
 
@@ -109,6 +109,45 @@ final class ComponentLoaderTests: XCTestCase {
             XCTAssertFalse(definition.description.isEmpty,
                 "Component '\(definition.name)' should have a description")
         }
+    }
+
+    func testModalSheetDefinition() {
+        let definitions = ComponentLoader.loadAll()
+        let modalSheet = definitions.first { $0.name == "modal-sheet" }
+
+        XCTAssertNotNil(modalSheet)
+        XCTAssertTrue(modalSheet?.interaction.clickable ?? false,
+            "Modal sheet should be clickable (to dismiss)")
+        XCTAssertEqual(modalSheet?.interaction.clickTarget, .firstDismissButton)
+        XCTAssertEqual(modalSheet?.interaction.clickResult, .dismisses)
+        XCTAssertEqual(modalSheet?.matchRules.hasDismissButton, true)
+        XCTAssertFalse(modalSheet?.interaction.backAfterClick ?? true,
+            "Modal sheet dismiss should not need back navigation")
+    }
+
+    func testBottomNavigationBarNotClickable() {
+        let definitions = ComponentLoader.loadAll()
+        let bottomNav = definitions.first { $0.name == "bottom-navigation-bar" }
+
+        XCTAssertNotNil(bottomNav,
+            "Should load bottom-navigation-bar component")
+        XCTAssertFalse(bottomNav?.interaction.clickable ?? true,
+            "Bottom navigation bar should not be clickable")
+        XCTAssertEqual(bottomNav?.interaction.clickTarget, ClickTargetRule.none)
+        XCTAssertEqual(bottomNav?.matchRules.zone, .tabBar,
+            "Bottom navigation bar should be in tab_bar zone")
+        XCTAssertGreaterThanOrEqual(bottomNav?.matchRules.minElements ?? 0, 2,
+            "Bottom navigation bar requires at least 2 elements")
+    }
+
+    func testTabBarItemNotClickable() {
+        let definitions = ComponentLoader.loadAll()
+        let tabBarItem = definitions.first { $0.name == "tab-bar-item" }
+
+        XCTAssertNotNil(tabBarItem)
+        XCTAssertFalse(tabBarItem?.interaction.clickable ?? true,
+            "Tab bar item should not be clickable during exploration")
+        XCTAssertEqual(tabBarItem?.interaction.clickTarget, ClickTargetRule.none)
     }
 
     func testAllClickableComponentsHaveTapTargetRule() {

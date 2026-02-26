@@ -384,6 +384,108 @@ final class ScreenPlannerTests: XCTestCase {
         }
     }
 
+    // MARK: - Safe Y Boundary
+
+    func testElementsBelowSafeYExcludedFromPlan() {
+        // screenHeight=890, safeBottomMarginPt=62 → safe Y threshold = 828
+        let classified = [
+            navElement("Safe Item", y: 700, hasChevron: true),
+            navElement("Unsafe Item", y: 840, hasChevron: true),
+        ]
+
+        let plan = ScreenPlanner.buildPlan(
+            classified: classified,
+            visitedElements: [],
+            scoutResults: [:],
+            screenHeight: screenHeight
+        )
+
+        let planTexts = plan.map(\.point.text)
+        XCTAssertTrue(planTexts.contains("Safe Item"),
+            "Element above safe Y should be in plan")
+        XCTAssertFalse(planTexts.contains("Unsafe Item"),
+            "Element below safe Y threshold should be excluded from plan")
+    }
+
+    func testElementsAboveSafeYIncluded() {
+        // Element just below the threshold (y=827 < 890-62=828)
+        let classified = [
+            navElement("Just Safe", y: 827, hasChevron: true),
+        ]
+
+        let plan = ScreenPlanner.buildPlan(
+            classified: classified,
+            visitedElements: [],
+            scoutResults: [:],
+            screenHeight: screenHeight
+        )
+
+        XCTAssertEqual(plan.count, 1)
+        XCTAssertEqual(plan[0].point.text, "Just Safe",
+            "Element just above safe Y threshold should be included")
+    }
+
+    func testElementsBelowSafeYExcludedFromComponentPlan() {
+        let elements = [
+            TapPoint(text: "Safe Row", tapX: 100, tapY: 400, confidence: 0.9),
+            TapPoint(text: ">", tapX: 370, tapY: 400, confidence: 0.9),
+            TapPoint(text: "Unsafe Row", tapX: 100, tapY: 840, confidence: 0.9),
+            TapPoint(text: ">", tapX: 370, tapY: 840, confidence: 0.9),
+        ]
+
+        let classified = ElementClassifier.classify(elements, screenHeight: screenHeight)
+        let components = ComponentDetector.detect(
+            classified: classified,
+            definitions: ComponentCatalog.definitions,
+            screenHeight: screenHeight
+        )
+        let plan = ScreenPlanner.buildComponentPlan(
+            components: components,
+            visitedElements: [],
+            scoutResults: [:],
+            screenHeight: screenHeight
+        )
+
+        let planTexts = plan.map(\.point.text)
+        XCTAssertTrue(planTexts.contains("Safe Row"),
+            "Component above safe Y should be in plan")
+        XCTAssertFalse(planTexts.contains("Unsafe Row"),
+            "Component below safe Y threshold should be excluded from plan")
+    }
+
+    // MARK: - Tab Bar Exclusion
+
+    func testTabBarElementsExcludedFromComponentPlan() {
+        let elements = [
+            TapPoint(text: "General", tapX: 100, tapY: 400, confidence: 0.9),
+            TapPoint(text: ">", tapX: 370, tapY: 400, confidence: 0.9),
+            // Tab bar items in bottom 12% of 890pt screen (y > 783)
+            TapPoint(text: "Resume", tapX: 100, tapY: 845, confidence: 0.9),
+            TapPoint(text: "Partage", tapX: 300, tapY: 846, confidence: 0.9),
+        ]
+
+        let classified = ElementClassifier.classify(elements, screenHeight: screenHeight)
+        let components = ComponentDetector.detect(
+            classified: classified,
+            definitions: ComponentCatalog.definitions,
+            screenHeight: screenHeight
+        )
+        let plan = ScreenPlanner.buildComponentPlan(
+            components: components,
+            visitedElements: [],
+            scoutResults: [:],
+            screenHeight: screenHeight
+        )
+
+        let planTexts = Set(plan.map(\.point.text))
+        XCTAssertTrue(planTexts.contains("General"),
+            "Content area element should be in plan")
+        XCTAssertFalse(planTexts.contains("Resume"),
+            "Tab bar item should not be in plan")
+        XCTAssertFalse(planTexts.contains("Partage"),
+            "Tab bar item should not be in plan")
+    }
+
     func testBuildComponentPlanRespectsScoutResults() {
         let elements = [
             TapPoint(text: "Works", tapX: 100, tapY: 300, confidence: 0.9),
