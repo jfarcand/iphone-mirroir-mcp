@@ -483,6 +483,8 @@ final class SkillFileTests: XCTestCase {
         for relPath in allFiles {
             // Skip legacy directory
             if relPath.hasPrefix("legacy/") { continue }
+            // Skip component definitions (loaded by ComponentLoader, not the skill runner)
+            if relPath.hasPrefix("components/") { continue }
             // Skip dotfile directories (.claude/, .github/)
             let pathComponents = relPath.components(separatedBy: "/")
             if pathComponents.contains(where: { $0.hasPrefix(".") }) { continue }
