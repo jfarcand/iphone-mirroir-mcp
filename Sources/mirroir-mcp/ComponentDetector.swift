@@ -171,9 +171,9 @@ enum ComponentDetector {
         }
 
         let hasChevron = row.contains { element in
-            ElementClassifier.chevronCharacters.contains(
-                element.point.text.trimmingCharacters(in: .whitespaces)
-            )
+            let trimmed = element.point.text.trimmingCharacters(in: .whitespaces)
+            // Exact match (element is just ">") or embedded (text ends with " >")
+            return ElementClassifier.chevronCharacters.contains(where: { trimmed.hasSuffix($0) })
         }
 
         let hasNumericValue = row.contains { element in
@@ -277,8 +277,8 @@ enum ComponentDetector {
             if requireChevron != rowProps.hasChevron {
                 return nil
             }
-            // Chevron constraints are specific — bonus for matching
-            score += 3.0
+            // Chevron presence is a strong signal; absence is the default for most rows
+            score += requireChevron ? 3.0 : 1.0
         }
 
         // Hard constraint: numeric value requirement
