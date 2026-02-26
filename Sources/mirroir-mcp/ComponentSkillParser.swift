@@ -36,6 +36,12 @@ struct ComponentMatchRules: Sendable {
     let hasDismissButton: Bool?
     /// Screen zone where this component typically appears.
     let zone: ScreenZone
+    /// Minimum average OCR confidence for the row. nil = don't constrain.
+    let minConfidence: Double?
+    /// When true, bare-digit elements (1-3 chars, all digits) are excluded from element count. nil = false.
+    let excludeNumericOnly: Bool?
+    /// Regex: at least one element's text must match. nil = don't constrain.
+    let textPattern: String?
 }
 
 /// How a component responds to user interaction during exploration.
@@ -218,7 +224,10 @@ enum ComponentSkillParser {
             hasNumericValue: parseBool(kv["has_numeric_value"]),
             hasLongText: parseBool(kv["has_long_text"]),
             hasDismissButton: parseBool(kv["has_dismiss_button"]),
-            zone: ScreenZone(rawValue: kv["zone"] ?? "content") ?? .content
+            zone: ScreenZone(rawValue: kv["zone"] ?? "content") ?? .content,
+            minConfidence: parseDouble(kv["min_confidence"]),
+            excludeNumericOnly: parseBool(kv["exclude_numeric_only"]),
+            textPattern: kv["text_pattern"]
         )
     }
 

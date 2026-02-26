@@ -351,4 +351,60 @@ final class ComponentSkillParserTests: XCTestCase {
         XCTAssertEqual(definition.visualPattern[0], "First pattern line")
         XCTAssertEqual(definition.visualPattern[2], "Third pattern line")
     }
+
+    // MARK: - Precision Rules
+
+    func testParsesNewPrecisionRules() {
+        let content = """
+            ---
+            name: tab-bar-item
+            platform: ios
+            ---
+
+            # Tab Bar Item
+
+            ## Description
+
+            Tab bar item with precision rules.
+
+            ## Match Rules
+
+            - zone: tab_bar
+            - min_elements: 1
+            - max_elements: 6
+            - min_confidence: 0.50
+            - exclude_numeric_only: true
+            - text_pattern: ^[A-Za-z]+$
+            """
+
+        let definition = ComponentSkillParser.parse(
+            content: content, fallbackName: "fallback"
+        )
+
+        XCTAssertEqual(definition.matchRules.minConfidence, 0.50)
+        XCTAssertEqual(definition.matchRules.excludeNumericOnly, true)
+        XCTAssertEqual(definition.matchRules.textPattern, "^[A-Za-z]+$")
+    }
+
+    func testPrecisionRulesDefaultToNil() {
+        let content = """
+            ---
+            name: simple
+            ---
+
+            # Simple
+
+            ## Match Rules
+
+            - min_elements: 1
+            """
+
+        let definition = ComponentSkillParser.parse(
+            content: content, fallbackName: "fallback"
+        )
+
+        XCTAssertNil(definition.matchRules.minConfidence)
+        XCTAssertNil(definition.matchRules.excludeNumericOnly)
+        XCTAssertNil(definition.matchRules.textPattern)
+    }
 }

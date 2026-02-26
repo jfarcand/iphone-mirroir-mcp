@@ -236,10 +236,10 @@ final class ComponentDetectorTests: XCTestCase {
             "Unmatched elements should create fallback components")
         XCTAssertEqual(components[0].kind, "unclassified")
 
-        // The fallback should be clickable if the element was navigation
-        let navComponents = components.filter { $0.tapTarget != nil }
-        XCTAssertFalse(navComponents.isEmpty,
-            "Navigation fallback should have a tap target")
+        // Conservative default: unclassified fallback is non-clickable.
+        // Elements that should be clicked need an explicit component definition.
+        XCTAssertNil(components[0].tapTarget,
+            "Unclassified fallback should not be clickable (conservative default)")
     }
 
     func testUnmatchedInfoElementNotClickable() {
@@ -275,7 +275,10 @@ final class ComponentDetectorTests: XCTestCase {
             zone: .content,
             hasStateIndicator: false,
             hasLongText: false,
-            hasDismissButton: false
+            hasDismissButton: false,
+            averageConfidence: 0.95,
+            numericOnlyCount: 0,
+            elementTexts: ["General", ">"]
         )
 
         let match = ComponentDetector.bestMatch(
@@ -299,7 +302,10 @@ final class ComponentDetectorTests: XCTestCase {
             zone: .content,
             hasStateIndicator: false,
             hasLongText: false,
-            hasDismissButton: false
+            hasDismissButton: false,
+            averageConfidence: 0.95,
+            numericOnlyCount: 0,
+            elementTexts: ["Settings", "Back"]
         )
 
         let navBarDef = definitions.first { $0.name == "navigation-bar" }
@@ -492,5 +498,208 @@ final class ComponentDetectorTests: XCTestCase {
             "Should detect modal sheet with unicode dismiss button")
         XCTAssertEqual(modalSheets[0].tapTarget?.text, "✕",
             "Tap target should be the unicode dismiss button")
+    }
+
+    // MARK: - Precision Rules
+
+    func testMinConfidenceRejectsLowConfidenceRow() {
+        // Definition requires minConfidence=0.5, row has avg conf 0.3
+        let definition = ComponentDefinition(
+            name: "high-conf-only",
+            platform: "ios",
+            description: "Requires high confidence.",
+            visualPattern: [],
+            matchRules: ComponentMatchRules(
+                rowHasChevron: nil, minElements: 1, maxElements: 4,
+                maxRowHeightPt: 100, hasNumericValue: nil, hasLongText: nil,
+                hasDismissButton: nil, zone: .content,
+                minConfidence: 0.5, excludeNumericOnly: nil, textPattern: nil
+            ),
+            interaction: ComponentInteraction(
+                clickable: true, clickTarget: .firstNavigation,
+                clickResult: .navigates, backAfterClick: true
+            ),
+            grouping: ComponentGrouping(
+                absorbsSameRow: true, absorbsBelowWithinPt: 0, absorbCondition: .any
+            )
+        )
+
+        let rowProps = ComponentDetector.RowProperties(
+            elementCount: 2, hasChevron: false, hasNumericValue: false,
+            rowHeight: 5, topY: 400, bottomY: 405, zone: .content,
+            hasStateIndicator: false, hasLongText: false, hasDismissButton: false,
+            averageConfidence: 0.3, numericOnlyCount: 0,
+            elementTexts: ["Résumé", "Partage"]
+        )
+
+        let match = ComponentDetector.bestMatch(
+            definitions: [definition], rowProps: rowProps
+        )
+        XCTAssertNil(match, "Row with avg conf 0.3 should not match def requiring 0.5")
+    }
+
+    func testMinConfidenceAcceptsHighConfidenceRow() {
+        let definition = ComponentDefinition(
+            name: "high-conf-only",
+            platform: "ios",
+            description: "Requires high confidence.",
+            visualPattern: [],
+            matchRules: ComponentMatchRules(
+                rowHasChevron: nil, minElements: 1, maxElements: 4,
+                maxRowHeightPt: 100, hasNumericValue: nil, hasLongText: nil,
+                hasDismissButton: nil, zone: .content,
+                minConfidence: 0.5, excludeNumericOnly: nil, textPattern: nil
+            ),
+            interaction: ComponentInteraction(
+                clickable: true, clickTarget: .firstNavigation,
+                clickResult: .navigates, backAfterClick: true
+            ),
+            grouping: ComponentGrouping(
+                absorbsSameRow: true, absorbsBelowWithinPt: 0, absorbCondition: .any
+            )
+        )
+
+        let rowProps = ComponentDetector.RowProperties(
+            elementCount: 2, hasChevron: false, hasNumericValue: false,
+            rowHeight: 5, topY: 400, bottomY: 405, zone: .content,
+            hasStateIndicator: false, hasLongText: false, hasDismissButton: false,
+            averageConfidence: 0.9, numericOnlyCount: 0,
+            elementTexts: ["Résumé", "Partage"]
+        )
+
+        let match = ComponentDetector.bestMatch(
+            definitions: [definition], rowProps: rowProps
+        )
+        XCTAssertNotNil(match, "Row with avg conf 0.9 should match def requiring 0.5")
+    }
+
+    func testExcludeNumericOnlyReducesEffectiveCount() {
+        // Row has 3 elements: "23", "Résumé", "Partage"
+        // With exclude_numeric_only=true, effective count = 2
+        // Definition requires max_elements=2 — passes with exclusion, would fail without
+        let definition = ComponentDefinition(
+            name: "no-numeric-noise",
+            platform: "ios",
+            description: "Excludes numeric-only elements.",
+            visualPattern: [],
+            matchRules: ComponentMatchRules(
+                rowHasChevron: nil, minElements: 1, maxElements: 2,
+                maxRowHeightPt: 100, hasNumericValue: nil, hasLongText: nil,
+                hasDismissButton: nil, zone: .tabBar,
+                minConfidence: nil, excludeNumericOnly: true, textPattern: nil
+            ),
+            interaction: ComponentInteraction(
+                clickable: false, clickTarget: .none,
+                clickResult: .none, backAfterClick: false
+            ),
+            grouping: ComponentGrouping(
+                absorbsSameRow: true, absorbsBelowWithinPt: 0, absorbCondition: .any
+            )
+        )
+
+        let rowProps = ComponentDetector.RowProperties(
+            elementCount: 3, hasChevron: false, hasNumericValue: false,
+            rowHeight: 5, topY: 845, bottomY: 850, zone: .tabBar,
+            hasStateIndicator: false, hasLongText: false, hasDismissButton: false,
+            averageConfidence: 0.8, numericOnlyCount: 1,
+            elementTexts: ["23", "Résumé", "Partage"]
+        )
+
+        let match = ComponentDetector.bestMatch(
+            definitions: [definition], rowProps: rowProps
+        )
+        XCTAssertNotNil(match,
+            "With exclude_numeric_only, effective count 2 fits max_elements=2")
+    }
+
+    func testTextPatternMatchesElement() {
+        let definition = ComponentDefinition(
+            name: "search-icon",
+            platform: "ios",
+            description: "Matches search icon (Q misread).",
+            visualPattern: [],
+            matchRules: ComponentMatchRules(
+                rowHasChevron: nil, minElements: 1, maxElements: 4,
+                maxRowHeightPt: 100, hasNumericValue: nil, hasLongText: nil,
+                hasDismissButton: nil, zone: .tabBar,
+                minConfidence: nil, excludeNumericOnly: nil, textPattern: "^[Qq]$"
+            ),
+            interaction: ComponentInteraction(
+                clickable: false, clickTarget: .none,
+                clickResult: .none, backAfterClick: false
+            ),
+            grouping: ComponentGrouping(
+                absorbsSameRow: true, absorbsBelowWithinPt: 0, absorbCondition: .any
+            )
+        )
+
+        let rowProps = ComponentDetector.RowProperties(
+            elementCount: 2, hasChevron: false, hasNumericValue: false,
+            rowHeight: 5, topY: 845, bottomY: 850, zone: .tabBar,
+            hasStateIndicator: false, hasLongText: false, hasDismissButton: false,
+            averageConfidence: 0.8, numericOnlyCount: 0,
+            elementTexts: ["Q", "Rechercher"]
+        )
+
+        let match = ComponentDetector.bestMatch(
+            definitions: [definition], rowProps: rowProps
+        )
+        XCTAssertNotNil(match, "Row with 'Q' should match text_pattern ^[Qq]$")
+    }
+
+    func testTextPatternRejectsNonMatching() {
+        let definition = ComponentDefinition(
+            name: "search-icon",
+            platform: "ios",
+            description: "Matches search icon (Q misread).",
+            visualPattern: [],
+            matchRules: ComponentMatchRules(
+                rowHasChevron: nil, minElements: 1, maxElements: 4,
+                maxRowHeightPt: 100, hasNumericValue: nil, hasLongText: nil,
+                hasDismissButton: nil, zone: .tabBar,
+                minConfidence: nil, excludeNumericOnly: nil, textPattern: "^[Qq]$"
+            ),
+            interaction: ComponentInteraction(
+                clickable: false, clickTarget: .none,
+                clickResult: .none, backAfterClick: false
+            ),
+            grouping: ComponentGrouping(
+                absorbsSameRow: true, absorbsBelowWithinPt: 0, absorbCondition: .any
+            )
+        )
+
+        let rowProps = ComponentDetector.RowProperties(
+            elementCount: 2, hasChevron: false, hasNumericValue: false,
+            rowHeight: 5, topY: 845, bottomY: 850, zone: .tabBar,
+            hasStateIndicator: false, hasLongText: false, hasDismissButton: false,
+            averageConfidence: 0.8, numericOnlyCount: 0,
+            elementTexts: ["Résumé", "Partage"]
+        )
+
+        let match = ComponentDetector.bestMatch(
+            definitions: [definition], rowProps: rowProps
+        )
+        XCTAssertNil(match,
+            "Row without Q/q should not match text_pattern ^[Qq]$")
+    }
+
+    func testUnclassifiedFallbackNotClickable() {
+        // Even a navigation-role element gets non-clickable fallback
+        let classified = [
+            classifiedNav("SomeElement", x: 200, y: 400, hasChevron: true),
+        ]
+
+        let components = ComponentDetector.detect(
+            classified: classified,
+            definitions: [],
+            screenHeight: screenHeight
+        )
+
+        XCTAssertEqual(components.count, 1)
+        XCTAssertEqual(components[0].kind, "unclassified")
+        XCTAssertNil(components[0].tapTarget,
+            "Unclassified fallback must have nil tapTarget (conservative default)")
+        XCTAssertFalse(components[0].definition.interaction.clickable,
+            "Unclassified fallback must not be clickable")
     }
 }

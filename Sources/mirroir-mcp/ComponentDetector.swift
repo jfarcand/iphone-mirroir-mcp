@@ -143,6 +143,12 @@ enum ComponentDetector {
         let hasStateIndicator: Bool
         let hasLongText: Bool
         let hasDismissButton: Bool
+        /// Mean OCR confidence across all elements in the row.
+        let averageConfidence: Double
+        /// Count of bare-digit elements (1-3 chars, all digits) like "23" or "5".
+        let numericOnlyCount: Int
+        /// Raw text of each element in the row (for text_pattern matching).
+        let elementTexts: [String]
     }
 
     /// Compute properties for a row of classified elements.
@@ -189,6 +195,14 @@ enum ComponentDetector {
             )
         }
 
+        let avgConf = row.isEmpty
+            ? 0.0
+            : row.map { Double($0.point.confidence) }.reduce(0, +) / Double(row.count)
+        let numericOnlyCount = row.filter {
+            isShortNumericOnly($0.point.text)
+        }.count
+        let elementTexts = row.map { $0.point.text }
+
         return RowProperties(
             elementCount: row.count,
             hasChevron: hasChevron,
@@ -199,7 +213,10 @@ enum ComponentDetector {
             zone: zone,
             hasStateIndicator: hasStateIndicator,
             hasLongText: hasLongText,
-            hasDismissButton: hasDismissButton
+            hasDismissButton: hasDismissButton,
+            averageConfidence: avgConf,
+            numericOnlyCount: numericOnlyCount,
+            elementTexts: elementTexts
         )
     }
 
@@ -241,8 +258,12 @@ enum ComponentDetector {
             return nil
         }
 
-        // Hard constraint: element count in range
-        if rowProps.elementCount < rules.minElements || rowProps.elementCount > rules.maxElements {
+        // Hard constraint: element count in range.
+        // When exclude_numeric_only is set, use effective count (excluding bare-digit elements).
+        let effectiveCount = rules.excludeNumericOnly == true
+            ? rowProps.elementCount - rowProps.numericOnlyCount
+            : rowProps.elementCount
+        if effectiveCount < rules.minElements || effectiveCount > rules.maxElements {
             return nil
         }
 
@@ -282,6 +303,21 @@ enum ComponentDetector {
                 return nil
             }
             score += 3.0
+        }
+
+        // Hard constraint: average row OCR confidence
+        if let minConf = rules.minConfidence, rowProps.averageConfidence < minConf {
+            return nil
+        }
+
+        // Hard constraint: text pattern — at least one element must match regex
+        if let pattern = rules.textPattern,
+           let regex = try? NSRegularExpression(pattern: pattern) {
+            let anyMatch = rowProps.elementTexts.contains { text in
+                let range = NSRange(text.startIndex..., in: text)
+                return regex.firstMatch(in: text, range: range) != nil
+            }
+            if !anyMatch { return nil }
         }
 
         // Specificity bonuses: tighter ranges score higher
@@ -352,9 +388,6 @@ enum ComponentDetector {
     private static func buildFallbackComponent(
         element: ClassifiedElement
     ) -> ScreenComponent {
-        let isClickable = element.role == .navigation
-        let clickResult: ClickResult = element.hasChevronContext ? .navigates : .none
-
         let fallbackDef = ComponentDefinition(
             name: "unclassified",
             platform: "ios",
@@ -363,13 +396,14 @@ enum ComponentDetector {
             matchRules: ComponentMatchRules(
                 rowHasChevron: nil, minElements: 1, maxElements: 1,
                 maxRowHeightPt: 100, hasNumericValue: nil, hasLongText: nil,
-                hasDismissButton: nil, zone: .content
+                hasDismissButton: nil, zone: .content,
+                minConfidence: nil, excludeNumericOnly: nil, textPattern: nil
             ),
             interaction: ComponentInteraction(
-                clickable: isClickable,
-                clickTarget: isClickable ? .firstNavigation : .none,
-                clickResult: clickResult,
-                backAfterClick: clickResult == .navigates
+                clickable: false,
+                clickTarget: .none,
+                clickResult: .none,
+                backAfterClick: false
             ),
             grouping: ComponentGrouping(
                 absorbsSameRow: false,
@@ -382,7 +416,7 @@ enum ComponentDetector {
             kind: "unclassified",
             definition: fallbackDef,
             elements: [element],
-            tapTarget: isClickable ? element.point : nil,
+            tapTarget: nil,
             hasChevron: element.hasChevronContext,
             topY: element.point.tapY,
             bottomY: element.point.tapY
@@ -427,6 +461,13 @@ enum ComponentDetector {
     }
 
     // MARK: - Helpers
+
+    /// Check if text is a short bare-digit string (1-3 characters, all digits).
+    /// Used to identify OCR-hallucinated badge numbers or icon artifacts like "23" or "5".
+    private static func isShortNumericOnly(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        return !trimmed.isEmpty && trimmed.count <= 3 && trimmed.allSatisfy { $0.isNumber }
+    }
 
     /// Check if text contains a numeric value (e.g. "12,4km", "3.2 GB", "50%").
     private static func containsNumericValue(_ text: String) -> Bool {

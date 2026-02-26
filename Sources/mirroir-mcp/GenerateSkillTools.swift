@@ -369,18 +369,18 @@ extension MirroirMCP {
                 "Spotlight search may still be visible. Try launching the app manually first.")
         }
 
-        // Parse budget overrides; skip patterns come from permissions.json
+        // Parse budget overrides; permissions.json skipElements merge on top of built-in patterns
         let maxDepth = args["max_depth"]?.asInt() ?? ExplorationBudget.default.maxDepth
         let maxScreens = args["max_screens"]?.asInt() ?? ExplorationBudget.default.maxScreens
         let maxTime = args["max_time"]?.asInt() ?? ExplorationBudget.default.maxTimeSeconds
-        let skipPatterns = PermissionPolicy.loadConfig()?.skipElements ?? []
+        let extraPatterns = PermissionPolicy.loadConfig()?.skipElements ?? []
         let budget = ExplorationBudget(
             maxDepth: maxDepth,
             maxScreens: maxScreens,
             maxTimeSeconds: maxTime,
             maxActionsPerScreen: ExplorationBudget.default.maxActionsPerScreen,
             scrollLimit: ExplorationBudget.default.scrollLimit,
-            skipPatterns: skipPatterns
+            skipPatterns: ExplorationBudget.builtInSkipPatterns + extraPatterns
         )
 
         let goal = args["goal"]?.asString() ?? ""

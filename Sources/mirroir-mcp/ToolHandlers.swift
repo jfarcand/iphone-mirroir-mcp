@@ -26,5 +26,6 @@ extension MirroirMCP {
         registerTargetTools(server: server, registry: registry)
         registerCompilationTools(server: server, registry: registry)
         registerGenerateSkillTools(server: server, registry: registry)
+        registerComponentTools(server: server, registry: registry)
     }
 }

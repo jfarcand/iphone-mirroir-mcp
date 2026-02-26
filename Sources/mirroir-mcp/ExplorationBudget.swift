@@ -53,7 +53,8 @@ struct ExplorationBudget: Sendable {
     }
 
     /// Default budget suitable for most mobile app explorations.
-    /// Skip patterns are empty — they come from permissions.json `skipElements` field.
+    /// Includes built-in safety skip patterns for destructive, network, ad, and purchase actions.
+    /// permissions.json `skipElements` can add patterns on top of these via `mergedWith(_:)`.
     static let `default` = ExplorationBudget(
         maxDepth: 6,
         maxScreens: 30,
@@ -61,8 +62,40 @@ struct ExplorationBudget: Sendable {
         maxActionsPerScreen: 5,
         scrollLimit: 3,
         maxScoutsPerScreen: 8,
-        skipPatterns: []
+        skipPatterns: builtInSkipPatterns
     )
+
+    /// Safety-critical skip patterns that are always present regardless of permissions.json.
+    /// Covers destructive actions, network toggles, ad/sponsored content, and purchase flows
+    /// in English, French, Spanish, and German.
+    static let builtInSkipPatterns: [String] = [
+        // English destructive
+        "delete", "sign out", "log out", "reset all", "erase all", "remove all",
+        // French destructive
+        "supprimer", "déconnexion", "déconnecter", "réinitialiser", "effacer",
+        // Spanish destructive
+        "eliminar", "cerrar sesión", "restablecer", "borrar",
+        // Network toggles (multi-language)
+        "airplane mode", "mode avion", "modo avión", "flugmodus",
+        // Ad/sponsored content
+        "sponsored", "promoted", "advertisement", "order now", "buy now", "install now",
+        // Purchase actions (multi-language)
+        "subscribe", "purchase", "s'abonner", "acheter",
+    ]
+
+    /// Return a new budget with additional skip patterns merged on top of built-in ones.
+    func mergedWith(_ additionalPatterns: [String]) -> ExplorationBudget {
+        guard !additionalPatterns.isEmpty else { return self }
+        return ExplorationBudget(
+            maxDepth: maxDepth,
+            maxScreens: maxScreens,
+            maxTimeSeconds: maxTimeSeconds,
+            maxActionsPerScreen: maxActionsPerScreen,
+            scrollLimit: scrollLimit,
+            maxScoutsPerScreen: maxScoutsPerScreen,
+            skipPatterns: skipPatterns + additionalPatterns
+        )
+    }
 
     /// Check if the exploration budget is exhausted based on current state.
     ///

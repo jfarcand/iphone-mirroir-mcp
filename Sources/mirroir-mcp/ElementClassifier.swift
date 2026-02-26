@@ -385,4 +385,5 @@ enum ElementClassifier {
         let lowered = text.lowercased()
         return helpLinkPatterns.contains { lowered.contains($0) }
     }
+
 }
