@@ -101,6 +101,14 @@ final class ComponentLoaderTests: XCTestCase {
             "Should include mirroir-skills/components in search paths")
     }
 
+    func testSearchPathsIncludeConfigDirSkillsRepo() {
+        let paths = ComponentLoader.searchPaths()
+        let pathStrings = paths.map { $0.path }
+
+        XCTAssertTrue(pathStrings.contains { $0.contains(".mirroir-mcp/skills/components/ios") },
+            "Should include .mirroir-mcp/skills/components/ios for CI environments")
+    }
+
     // MARK: - Catalog Completeness
 
     func testAllBuiltInComponentsHaveDescriptions() {

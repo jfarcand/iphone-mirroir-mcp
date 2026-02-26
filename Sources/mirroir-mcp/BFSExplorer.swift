@@ -208,9 +208,9 @@ final class BFSExplorer: @unchecked Sendable {
         lock.unlock()
 
         // OCR to verify navigation succeeded
-        guard let result = ExplorerUtilities.dismissAlertIfPresent(
+        guard ExplorerUtilities.dismissAlertIfPresent(
             describer: describer, input: input
-        ) else {
+        ) != nil else {
             // OCR failed — skip this frontier screen, return to root
             phase = target.depth > 1
                 ? .returning(depthRemaining: pathIndex + 1) : .atRoot

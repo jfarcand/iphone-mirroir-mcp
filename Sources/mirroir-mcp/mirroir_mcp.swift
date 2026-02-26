@@ -50,8 +50,12 @@ struct MirroirMCP {
         }
         let skipPermissions = PermissionPolicy.parseSkipPermissions(from: args)
         DebugLog.enabled = args.contains("--debug")
-        DebugLog.reset()
-        DebugLog.persist("startup", "version: \(GitVersion.commitHash)")
+        if HotReload.isReloaded {
+            DebugLog.persist("hot-reload", "Reloaded — version: \(GitVersion.commitHash)")
+        } else {
+            DebugLog.reset()
+            DebugLog.persist("startup", "version: \(GitVersion.commitHash)")
+        }
         if DebugLog.enabled {
             DebugLog.persist("startup", "Debug logging enabled (--debug)")
         }

@@ -51,6 +51,7 @@ final class MCPServer: Sendable {
                 continue  // Notifications produce no response per JSON-RPC 2.0
             }
             writeResponse(response)
+            HotReload.reloadIfNeeded()
         }
     }
 
