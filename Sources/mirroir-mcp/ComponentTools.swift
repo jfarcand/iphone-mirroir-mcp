@@ -35,6 +35,11 @@ extension MirroirMCP {
                         "description": .string(
                             "Target name for multi-target setups (optional)"),
                     ]),
+                    "scroll": .object([
+                        "type": .string("boolean"),
+                        "description": .string(
+                            "Scroll through the full page to collect all elements (default: false)"),
+                    ]),
                 ]),
                 "required": .array([.string("component_path")]),
             ],
@@ -42,6 +47,7 @@ extension MirroirMCP {
                 let (ctx, err) = registry.resolveForTool(args)
                 guard let ctx else { return err! }
                 let bridge = ctx.bridge
+                let input = ctx.input
                 let describer = ctx.describer
 
                 // Parse component_path argument
@@ -49,6 +55,8 @@ extension MirroirMCP {
                       !componentPath.isEmpty else {
                     return .error("component_path is required")
                 }
+
+                let scrollEnabled = args["scroll"]?.asBool() ?? false
 
                 // Read the component definition file
                 let fileURL = URL(fileURLWithPath: componentPath)
@@ -75,10 +83,26 @@ extension MirroirMCP {
                     }
                 }
 
-                // OCR the current screen
-                guard let result = describer.describe(skipOCR: false) else {
-                    return .error(
-                        "Failed to capture/analyze screen. Is the '\(ctx.name)' window visible?")
+                // Collect OCR elements: single viewport or full-page scroll
+                let elements: [TapPoint]
+                let screenshotBase64: String
+
+                if scrollEnabled {
+                    guard let scrollResult = CalibrationScroller.collectFullPage(
+                        describer: describer, input: input, bridge: bridge
+                    ) else {
+                        return .error(
+                            "Failed to capture/analyze screen. Is the '\(ctx.name)' window visible?")
+                    }
+                    elements = scrollResult.elements
+                    screenshotBase64 = scrollResult.screenshotBase64
+                } else {
+                    guard let result = describer.describe(skipOCR: false) else {
+                        return .error(
+                            "Failed to capture/analyze screen. Is the '\(ctx.name)' window visible?")
+                    }
+                    elements = result.elements
+                    screenshotBase64 = result.screenshotBase64
                 }
 
                 // Get screen height for zone calculation
@@ -90,7 +114,7 @@ extension MirroirMCP {
                 // Generate diagnostic report
                 let report = ComponentTester.diagnose(
                     definition: definition,
-                    elements: result.elements,
+                    elements: elements,
                     screenHeight: screenHeight,
                     allDefinitions: allDefinitions
                 )
@@ -98,7 +122,7 @@ extension MirroirMCP {
                 return MCPToolResult(
                     content: [
                         .text(report),
-                        .image(result.screenshotBase64, mimeType: "image/png"),
+                        .image(screenshotBase64, mimeType: "image/png"),
                     ],
                     isError: false
                 )

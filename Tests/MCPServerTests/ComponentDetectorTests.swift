@@ -510,7 +510,7 @@ final class ComponentDetectorTests: XCTestCase {
             description: "Requires high confidence.",
             visualPattern: [],
             matchRules: ComponentMatchRules(
-                rowHasChevron: nil, minElements: 1, maxElements: 4,
+                rowHasChevron: nil, chevronMode: nil, minElements: 1, maxElements: 4,
                 maxRowHeightPt: 100, hasNumericValue: nil, hasLongText: nil,
                 hasDismissButton: nil, zone: .content,
                 minConfidence: 0.5, excludeNumericOnly: nil, textPattern: nil
@@ -545,7 +545,7 @@ final class ComponentDetectorTests: XCTestCase {
             description: "Requires high confidence.",
             visualPattern: [],
             matchRules: ComponentMatchRules(
-                rowHasChevron: nil, minElements: 1, maxElements: 4,
+                rowHasChevron: nil, chevronMode: nil, minElements: 1, maxElements: 4,
                 maxRowHeightPt: 100, hasNumericValue: nil, hasLongText: nil,
                 hasDismissButton: nil, zone: .content,
                 minConfidence: 0.5, excludeNumericOnly: nil, textPattern: nil
@@ -583,7 +583,7 @@ final class ComponentDetectorTests: XCTestCase {
             description: "Excludes numeric-only elements.",
             visualPattern: [],
             matchRules: ComponentMatchRules(
-                rowHasChevron: nil, minElements: 1, maxElements: 2,
+                rowHasChevron: nil, chevronMode: nil, minElements: 1, maxElements: 2,
                 maxRowHeightPt: 100, hasNumericValue: nil, hasLongText: nil,
                 hasDismissButton: nil, zone: .tabBar,
                 minConfidence: nil, excludeNumericOnly: true, textPattern: nil
@@ -619,7 +619,7 @@ final class ComponentDetectorTests: XCTestCase {
             description: "Matches search icon (Q misread).",
             visualPattern: [],
             matchRules: ComponentMatchRules(
-                rowHasChevron: nil, minElements: 1, maxElements: 4,
+                rowHasChevron: nil, chevronMode: nil, minElements: 1, maxElements: 4,
                 maxRowHeightPt: 100, hasNumericValue: nil, hasLongText: nil,
                 hasDismissButton: nil, zone: .tabBar,
                 minConfidence: nil, excludeNumericOnly: nil, textPattern: "^[Qq]$"
@@ -654,7 +654,7 @@ final class ComponentDetectorTests: XCTestCase {
             description: "Matches search icon (Q misread).",
             visualPattern: [],
             matchRules: ComponentMatchRules(
-                rowHasChevron: nil, minElements: 1, maxElements: 4,
+                rowHasChevron: nil, chevronMode: nil, minElements: 1, maxElements: 4,
                 maxRowHeightPt: 100, hasNumericValue: nil, hasLongText: nil,
                 hasDismissButton: nil, zone: .tabBar,
                 minConfidence: nil, excludeNumericOnly: nil, textPattern: "^[Qq]$"
@@ -717,7 +717,7 @@ final class ComponentDetectorTests: XCTestCase {
             description: "Test absorbing component.",
             visualPattern: [],
             matchRules: ComponentMatchRules(
-                rowHasChevron: nil, minElements: 1, maxElements: 10,
+                rowHasChevron: nil, chevronMode: nil, minElements: 1, maxElements: 10,
                 maxRowHeightPt: 100, hasNumericValue: nil, hasLongText: nil,
                 hasDismissButton: nil, zone: .content,
                 minConfidence: nil, excludeNumericOnly: nil, textPattern: nil

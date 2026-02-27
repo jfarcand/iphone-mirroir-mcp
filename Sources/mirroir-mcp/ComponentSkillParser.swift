@@ -18,10 +18,24 @@ struct ComponentDefinition: Sendable {
     let grouping: ComponentGrouping
 }
 
+/// Chevron constraint mode for component matching.
+/// Controls how chevron presence/absence affects matching scores.
+enum ChevronMode: String, Sendable {
+    /// Hard constraint: row must have a chevron or matching fails.
+    case required
+    /// Hard constraint: row must not have a chevron or matching fails.
+    case forbidden
+    /// Soft constraint: chevron presence gives a score bonus but absence does not fail.
+    case preferred
+}
+
 /// Rules for matching OCR elements to a component type based on row properties.
 struct ComponentMatchRules: Sendable {
     /// Whether the row must contain a chevron character. nil = don't care.
+    /// Legacy field — prefer chevronMode for new definitions.
     let rowHasChevron: Bool?
+    /// Chevron constraint mode. Takes precedence over rowHasChevron when set.
+    let chevronMode: ChevronMode?
     /// Minimum number of OCR elements in the row.
     let minElements: Int
     /// Maximum number of OCR elements in the row.
@@ -216,8 +230,10 @@ enum ComponentSkillParser {
     /// Parse key-value lines from a Match Rules section.
     private static func parseMatchRules(_ text: String) -> ComponentMatchRules {
         let kv = extractKeyValues(from: text)
+        let chevronMode = kv["chevron_mode"].flatMap { ChevronMode(rawValue: $0) }
         return ComponentMatchRules(
             rowHasChevron: parseBool(kv["row_has_chevron"]),
+            chevronMode: chevronMode,
             minElements: parseInt(kv["min_elements"]) ?? 1,
             maxElements: parseInt(kv["max_elements"]) ?? 10,
             maxRowHeightPt: parseDouble(kv["max_row_height_pt"]) ?? 100,

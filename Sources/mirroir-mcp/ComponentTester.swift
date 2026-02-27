@@ -98,12 +98,12 @@ enum ComponentTester {
             lines.append("  \(elementDescs.joined(separator: ", "))")
 
             // What actually matched from all definitions?
-            let actualMatch = ComponentDetector.bestMatch(
+            let actualMatch = ComponentScoring.bestMatch(
                 definitions: allDefinitions, rowProps: rowProps
             )
 
             // Would our target definition match in isolation?
-            let targetMatch = ComponentDetector.bestMatch(
+            let targetMatch = ComponentScoring.bestMatch(
                 definitions: [definition], rowProps: rowProps
             )
 
@@ -149,6 +149,15 @@ enum ComponentTester {
             }
         }
 
+        // Section 4: Detection pipeline view (what BFS actually sees after absorption)
+        let detectionView = formatDetectionView(
+            classified: classified,
+            allDefinitions: allDefinitions,
+            screenHeight: screenHeight
+        )
+        lines.append("")
+        lines.append(detectionView)
+
         return lines.joined(separator: "\n")
     }
 
@@ -162,7 +171,11 @@ enum ComponentTester {
         parts.append("max_row_height_pt=\(Int(rules.maxRowHeightPt))")
 
         var optionals: [String] = []
-        optionals.append("row_has_chevron=\(rules.rowHasChevron.map(String.init) ?? "nil")")
+        if let mode = rules.chevronMode {
+            optionals.append("chevron_mode=\(mode.rawValue)")
+        } else {
+            optionals.append("row_has_chevron=\(rules.rowHasChevron.map(String.init) ?? "nil")")
+        }
         optionals.append("has_numeric=\(rules.hasNumericValue.map(String.init) ?? "nil")")
         optionals.append("has_long_text=\(rules.hasLongText.map(String.init) ?? "nil")")
         optionals.append("has_dismiss=\(rules.hasDismissButton.map(String.init) ?? "nil")")
@@ -205,7 +218,19 @@ enum ComponentTester {
         if rowProps.rowHeight > rules.maxRowHeightPt {
             reasons.append("row too tall: need ≤\(Int(rules.maxRowHeightPt))pt, got \(Int(rowProps.rowHeight))pt")
         }
-        if let requireChevron = rules.rowHasChevron, requireChevron != rowProps.hasChevron {
+        if let mode = rules.chevronMode {
+            switch mode {
+            case .required where !rowProps.hasChevron:
+                reasons.append("chevron: required but absent")
+            case .forbidden where rowProps.hasChevron:
+                reasons.append("chevron: forbidden but present")
+            case .preferred where !rowProps.hasChevron:
+                // Not a mismatch — score penalty only
+                break
+            default:
+                break
+            }
+        } else if let requireChevron = rules.rowHasChevron, requireChevron != rowProps.hasChevron {
             reasons.append("chevron: need \(requireChevron), got \(rowProps.hasChevron)")
         }
         if let requireNumeric = rules.hasNumericValue, requireNumeric != rowProps.hasNumericValue {
@@ -236,6 +261,63 @@ enum ComponentTester {
         }
 
         return reasons
+    }
+
+    // MARK: - Detection Pipeline View
+
+    /// Format the detection pipeline view showing what BFS actually sees after absorption.
+    /// Runs full detect() + applyAbsorption() and formats each resulting ScreenComponent.
+    static func formatDetectionView(
+        classified: [ClassifiedElement],
+        allDefinitions: [ComponentDefinition],
+        screenHeight: Double
+    ) -> String {
+        let raw = ComponentDetector.detect(
+            classified: classified,
+            definitions: allDefinitions,
+            screenHeight: screenHeight
+        )
+        let components = ComponentDetector.applyAbsorption(raw)
+
+        var lines: [String] = []
+        lines.append("=== Detection Result (after absorption) ===")
+
+        if components.isEmpty {
+            lines.append("No components detected.")
+            return lines.joined(separator: "\n")
+        }
+
+        let absorbedCount = raw.count - components.count
+        lines.append("\(components.count) component(s) (\(absorbedCount) absorbed)")
+
+        for component in components {
+            let yRange = component.topY == component.bottomY
+                ? "\(Int(component.topY))"
+                : "\(Int(component.topY))-\(Int(component.bottomY))"
+
+            // Count how many elements were absorbed from other rows
+            let originalCount = raw.first { $0.kind == component.kind && $0.topY == component.topY }
+                .map { $0.elements.count } ?? component.elements.count
+            let absorbedElements = component.elements.count - originalCount
+
+            var header = "  \(component.kind) [y=\(yRange)] → \(component.elements.count) element(s)"
+            if absorbedElements > 0 {
+                header += " (\(absorbedElements) absorbed)"
+            }
+            lines.append(header)
+
+            // Element texts
+            let texts = component.elements.map { "\"\($0.point.text)\"" }.joined(separator: ", ")
+            lines.append("    \(texts)")
+
+            // Tap target
+            if let tap = component.tapTarget {
+                let clickDesc = component.definition.interaction.clickResult.rawValue
+                lines.append("    tapTarget: \"\(tap.text)\" (\(clickDesc))")
+            }
+        }
+
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Helpers

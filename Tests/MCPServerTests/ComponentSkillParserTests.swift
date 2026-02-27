@@ -386,6 +386,140 @@ final class ComponentSkillParserTests: XCTestCase {
         XCTAssertEqual(definition.matchRules.textPattern, "^[A-Za-z]+$")
     }
 
+    // MARK: - Chevron Mode Parsing
+
+    func testParsesChevronModePreferred() {
+        let content = """
+            ---
+            name: summary-card
+            ---
+
+            # Summary Card
+
+            ## Match Rules
+
+            - chevron_mode: preferred
+            - has_numeric_value: true
+            - min_elements: 2
+            - max_elements: 3
+            """
+
+        let definition = ComponentSkillParser.parse(
+            content: content, fallbackName: "fallback"
+        )
+
+        XCTAssertEqual(definition.matchRules.chevronMode, .preferred)
+        XCTAssertNil(definition.matchRules.rowHasChevron,
+            "chevron_mode should not set rowHasChevron")
+    }
+
+    func testParsesChevronModeRequired() {
+        let content = """
+            ---
+            name: disclosure-row
+            ---
+
+            # Disclosure Row
+
+            ## Match Rules
+
+            - chevron_mode: required
+            """
+
+        let definition = ComponentSkillParser.parse(
+            content: content, fallbackName: "fallback"
+        )
+
+        XCTAssertEqual(definition.matchRules.chevronMode, .required)
+    }
+
+    func testParsesChevronModeForbidden() {
+        let content = """
+            ---
+            name: plain-row
+            ---
+
+            # Plain Row
+
+            ## Match Rules
+
+            - chevron_mode: forbidden
+            """
+
+        let definition = ComponentSkillParser.parse(
+            content: content, fallbackName: "fallback"
+        )
+
+        XCTAssertEqual(definition.matchRules.chevronMode, .forbidden)
+    }
+
+    func testChevronModeDefaultsToNil() {
+        let content = """
+            ---
+            name: simple
+            ---
+
+            # Simple
+
+            ## Match Rules
+
+            - min_elements: 1
+            """
+
+        let definition = ComponentSkillParser.parse(
+            content: content, fallbackName: "fallback"
+        )
+
+        XCTAssertNil(definition.matchRules.chevronMode,
+            "chevronMode should default to nil when not specified")
+    }
+
+    func testLegacyRowHasChevronStillParsed() {
+        let content = """
+            ---
+            name: legacy-row
+            ---
+
+            # Legacy Row
+
+            ## Match Rules
+
+            - row_has_chevron: true
+            """
+
+        let definition = ComponentSkillParser.parse(
+            content: content, fallbackName: "fallback"
+        )
+
+        XCTAssertEqual(definition.matchRules.rowHasChevron, true,
+            "Legacy row_has_chevron should still be parsed")
+        XCTAssertNil(definition.matchRules.chevronMode,
+            "chevronMode should be nil when only row_has_chevron is set")
+    }
+
+    func testBothChevronModeAndLegacyCanCoexist() {
+        let content = """
+            ---
+            name: both-set
+            ---
+
+            # Both Set
+
+            ## Match Rules
+
+            - row_has_chevron: true
+            - chevron_mode: preferred
+            """
+
+        let definition = ComponentSkillParser.parse(
+            content: content, fallbackName: "fallback"
+        )
+
+        XCTAssertEqual(definition.matchRules.rowHasChevron, true)
+        XCTAssertEqual(definition.matchRules.chevronMode, .preferred,
+            "Both fields should be parsed independently")
+    }
+
     func testPrecisionRulesDefaultToNil() {
         let content = """
             ---
