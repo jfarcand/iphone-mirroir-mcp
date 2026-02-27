@@ -16,6 +16,10 @@ Give your AI eyes, hands, and a real iPhone. An MCP server that lets any AI agen
 
 ## What's Changed
 
+- **Component calibration report** — All 18 iOS component definitions [tested against Apple Health (Santé)](https://gist.github.com/jfarcand/bb11f9c55814d134f47c814d0a5060d4). Scoring system correctly resolves conflicts between permissive and specific definitions. Zone-boundary absorption prevents cross-zone component merging.
+- **Trackpad-style scroll** — Swipe gestures use continuous trackpad attributes (gesture phases, pixel deltas) for reliable scrolling in iPhone Mirroring.
+- **Crash recovery** — `--restart-on-crash` flag re-execs the binary via `execv()` on SIGSEGV/SIGABRT/SIGBUS/SIGILL, preserving the MCP client connection.
+- **Debug log preservation** — When `--debug` is active, logs survive server restarts instead of being truncated.
 - **Component-driven exploration** — The explorer matches screen regions against [component definitions](docs/components.md) (`.md` files describing UI patterns like table rows, toggles, tab bars) instead of guessing from raw OCR. Multi-row elements (Health app summary cards) are absorbed into single tappable components. Calibrate definitions against live screens with `calibrate_component`.
 - **Hot reload** — During development, the server detects when its binary is rebuilt and reloads via `execv()`, preserving the MCP client connection. No manual reconnect needed after `swift build`.
 - **Autonomous app explorer** — `generate_skill` with `action: "explore"` does BFS graph traversal of any app, producing SKILL.md files automatically. Supports mobile, social, and desktop exploration strategies.
