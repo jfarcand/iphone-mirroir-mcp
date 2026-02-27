@@ -40,18 +40,17 @@ gh run list --workflow=release.yml --limit 1
 gh run watch    # watch the triggered run
 ```
 
-The workflow runs 4 jobs:
+The workflow runs 3 jobs:
 
 | Job | What it does |
 |-----|-------------|
 | `release` | Bumps 5 version files, builds, tests, commits, tags, creates GitHub release with tarball + SHA256SUMS |
 | `update-homebrew` | Updates `Formula/mirroir-mcp.rb` (url + sha256) and `index.md` in `jfarcand/homebrew-tap` |
-| `update-skills` | Bumps version in `marketplace.json` files in `jfarcand/mirroir-skills` |
-| `publish-npm` | Publishes to npm and verifies |
+| `publish-npm` | Publishes to npm via OIDC Trusted Publishing and verifies |
 
 ## Step 3 — Verify
 
-After all 4 jobs are green:
+After all 3 jobs are green:
 
 ```bash
 # GitHub release
@@ -67,7 +66,7 @@ npx -y mirroir-mcp@X.Y.Z --help
 Report to ChefFamille:
 - GitHub release URL
 - npm version published
-- All 4 jobs green
+- All 3 jobs green
 
 ## Version files bumped by the workflow
 
@@ -80,14 +79,12 @@ Report to ChefFamille:
 | 5 | `Tests/MCPServerTests/MCPServerRoutingTests.swift` | Version assertion |
 | 6 | `../homebrew-tap/Formula/mirroir-mcp.rb` | `url` + `sha256` |
 | 7 | `../homebrew-tap/index.md` | Version in formulae table |
-| 8 | `mirroir-skills/.claude-plugin/marketplace.json` | `"version"` fields |
-| 9 | `mirroir-skills/.github/plugin/marketplace.json` | `"version"` fields |
 
 ## Required secrets
 
 | Secret | Purpose |
 |--------|---------|
-| `RELEASE_PAT` | GitHub classic PAT with `repo` scope — pushes to homebrew-tap + mirroir-skills, creates tags |
+| `RELEASE_PAT` | GitHub classic PAT with `repo` scope — pushes to homebrew-tap, creates tags |
 | `NPM_TOKEN` | Not used — npm publishes via OIDC Trusted Publishing (kept as fallback) |
 | `GITHUB_TOKEN` | Built-in — pushes to own repo + creates GitHub release |
 

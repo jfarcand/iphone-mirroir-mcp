@@ -160,34 +160,6 @@ jobs:
           git commit -m "chore: bump mirroir-mcp to ${VERSION}"
           git push
 
-  update-skills:
-    needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout mirroir-skills
-        uses: actions/checkout@v4
-        with:
-          repository: jfarcand/mirroir-skills
-          token: ${{ secrets.RELEASE_PAT }}
-
-      - name: Bump version in marketplace.json files
-        env:
-          VERSION: ${{ github.event.inputs.version }}
-        run: |
-          sed -i "s/\"version\": \"[0-9]\+\.[0-9]\+\.[0-9]\+\"/\"version\": \"${VERSION}\"/g" \
-            .claude-plugin/marketplace.json \
-            .github/plugin/marketplace.json
-
-      - name: Commit and push
-        env:
-          VERSION: ${{ github.event.inputs.version }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .claude-plugin/marketplace.json .github/plugin/marketplace.json
-          git commit -m "chore: bump version to ${VERSION}"
-          git push
-
   publish-npm:
     needs: release
     runs-on: ubuntu-latest
