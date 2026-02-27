@@ -36,18 +36,26 @@ enum DebugLog {
         timestampFormatter.string(from: Date())
     }
 
-    /// Truncate the debug log file. Called once at startup.
-    /// Always creates the config directory and file so startup lines can be written.
+    /// Prepare the debug log file at startup.
+    /// When --debug is active, preserves the existing log so prior-session
+    /// diagnostics survive restarts. Otherwise truncates for a clean slate.
     static func reset() {
         let dir = PermissionPolicy.globalConfigDir
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        // Truncate in-place so `tail -f` keeps following the same file descriptor.
-        // createFile replaces the inode, which orphans any existing tail process.
-        if let fh = FileHandle(forWritingAtPath: logPath) {
-            fh.truncateFile(atOffset: 0)
-            fh.closeFile()
+
+        if enabled {
+            // Append a separator so prior-session logs remain for post-mortem.
+            let separator = "\n--- restart \(timestamp) ---\n"
+            appendToFile(separator)
         } else {
-            FileManager.default.createFile(atPath: logPath, contents: nil)
+            // Truncate in-place so `tail -f` keeps following the same file descriptor.
+            // createFile replaces the inode, which orphans any existing tail process.
+            if let fh = FileHandle(forWritingAtPath: logPath) {
+                fh.truncateFile(atOffset: 0)
+                fh.closeFile()
+            } else {
+                FileManager.default.createFile(atPath: logPath, contents: nil)
+            }
         }
     }
 
