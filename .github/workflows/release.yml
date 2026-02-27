@@ -80,7 +80,7 @@ jobs:
       - name: Run tests
         run: swift test --skip IntegrationTests
 
-      - name: Commit version bump and tag
+      - name: Commit version bump
         env:
           VERSION: ${{ github.event.inputs.version }}
         run: |
@@ -90,8 +90,17 @@ jobs:
             Sources/mirroir-mcp/MCPServer.swift \
             Tests/MCPServerTests/MCPServerRoutingTests.swift
           git commit -m "chore: bump version to $VERSION"
-          git tag "v$VERSION"
-          git push origin main --tags
+          git push origin main
+
+      - name: Create tag via API
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          gh api repos/${{ github.repository }}/git/refs \
+            -f ref="refs/tags/v$VERSION" \
+            -f sha="$SHA"
 
       - name: Create tarball and checksums
         run: |
