@@ -12,12 +12,13 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)](https://support.apple.com/en-us/105071)
 
-Give your AI eyes, hands, and a real iPhone. An MCP server that lets any AI agent see the screen, tap what it needs, and figure the rest out — through macOS iPhone Mirroring. Experimental support for macOS windows. [31 tools](docs/tools.md), any MCP client.
+Give your AI eyes, hands, and a real iPhone. An MCP server that lets any AI agent see the screen, tap what it needs, and figure the rest out — through macOS iPhone Mirroring. Experimental support for macOS windows. [32 tools](docs/tools.md), any MCP client.
 
 ## What's Changed
 
-- **Reliable back navigation** — DFS explorer now taps the iOS back button directly instead of attempting edge-swipe gestures (which CGEvent cannot produce). Includes canonical position fallback when OCR misses the chevron.
-- **Autonomous app explorer** — `generate_skill` with `action: "explore"` does DFS graph traversal of any app, producing SKILL.md files automatically. Supports mobile, social, and desktop exploration strategies.
+- **Component-driven exploration** — The explorer matches screen regions against [component definitions](docs/components.md) (`.md` files describing UI patterns like table rows, toggles, tab bars) instead of guessing from raw OCR. Multi-row elements (Health app summary cards) are absorbed into single tappable components. Calibrate definitions against live screens with `calibrate_component`.
+- **Hot reload** — During development, the server detects when its binary is rebuilt and reloads via `execv()`, preserving the MCP client connection. No manual reconnect needed after `swift build`.
+- **Autonomous app explorer** — `generate_skill` with `action: "explore"` does BFS graph traversal of any app, producing SKILL.md files automatically. Supports mobile, social, and desktop exploration strategies.
 - **CGEvent-only input** — All input (tap, swipe, type, press_key, shake) uses macOS CGEvent API directly. No kernel extensions, no root privileges, no helper daemons.
 
 ## Requirements
@@ -309,11 +310,12 @@ Environment variables also work: `MIRROIR_KEYSTROKE_DELAY_US`. See [`TimingConst
 
 | | |
 |---|---|
-| [Tools Reference](docs/tools.md) | All 31 tools, parameters, and input workflows |
+| [Tools Reference](docs/tools.md) | All 32 tools, parameters, and input workflows |
 | [FAQ](docs/faq.md) | Security, focus stealing, keyboard layouts |
 | [Security](docs/security.md) | Threat model, kill switch, and recommendations |
 | [Permissions](docs/permissions.md) | Fail-closed permission model and config file |
 | [Known Limitations](docs/limitations.md) | Focus stealing, keyboard layout gaps, autocorrect |
+| [Component Detection](docs/components.md) | Component definitions, calibration, and the detection pipeline |
 | [Compiled Skills](docs/compiled-skills.md) | Zero-OCR skill replay |
 | [Testing](docs/testing.md) | FakeMirroring, integration tests, and CI strategy |
 | [Troubleshooting](docs/troubleshooting.md) | Debug mode and common issues |

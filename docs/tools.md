@@ -1,6 +1,6 @@
 # Tools Reference
 
-All 31 tools exposed by the MCP server. Mutating tools require [permission](permissions.md) to appear in `tools/list`.
+All 32 tools exposed by the MCP server. Mutating tools require [permission](permissions.md) to appear in `tools/list`.
 
 ## Tool List
 
@@ -33,6 +33,9 @@ All 31 tools exposed by the MCP server. Mutating tools require [permission](perm
 | `list_skills` | — | List available skills (SKILL.md and YAML) from project-local and global config dirs |
 | `get_skill` | `name` | Read a skill file (SKILL.md or YAML) with ${VAR} env substitution. Appends compilation status. |
 | `generate_skill` | `action`, `app_name`?, `goal`?, `arrived_via`?, `action_type`? | Generate a SKILL.md by exploring an app. Session-based: start → capture → finish |
+| `list_targets` | — | List all configured automation targets with status and window size |
+| `switch_target` | `target` | Switch active target for subsequent tool calls |
+| `calibrate_component` | `component_path`, `target`? | Test a component definition (.md) against the current screen and return a diagnostic report |
 | `record_step` | `step_index`, `type`, `label`?, `tap_x`?, `tap_y`?, `confidence`?, `match_strategy`?, `elapsed_ms`?, `scroll_count`?, `scroll_direction`? | Record a compiled step during AI-driven skill execution |
 | `save_compiled` | `skill_name` | Save accumulated compiled steps as .compiled.json next to the source skill |
 
@@ -155,6 +158,20 @@ steps:
   - assert_visible: "Welcome"
   - screenshot: "final_state"
 ```
+
+## Multi-Target
+
+`list_targets` shows all configured automation targets (iPhone Mirroring, Android emulators, generic macOS windows) with their status, window size, and which is currently active.
+
+`switch_target` changes the active target for all subsequent tool calls. Use it in skills with the `target: "name"` step type to automate workflows that span multiple devices or windows.
+
+## Calibrate Component
+
+`calibrate_component` tests a [component definition](components.md) against the current live screen. It OCRs the screen, runs the full detection pipeline against your definition, and returns a diagnostic report showing which rows matched, which didn't, and why.
+
+Pass the path to a `.md` component definition file. The report includes per-row analysis with zone, element count, confidence scores, and match/mismatch reasons. Use it to validate and tune match rules before deploying a component for exploration.
+
+See [Component Detection](components.md) for the definition format and calibration workflow.
 
 ### Variable Substitution
 
