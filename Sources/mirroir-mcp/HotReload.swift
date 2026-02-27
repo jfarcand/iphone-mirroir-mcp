@@ -9,21 +9,30 @@ import Foundation
 
 /// Checks the binary's mtime after each response and calls execv() to reload
 /// when the binary on disk is newer than when the process started.
+///
+/// Hot-reload is enabled only in debug builds. Release builds ignore binary
+/// changes but support `--restart-on-crash` for crash recovery via execv().
 enum HotReload {
 
     /// Argument passed through execv so the restarted process skips the log reset.
     static let reloadFlag = "--hot-reload"
 
-    /// Whether this process was started via hot-reload (vs. fresh launch).
+    /// Whether this process was started via hot-reload or crash restart.
     static let isReloaded: Bool = CommandLine.arguments.contains(reloadFlag)
+
+    /// Whether crash-restart is enabled (release builds only, via CLI flag).
+    static let restartOnCrash: Bool = CommandLine.arguments.contains("--restart-on-crash")
 
     /// Mtime of the binary when the process started. Captured once on first access.
     private static let initialMtime: Date? = binaryMtime()
 
-    /// Check if the binary on disk is newer than when we started, and replace
-    /// the process image with the new binary via execv(). Called after each
-    /// response is flushed so the client sees no interruption.
+    /// In debug builds, check if the binary on disk is newer than when we
+    /// started and replace the process image via execv(). In release builds
+    /// this is a no-op — use `restartViaExecv()` for crash recovery instead.
     static func reloadIfNeeded() {
+        #if !DEBUG
+        return
+        #else
         guard let initial = initialMtime,
               let current = binaryMtime(),
               current > initial else {
@@ -31,6 +40,39 @@ enum HotReload {
         }
 
         DebugLog.persist("hot-reload", "Binary changed on disk, reloading via execv...")
+        restartViaExecv()
+        #endif
+    }
+
+    /// Saved copy of argv for the signal handler (which cannot capture context).
+    /// Populated once during `installCrashHandlers()`, read by `crashSignalHandler`.
+    /// nonisolated(unsafe) because the signal handler reads this after setup.
+    nonisolated(unsafe) static var savedArgv: [UnsafeMutablePointer<CChar>?] = []
+
+    /// Install signal handlers for crash signals (SIGSEGV, SIGABRT, SIGBUS,
+    /// SIGILL) that re-exec the binary via execv(). Only active when
+    /// `--restart-on-crash` is passed. The MCP client stays connected because
+    /// execv() preserves stdio file descriptors.
+    static func installCrashHandlers() {
+        guard restartOnCrash else { return }
+        DebugLog.persist("startup", "Crash restart enabled (--restart-on-crash)")
+
+        // Pre-allocate argv for the signal handler (strdup is async-signal-safe,
+        // but Swift array operations are not — so build the array now).
+        var args = CommandLine.arguments.filter { $0 != reloadFlag }
+        args.append(reloadFlag)
+        savedArgv = args.map { strdup($0) }
+        savedArgv.append(nil)
+
+        let crashSignals: [Int32] = [SIGSEGV, SIGABRT, SIGBUS, SIGILL]
+        for sig in crashSignals {
+            signal(sig, crashSignalHandler)
+        }
+    }
+
+    /// Re-exec the current binary, preserving PID and stdio so the MCP client
+    /// stays connected. Used for hot-reload (debug builds).
+    static func restartViaExecv() {
         fflush(stderr)
 
         // Build argv: original args (minus any prior --hot-reload) plus the flag.
@@ -53,4 +95,25 @@ enum HotReload {
         }
         return mtime
     }
+}
+
+/// C-compatible signal handler for crash recovery. Uses only async-signal-safe
+/// functions (write, signal, execv, _exit). Called when SIGSEGV/SIGABRT/
+/// SIGBUS/SIGILL is raised and --restart-on-crash is active.
+private func crashSignalHandler(_ signum: Int32) {
+    let msg = "[crash-restart] Caught signal, restarting via execv...\n"
+    _ = msg.withCString { ptr in
+        write(STDERR_FILENO, ptr, Int(strlen(ptr)))
+    }
+
+    // Reset to default so a double-fault terminates instead of looping.
+    signal(signum, SIG_DFL)
+
+    // Use the pre-allocated argv from installCrashHandlers().
+    _ = HotReload.savedArgv.withUnsafeMutableBufferPointer { buf in
+        execv(CommandLine.arguments[0], buf.baseAddress!)
+    }
+
+    // execv failed — terminate with the signal's exit code.
+    _exit(128 + signum)
 }
