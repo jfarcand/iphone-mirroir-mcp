@@ -67,7 +67,10 @@ jobs:
           fi
 
       - name: Clone skills repo
-        run: git clone https://github.com/jfarcand/mirroir-skills.git .mirroir-mcp/skills
+        run: |
+          git clone https://github.com/jfarcand/mirroir-skills.git ../mirroir-skills
+          mkdir -p .mirroir-mcp
+          ln -s "$(cd ../mirroir-skills && pwd)" .mirroir-mcp/skills
 
       - name: Build release
         run: swift build -c release
