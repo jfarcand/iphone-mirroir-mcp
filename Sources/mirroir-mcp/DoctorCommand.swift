@@ -93,7 +93,7 @@ enum DoctorCommand {
         let usage = """
         Usage: mirroir-mcp doctor [options]
 
-        Check every prerequisite for a working iPhone Mirroring MCP setup.
+        Check every prerequisite for a working mirroir-mcp setup.
         Runs diagnostic checks and reports results with fix hints.
 
         Options:

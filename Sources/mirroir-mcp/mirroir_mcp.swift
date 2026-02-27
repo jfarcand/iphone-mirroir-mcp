@@ -1,7 +1,7 @@
 // Copyright 2026 jfarcand@apache.org
 // Licensed under the Apache License, Version 2.0
 //
-// ABOUTME: Entry point for the iPhone Mirroring MCP server.
+// ABOUTME: Entry point for the mirroir-mcp server.
 // ABOUTME: Initializes subsystems and starts the JSON-RPC server loop over stdio.
 
 import Darwin
