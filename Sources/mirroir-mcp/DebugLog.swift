@@ -24,6 +24,18 @@ enum DebugLog {
         PermissionPolicy.globalConfigDir + "/debug.log"
     }
 
+    /// ISO-style timestamp formatter (HH:mm:ss.SSS) for log lines.
+    private static let timestampFormatter: DateFormatter = {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm:ss.SSS"
+        return fmt
+    }()
+
+    /// Current timestamp string for log output.
+    private static var timestamp: String {
+        timestampFormatter.string(from: Date())
+    }
+
     /// Truncate the debug log file. Called once at startup.
     /// Always creates the config directory and file so startup lines can be written.
     static func reset() {
@@ -42,7 +54,7 @@ enum DebugLog {
     /// Write a tagged line to the log file and stderr unconditionally.
     /// Use for startup messages that must always be recorded.
     static func persist(_ tag: String, _ message: String) {
-        let line = "[\(tag)] \(message)\n"
+        let line = "[\(tag) \(timestamp)] \(message)\n"
         fputs(line, stderr)
         appendToFile(line)
     }
@@ -51,7 +63,7 @@ enum DebugLog {
     /// Use for per-request diagnostic messages gated by --debug.
     static func log(_ tag: String, _ message: String) {
         guard enabled else { return }
-        let line = "[\(tag)] \(message)\n"
+        let line = "[\(tag) \(timestamp)] \(message)\n"
         fputs(line, stderr)
         appendToFile(line)
     }

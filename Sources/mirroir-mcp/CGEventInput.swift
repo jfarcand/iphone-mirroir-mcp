@@ -111,11 +111,26 @@ enum CGEventInput {
         // negative wheel1 = scroll down (content moves up).
         // A swipe from top to bottom (positive deltaY) means the user
         // dragged downward, which in scroll-wheel terms is scroll-up (positive).
-        let totalWheel1 = Int32(deltaY)
-        let totalWheel2 = Int32(-deltaX) // horizontal: right-swipe = scroll left
+        // Scale factor: continuous trackpad gestures with phase flags have
+        // smaller per-pixel displacement than legacy scroll wheel events.
+        // Amplify to match physical trackpad scroll distance.
+        let scrollAmplification = 3.0
+        let totalWheel1 = Int32(deltaY * scrollAmplification)
+        let totalWheel2 = Int32(-deltaX * scrollAmplification)
+
+        // Trackpad-style continuous scroll requires gesture phase flags and
+        // precise point-delta fields. iPhone Mirroring ignores bare scroll
+        // wheel events that lack these trackpad attributes.
+        let scrollPhaseField = CGEventField(rawValue: 99)!   // kCGScrollWheelEventScrollPhase
+        let isContinuousField = CGEventField(rawValue: 88)!  // kCGScrollWheelEventIsContinuous
+        let pointDeltaY = CGEventField(rawValue: 96)!        // kCGScrollWheelEventPointDeltaAxis1
+        let pointDeltaX = CGEventField(rawValue: 97)!        // kCGScrollWheelEventPointDeltaAxis2
+
+        let phaseBegan: Int64 = 1
+        let phaseChanged: Int64 = 2
+        let phaseEnded: Int64 = 4
 
         for i in 1...steps {
-            // Compute incremental delta for this step
             let prevFraction = Double(i - 1) / Double(steps)
             let fraction = Double(i) / Double(steps)
             let w1 = Int32(Double(totalWheel1) * fraction) - Int32(Double(totalWheel1) * prevFraction)
@@ -130,6 +145,18 @@ enum CGEventInput {
                 wheel3: 0
             ) else { continue }
             scroll.location = midpoint
+
+            // Mark as continuous trackpad gesture with precise pixel deltas
+            scroll.setIntegerValueField(isContinuousField, value: 1)
+            scroll.setIntegerValueField(pointDeltaY, value: Int64(w1))
+            scroll.setIntegerValueField(pointDeltaX, value: Int64(w2))
+
+            let phase: Int64
+            if i == 1 { phase = phaseBegan }
+            else if i == steps { phase = phaseEnded }
+            else { phase = phaseChanged }
+            scroll.setIntegerValueField(scrollPhaseField, value: phase)
+
             scroll.post(tap: .cghidEventTap)
             usleep(stepDelay)
         }

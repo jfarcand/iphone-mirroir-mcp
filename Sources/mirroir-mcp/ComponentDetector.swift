@@ -260,6 +260,14 @@ enum ComponentDetector {
                 let below = sorted[j]
                 guard below.topY <= maxY else { break }
 
+                // Don't absorb components that are themselves absorbers (e.g., another
+                // summary-card). Only non-absorbing components should be swallowed.
+                guard below.definition.grouping.absorbsBelowWithinPt == 0 else { continue }
+
+                // Don't absorb across zone boundaries (e.g., content card must not
+                // swallow tab_bar or nav_bar components).
+                guard below.definition.matchRules.zone == component.definition.matchRules.zone else { continue }
+
                 if shouldAbsorb(below.elements, condition: component.definition.grouping.absorbCondition) {
                     mergedElements.append(contentsOf: below.elements)
                     consumed.insert(j)
