@@ -46,7 +46,7 @@ The workflow runs 4 jobs:
 |-----|-------------|
 | `release` | Bumps 5 version files, builds, tests, commits, tags, creates GitHub release with tarball + SHA256SUMS |
 | `update-homebrew` | Updates `Formula/mirroir-mcp.rb` (url + sha256) and `index.md` in `jfarcand/homebrew-tap` |
-| `update-skills` | Bumps version in `marketplace.json` files in `jfarcand/mirroir-scenarios` |
+| `update-skills` | Bumps version in `marketplace.json` files in `jfarcand/mirroir-skills` |
 | `publish-npm` | Publishes to npm and verifies |
 
 ## Step 3 — Verify
@@ -80,15 +80,15 @@ Report to ChefFamille:
 | 5 | `Tests/MCPServerTests/MCPServerRoutingTests.swift` | Version assertion |
 | 6 | `../homebrew-tap/Formula/mirroir-mcp.rb` | `url` + `sha256` |
 | 7 | `../homebrew-tap/index.md` | Version in formulae table |
-| 8 | `mirroir-scenarios/.claude-plugin/marketplace.json` | `"version"` fields |
-| 9 | `mirroir-scenarios/.github/plugin/marketplace.json` | `"version"` fields |
+| 8 | `mirroir-skills/.claude-plugin/marketplace.json` | `"version"` fields |
+| 9 | `mirroir-skills/.github/plugin/marketplace.json` | `"version"` fields |
 
 ## Required secrets
 
 | Secret | Purpose |
 |--------|---------|
-| `RELEASE_PAT` | GitHub PAT with `repo` scope — pushes to homebrew-tap + mirroir-scenarios |
-| `NPM_TOKEN` | npm automation token — publishes without OTP |
+| `RELEASE_PAT` | GitHub classic PAT with `repo` scope — pushes to homebrew-tap + mirroir-skills, creates tags |
+| `NPM_TOKEN` | Not used — npm publishes via OIDC Trusted Publishing (kept as fallback) |
 | `GITHUB_TOKEN` | Built-in — pushes to own repo + creates GitHub release |
 
 ## Manual fallback
