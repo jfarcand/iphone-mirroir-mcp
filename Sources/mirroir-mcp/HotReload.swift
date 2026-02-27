@@ -10,8 +10,11 @@ import Foundation
 /// Checks the binary's mtime after each response and calls execv() to reload
 /// when the binary on disk is newer than when the process started.
 ///
-/// Hot-reload is enabled only in debug builds. Release builds ignore binary
-/// changes but support `--restart-on-crash` for crash recovery via execv().
+/// Hot-reload is always active: after each MCP response the server checks
+/// whether the binary has been replaced on disk and re-execs if so.
+/// Killing the process (SIGTERM, SIGINT, SIGKILL) does NOT trigger a
+/// restart because those signals bypass the mtime check entirely.
+/// Crash recovery (`--restart-on-crash`) is a separate opt-in feature.
 enum HotReload {
 
     /// Argument passed through execv so the restarted process skips the log reset.
@@ -20,9 +23,6 @@ enum HotReload {
     /// Whether this process was started via hot-reload or crash restart.
     static let isReloaded: Bool = CommandLine.arguments.contains(reloadFlag)
 
-    /// Whether hot-reload is enabled (opt-in via CLI flag).
-    static let hotReloadEnabled: Bool = CommandLine.arguments.contains("--hot-reload-enabled")
-
     /// Whether crash-restart is enabled (opt-in via CLI flag).
     static let restartOnCrash: Bool = CommandLine.arguments.contains("--restart-on-crash")
 
@@ -30,10 +30,10 @@ enum HotReload {
     private static let initialMtime: Date? = binaryMtime()
 
     /// Check if the binary on disk is newer than when we started and replace
-    /// the process image via execv(). Disabled by default; opt-in via
-    /// `--hot-reload-enabled` flag.
+    /// the process image via execv(). Only triggers when the binary file has
+    /// been replaced (mtime changed), so normal process termination (kill,
+    /// SIGTERM) does not cause a restart.
     static func reloadIfNeeded() {
-        guard hotReloadEnabled else { return }
         guard let initial = initialMtime,
               let current = binaryMtime(),
               current > initial else {
