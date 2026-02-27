@@ -20,19 +20,20 @@ enum HotReload {
     /// Whether this process was started via hot-reload or crash restart.
     static let isReloaded: Bool = CommandLine.arguments.contains(reloadFlag)
 
-    /// Whether crash-restart is enabled (release builds only, via CLI flag).
+    /// Whether hot-reload is enabled (opt-in via CLI flag).
+    static let hotReloadEnabled: Bool = CommandLine.arguments.contains("--hot-reload-enabled")
+
+    /// Whether crash-restart is enabled (opt-in via CLI flag).
     static let restartOnCrash: Bool = CommandLine.arguments.contains("--restart-on-crash")
 
     /// Mtime of the binary when the process started. Captured once on first access.
     private static let initialMtime: Date? = binaryMtime()
 
-    /// In debug builds, check if the binary on disk is newer than when we
-    /// started and replace the process image via execv(). In release builds
-    /// this is a no-op — use `restartViaExecv()` for crash recovery instead.
+    /// Check if the binary on disk is newer than when we started and replace
+    /// the process image via execv(). Disabled by default; opt-in via
+    /// `--hot-reload-enabled` flag.
     static func reloadIfNeeded() {
-        #if !DEBUG
-        return
-        #else
+        guard hotReloadEnabled else { return }
         guard let initial = initialMtime,
               let current = binaryMtime(),
               current > initial else {
@@ -41,7 +42,6 @@ enum HotReload {
 
         DebugLog.persist("hot-reload", "Binary changed on disk, reloading via execv...")
         restartViaExecv()
-        #endif
     }
 
     /// Saved copy of argv for the signal handler (which cannot capture context).

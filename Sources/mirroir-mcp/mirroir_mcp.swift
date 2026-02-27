@@ -59,6 +59,9 @@ struct MirroirMCP {
         if DebugLog.enabled {
             DebugLog.persist("startup", "Debug logging enabled (--debug)")
         }
+        if HotReload.hotReloadEnabled {
+            DebugLog.persist("startup", "Hot-reload enabled (--hot-reload-enabled)")
+        }
         HotReload.installCrashHandlers()
         let config = PermissionPolicy.loadConfig()
         let policy = PermissionPolicy(skipPermissions: skipPermissions, config: config)
