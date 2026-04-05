@@ -248,6 +248,12 @@ extension EnvConfig {
         readInt("ocrMinImageWidth", default: TimingConstants.ocrMinImageWidth)
     }
 
+    /// When true, describe_screen omits the screenshot image from its response.
+    /// Use this to prevent context overflow in long automation sessions.
+    public static var describeScreenOmitScreenshot: Bool {
+        readBool("describeScreenOmitScreenshot", envVar: "MIRROIR_OMIT_SCREENSHOT", default: false)
+    }
+
     // MARK: - YOLO Element Detection
 
     /// OCR backend selection: "auto", "vision", "yolo", or "both".

@@ -152,13 +152,10 @@ extension MirroirMCP {
                 lines.append("_meta: ocr_time_ms=\(result.ocrTimeMs) recognition_level=\(EnvConfig.ocrRecognitionLevel) element_count=\(result.elements.count)")
                 let description = lines.joined(separator: "\n")
 
-                return MCPToolResult(
-                    content: [
-                        .text(description),
-                        .image(result.screenshotBase64, mimeType: "image/png"),
-                    ],
-                    isError: false
-                )
+                let content: [MCPContent] = EnvConfig.describeScreenOmitScreenshot
+                    ? [.text(description)]
+                    : [.text(description), .image(result.screenshotBase64, mimeType: "image/png")]
+                return MCPToolResult(content: content, isError: false)
             }
         ))
 
