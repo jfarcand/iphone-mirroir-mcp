@@ -248,6 +248,26 @@ extension EnvConfig {
         readInt("ocrMinImageWidth", default: TimingConstants.ocrMinImageWidth)
     }
 
+    /// BCP-47 language codes passed to `VNRecognizeTextRequest.recognitionLanguages`.
+    ///
+    /// When unset, Apple Vision defaults to English (`["en-US"]`). Override this
+    /// to recognise additional scripts — e.g. `["ja-JP", "en-US"]` for Japanese UI,
+    /// `["zh-Hans", "en-US"]` for Simplified Chinese, or any combination of
+    /// [Vision-supported languages](https://developer.apple.com/documentation/vision/vnrecognizetextrequest/recognitionlanguages-swift.property).
+    ///
+    /// Configure via `settings.json`:
+    /// ```json
+    /// { "ocrLanguages": ["ja-JP", "en-US"] }
+    /// ```
+    /// Or via the `MIRROIR_OCR_LANGUAGES` environment variable (comma-separated):
+    /// ```
+    /// MIRROIR_OCR_LANGUAGES=ja-JP,en-US
+    /// ```
+    public static var ocrLanguages: [String] {
+        readStringArray("ocrLanguages", envVar: "MIRROIR_OCR_LANGUAGES",
+                        default: ["en-US"])
+    }
+
     // MARK: - YOLO Element Detection
 
     /// OCR backend selection: "auto", "vision", "yolo", or "both".

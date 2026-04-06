@@ -26,6 +26,7 @@ Every setting has a corresponding environment variable (e.g. `MIRROIR_SCREEN_DES
 | `ocrBackend` | `"auto"` | OCR backend: `"auto"`, `"vision"` (text only), `"yolo"` (icons only), or `"both"` |
 | `ocrRecognitionLevel` | `"accurate"` | Apple Vision OCR quality: `"accurate"` or `"fast"` |
 | `ocrLanguageCorrection` | `true` | Enable language correction during OCR text recognition |
+| `ocrLanguages` | `["en-US"]` | BCP-47 language codes for `VNRecognizeTextRequest.recognitionLanguages`. Add languages to recognise non-Latin scripts (e.g. `["ja-JP","en-US"]`). Also configurable via `MIRROIR_OCR_LANGUAGES` env var (comma-separated) |
 | `yoloModelURL` | `""` | URL to download a YOLO `.mlmodel` on first use |
 | `yoloModelPath` | `""` | Local path to a pre-compiled `.mlmodelc` directory (overrides download) |
 | `yoloConfidenceThreshold` | `0.3` | Minimum confidence for YOLO element detections (0.0–1.0) |

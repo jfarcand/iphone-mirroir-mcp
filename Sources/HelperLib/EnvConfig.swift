@@ -295,4 +295,16 @@ public enum EnvConfig {
         if let str = env[envVarName(key)], let parsed = Double(str) { return parsed }
         return fallback
     }
+
+    /// Reads a string array from settings.json (JSON array) or an env var
+    /// (comma-separated, e.g. "ja-JP,en-US"). Returns `fallback` when absent.
+    static func readStringArray(_ key: String, envVar: String? = nil,
+                                default fallback: [String]) -> [String] {
+        if let arr = settings[key] as? [String], !arr.isEmpty { return arr }
+        let varName = envVar ?? envVarName(key)
+        if let str = env[varName], !str.isEmpty {
+            return str.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        }
+        return fallback
+    }
 }
