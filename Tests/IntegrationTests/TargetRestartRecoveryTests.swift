@@ -45,6 +45,12 @@ final class TargetRestartRecoveryTests: XCTestCase {
             bridge.getState(), .noWindow,
             "Baseline: the bridge should see the running target's window")
 
+        // Built before the restart, exactly as the server builds it once at
+        // startup: it must resolve the PID it aims events at per call, not keep
+        // the one that was current when it was constructed.
+        let input = InputSimulation(bridge: bridge)
+        XCTAssertEqual(input.targetPID, originalPID, "Baseline: input should target the running app")
+
         try terminateFakeMirroring(original)
 
         // A frozen process snapshot still holds the terminated instance here,
@@ -56,6 +62,9 @@ final class TargetRestartRecoveryTests: XCTestCase {
         XCTAssertEqual(
             bridge.getState(), .notRunning,
             "A terminated target is `.notRunning`, not `.noWindow`")
+        XCTAssertNil(
+            input.targetPID,
+            "Input still had a PID to aim at after the target exited")
 
         try IntegrationTestHelper.ensureFakeMirroringRunning()
 
@@ -65,6 +74,9 @@ final class TargetRestartRecoveryTests: XCTestCase {
         XCTAssertNotEqual(
             relaunchedPID, originalPID,
             "Relaunched FakeMirroring should have a new PID")
+        XCTAssertEqual(
+            input.targetPID, relaunchedPID,
+            "Input is still aiming events at the PID that died before the restart")
         XCTAssertNotEqual(
             settledState(), .noWindow,
             "Bridge stayed in `.noWindow` after the target came back — this is the "

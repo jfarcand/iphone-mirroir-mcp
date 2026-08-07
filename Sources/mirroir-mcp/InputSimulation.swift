@@ -39,31 +39,33 @@ enum CursorMode: Sendable {
 /// Keyboard operations (type, press_key, shake) use keyboard events.
 final class InputSimulation: Sendable {
     let bridge: any WindowBridging
-    private let mirroringBundleID: String
     private let cursorMode: CursorMode
     /// Character substitution table for translating between the iPhone's hardware
     /// keyboard layout and US QWERTY. Built once at init from the first non-US
     /// keyboard layout found on the Mac. CGEvent keycodes are physical keys
     /// (layout-independent), same as HID — substitution is still needed.
     let layoutSubstitution: [Character: Character]
+    /// The target's PID right now, or nil when the target is not running.
+    ///
+    /// Resolved on every read rather than captured at init: the target can
+    /// restart under a new PID at any time — an iPhone respring restarts
+    /// ScreenContinuity — and a server that outlives that restart would
+    /// otherwise aim events at a process that no longer exists.
+    var targetPID: pid_t? {
+        bridge.findProcess()?.processIdentifier
+    }
+
     /// When non-nil, mouse events are posted directly to this PID without
     /// moving the system cursor. Only works for regular macOS apps, not
-    /// iPhone Mirroring. Resolved at init from MIRROIR_CURSOR_FREE env var.
-    let cursorFreePID: pid_t?
+    /// iPhone Mirroring. Enabled by the MIRROIR_CURSOR_FREE env var.
+    var cursorFreePID: pid_t? {
+        EnvConfig.cursorFreeInput ? targetPID : nil
+    }
 
     init(bridge: any WindowBridging, cursorMode: CursorMode = .direct,
          layoutSubstitution override: [Character: Character]? = nil) {
         self.bridge = bridge
         self.cursorMode = cursorMode
-        if EnvConfig.cursorFreeInput, let app = bridge.findProcess() {
-            self.cursorFreePID = app.processIdentifier
-        } else {
-            self.cursorFreePID = nil
-        }
-        // Resolve the bundle ID for AppleScript focus management. The bridge
-        // knows which process it points at (iPhone Mirroring's ScreenContinuity,
-        // a macOS app, etc.); look it up via findProcess() uniformly.
-        self.mirroringBundleID = bridge.findProcess()?.bundleIdentifier ?? ""
 
         // Build layout substitution table when the iPhone's hardware keyboard
         // layout differs from US QWERTY. Option-modified keycodes go through
@@ -225,7 +227,8 @@ final class InputSimulation: Sendable {
 
     /// Log window info and frontmost app state for any coordinate-based operation.
     private func logWindowState(_ tag: String, _ info: WindowInfo) {
-        let frontApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
+        guard DebugLog.enabled else { return }
+        let frontApp = RunningAppLocator.frontmostWindowOwner()?.bundleIdentifier ?? "unknown"
         DebugLog.log(tag, "window=(\(Int(info.position.x)),\(Int(info.position.y))) size=\(Int(info.size.width))x\(Int(info.size.height)) frontApp=\(frontApp)")
     }
 
@@ -364,9 +367,12 @@ final class InputSimulation: Sendable {
     }
 
     /// Ensure the target window is the frontmost app so it receives input.
-    /// Always activates because NSWorkspace.frontmostApplication can report
-    /// stale values when another app gained focus between MCP calls.
-    /// Only sleeps for Space-switch settling when we weren't already frontmost.
+    /// Always activates, since focus can move between the check and the input;
+    /// the check only decides whether to sleep for Space-switch settling.
+    ///
+    /// Activation state comes from the freshly resolved target itself, not from
+    /// `NSWorkspace.frontmostApplication`, which is frozen in a server that
+    /// never runs its main run loop (see `RunningAppLocator`).
     ///
     /// Uses AppleScript `set frontmost to true` via System Events for
     /// cross-Space activation (NSRunningApplication.activate() cannot trigger
@@ -375,13 +381,14 @@ final class InputSimulation: Sendable {
     /// - Returns: `true` if the window was not already frontmost (focus changed).
     @discardableResult
     func ensureTargetFrontmost() -> Bool {
-        let frontApp = NSWorkspace.shared.frontmostApplication
-        let alreadyFront = frontApp?.bundleIdentifier == mirroringBundleID
+        let target = bridge.findProcess()
+        let alreadyFront = target?.isActive ?? false
 
         if alreadyFront {
-            DebugLog.log("focus", "likely frontmost, re-confirming")
-        } else {
-            DebugLog.log("focus", "switching from \(frontApp?.bundleIdentifier ?? "nil")")
+            DebugLog.log("focus", "already frontmost, re-confirming")
+        } else if DebugLog.enabled {
+            let front = RunningAppLocator.frontmostWindowOwner()?.bundleIdentifier ?? "nil"
+            DebugLog.log("focus", "switching from \(front)")
         }
 
         // Resolve the process name for the current target's running application.
@@ -390,7 +397,7 @@ final class InputSimulation: Sendable {
         let processName: String
         if bridge is MirroringBridge {
             processName = EnvConfig.mirroringProcessName
-        } else if let app = bridge.findProcess(), let name = app.localizedName {
+        } else if let app = target, let name = app.localizedName {
             processName = name
         } else {
             // Fallback: use NSRunningApplication.activate() directly
@@ -417,8 +424,10 @@ final class InputSimulation: Sendable {
             usleep(EnvConfig.spaceSwitchSettleUs)
         }
 
-        let afterApp = NSWorkspace.shared.frontmostApplication
-        DebugLog.log("focus", "after activation frontApp=\(afterApp?.bundleIdentifier ?? "nil")")
+        if DebugLog.enabled {
+            let after = RunningAppLocator.frontmostWindowOwner()?.bundleIdentifier ?? "nil"
+            DebugLog.log("focus", "after activation frontApp=\(after)")
+        }
         return !alreadyFront
     }
 

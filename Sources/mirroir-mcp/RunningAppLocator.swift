@@ -47,4 +47,21 @@ enum RunningAppLocator {
         let live = NSRunningApplication(processIdentifier: candidate.processIdentifier)
         return live?.localizedName == name ? live : nil
     }
+
+    /// The application owning the frontmost normal-layer window, or nil.
+    ///
+    /// `NSWorkspace.shared.frontmostApplication` answers this from the same
+    /// frozen snapshot as `runningApplications`: measured naming the wrong app
+    /// in both directions of a focus switch in a process that never pumps its
+    /// run loop, which is how focus debug logs came to point at whatever
+    /// happened to be front at the last run loop trip. The window server's
+    /// on-screen list is live.
+    ///
+    /// To ask whether one specific app is frontmost, prefer `isActive` on an
+    /// instance from `byBundleID` — freshly resolved instances report live
+    /// activation state, and that answer is not affected by window layering.
+    static func frontmostWindowOwner() -> NSRunningApplication? {
+        WindowListHelper.frontmostWindowOwnerPID()
+            .flatMap { NSRunningApplication(processIdentifier: $0) }
+    }
 }

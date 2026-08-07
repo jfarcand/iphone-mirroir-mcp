@@ -285,7 +285,11 @@ final class MirroringBridge: Sendable {
     /// Activates the app first so the event reaches the right window.
     private func triggerKeyboardShortcut(keycode: UInt16) -> Bool {
         guard let app = findProcess() else { return false }
-        let alreadyFront = NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier
+        // `isActive` on the freshly resolved app, not NSWorkspace's frontmost
+        // application: that snapshot is frozen in the server (see
+        // `RunningAppLocator`), and believing it would send the shortcut to
+        // whichever app actually holds focus.
+        let alreadyFront = app.isActive
         if !alreadyFront {
             app.activate()
             usleep(EnvConfig.spaceSwitchSettleUs)

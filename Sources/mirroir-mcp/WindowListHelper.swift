@@ -22,6 +22,24 @@ enum WindowListHelper {
         ) as? WindowSnapshot ?? []
     }
 
+    /// PID of the process owning the frontmost normal-layer window, or nil when
+    /// no such window is on screen.
+    ///
+    /// The window server returns the on-screen list in front-to-back order, so
+    /// the first entry at layer 0 is the frontmost document window; higher
+    /// layers are menus, panels, and system overlays. This asks the window
+    /// server directly on every call, which is what makes it usable from a
+    /// process that never runs its main run loop — see `RunningAppLocator`.
+    static func frontmostWindowOwnerPID() -> pid_t? {
+        let onScreen = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
+        ) as? WindowSnapshot ?? []
+        for entry in onScreen where entry[kCGWindowLayer as String] as? Int == 0 {
+            if let pid = entry[kCGWindowOwnerPID as String] as? pid_t { return pid }
+        }
+        return nil
+    }
+
     /// Parse a CGFloat value from a CGWindowList bounds dictionary.
     /// CGWindowList may return bounds values as CGFloat or Int depending on context.
     static func parseBoundsValue(_ bounds: [String: Any], key: String) -> CGFloat {

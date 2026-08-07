@@ -253,6 +253,9 @@ final class EventRecorder {
     }
 
     private func isMirroringFrontmost() -> Bool {
+        // Safe here, unlike in the MCP server: recording only runs under
+        // `RecordCommand`'s `CFRunLoopRun()` — the CGEvent tap needs it — so
+        // NSWorkspace's snapshot is being refreshed. See `RunningAppLocator`.
         let frontApp = NSWorkspace.shared.frontmostApplication
         return frontApp?.bundleIdentifier == EnvConfig.mirroringBundleID
     }

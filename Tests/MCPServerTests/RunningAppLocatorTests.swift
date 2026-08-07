@@ -59,6 +59,27 @@ final class RunningAppLocatorTests: XCTestCase {
         XCTAssertGreaterThan(resolved, 0, "No running app resolved — the lookup is not working")
     }
 
+    /// The frontmost lookup reads the window server on every call, so whatever it
+    /// names must exist right now. nil is legitimate — no normal-layer window may
+    /// be on screen — but a terminated process never is.
+    func testFrontmostWindowOwnerIsLive() throws {
+        guard let front = RunningAppLocator.frontmostWindowOwner() else { return }
+        XCTAssertFalse(front.isTerminated, "Frontmost owner resolved to a terminated instance")
+        XCTAssertNotNil(
+            NSRunningApplication(processIdentifier: front.processIdentifier),
+            "Frontmost owner PID \(front.processIdentifier) is not a live process")
+    }
+
+    /// The lookup must name the owner of the frontmost normal-layer window, which
+    /// is the question `NSWorkspace.frontmostApplication` answers from a snapshot
+    /// that never refreshes in the server.
+    func testFrontmostWindowOwnerMatchesTheWindowServer() throws {
+        let expected = WindowListHelper.frontmostWindowOwnerPID()
+        XCTAssertEqual(
+            RunningAppLocator.frontmostWindowOwner()?.processIdentifier, expected,
+            "Frontmost owner disagreed with the window server's front-to-back order")
+    }
+
     /// The name path re-resolves its snapshot match by PID, so it too can only
     /// return a process that exists.
     func testLocalizedNameLookupOnlyReturnsLiveProcesses() throws {
