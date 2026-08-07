@@ -1,0 +1,80 @@
+// Copyright 2026 jfarcand@apache.org
+// Licensed under the Apache License, Version 2.0
+// ABOUTME: Unit tests for RunningAppLocator's live process-lookup contract.
+// ABOUTME: Covers unknown identifiers and the liveness guarantee every lookup must hold.
+
+import AppKit
+import XCTest
+@testable import mirroir_mcp
+
+/// The locator exists so a long-lived server never hands a dead PID to the AX
+/// APIs (issue #34). These tests pin the two halves of that contract: nothing is
+/// invented for identifiers that are not running, and everything returned is a
+/// process that still exists right now.
+final class RunningAppLocatorTests: XCTestCase {
+
+    // MARK: - Unknown identifiers
+
+    func testUnknownBundleIDReturnsNil() {
+        XCTAssertNil(
+            RunningAppLocator.byBundleID("com.jfarcand.mirroir.test.no-such-app"),
+            "A bundle ID that is not running must not resolve to a process")
+    }
+
+    func testEmptyBundleIDReturnsNil() {
+        XCTAssertNil(
+            RunningAppLocator.byBundleID(""),
+            "An empty bundle ID must not match an arbitrary process")
+    }
+
+    func testUnknownLocalizedNameReturnsNil() {
+        XCTAssertNil(
+            RunningAppLocator.byLocalizedName("No Such Application 4f1c9e"),
+            "A localized name that is not running must not resolve to a process")
+    }
+
+    // MARK: - Liveness
+
+    /// Every instance the locator returns must be a live process. A terminated
+    /// instance is precisely what strands `getState()` at `.noWindow`: its PID is
+    /// dead, so `AXUIElementCreateApplication` fails for the rest of the server's
+    /// lifetime.
+    func testBundleIDLookupOnlyReturnsLiveProcesses() throws {
+        let bundleIDs = Set(
+            NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+        XCTAssertFalse(bundleIDs.isEmpty, "Expected at least one running app with a bundle ID")
+
+        var resolved = 0
+        for bundleID in bundleIDs {
+            // nil is legitimate: an app listed in the snapshot may have exited
+            // since. What must never happen is resolving to a dead process.
+            guard let app = RunningAppLocator.byBundleID(bundleID) else { continue }
+            resolved += 1
+            XCTAssertEqual(app.bundleIdentifier, bundleID, "Lookup returned a different app")
+            XCTAssertFalse(app.isTerminated, "\(bundleID) resolved to a terminated instance")
+            XCTAssertNotNil(
+                NSRunningApplication(processIdentifier: app.processIdentifier),
+                "\(bundleID) resolved to PID \(app.processIdentifier), which is not a live process")
+        }
+        XCTAssertGreaterThan(resolved, 0, "No running app resolved — the lookup is not working")
+    }
+
+    /// The name path re-resolves its snapshot match by PID, so it too can only
+    /// return a process that exists.
+    func testLocalizedNameLookupOnlyReturnsLiveProcesses() throws {
+        let names = Set(NSWorkspace.shared.runningApplications.compactMap(\.localizedName))
+        XCTAssertFalse(names.isEmpty, "Expected at least one running app with a localized name")
+
+        var resolved = 0
+        for name in names {
+            guard let app = RunningAppLocator.byLocalizedName(name) else { continue }
+            resolved += 1
+            XCTAssertEqual(app.localizedName, name, "Lookup returned a differently named app")
+            XCTAssertFalse(app.isTerminated, "\(name) resolved to a terminated instance")
+            XCTAssertNotNil(
+                NSRunningApplication(processIdentifier: app.processIdentifier),
+                "\(name) resolved to PID \(app.processIdentifier), which is not a live process")
+        }
+        XCTAssertGreaterThan(resolved, 0, "No running app resolved — the lookup is not working")
+    }
+}

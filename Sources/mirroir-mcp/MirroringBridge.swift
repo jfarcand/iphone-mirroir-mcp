@@ -47,10 +47,12 @@ final class MirroringBridge: Sendable {
     }
 
     /// Find the iPhone Mirroring process.
+    ///
+    /// Resolved live on every call via `RunningAppLocator`: a device respring
+    /// restarts ScreenContinuity under a new PID, and the long-lived server must
+    /// follow it rather than keep querying AX against the process that died.
     func findProcess() -> NSRunningApplication? {
-        NSWorkspace.shared.runningApplications.first {
-            $0.bundleIdentifier == bundleIdentifier
-        }
+        RunningAppLocator.byBundleID(bundleIdentifier)
     }
 
     /// Get the AXUIElement for the main mirroring window.

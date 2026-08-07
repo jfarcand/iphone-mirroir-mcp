@@ -29,17 +29,15 @@ final class GenericWindowBridge: WindowBridging, Sendable {
         self.windowTitleSubstring = windowTitleContains
     }
 
+    /// Resolved live on every call so the bridge follows the target across a
+    /// restart instead of stranding a dead PID (see `RunningAppLocator`).
     func findProcess() -> NSRunningApplication? {
         if let bid = bundleIdentifier {
-            return NSWorkspace.shared.runningApplications.first {
-                $0.bundleIdentifier == bid
-            }
+            return RunningAppLocator.byBundleID(bid)
         }
         // For apps without bundle IDs (e.g. QEMU), match by localizedName
         if let name = processName {
-            return NSWorkspace.shared.runningApplications.first {
-                $0.localizedName == name
-            }
+            return RunningAppLocator.byLocalizedName(name)
         }
         return nil
     }

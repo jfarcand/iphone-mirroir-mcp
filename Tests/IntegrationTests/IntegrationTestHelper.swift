@@ -12,6 +12,7 @@ import AppKit
 enum IntegrationTestError: Error, CustomStringConvertible {
     case fakeMirroringNotFound
     case fakeMirroringLaunchFailed(String)
+    case fakeMirroringTerminateFailed
     case windowNotCapturable
     case describeReturnedNil
     case windowInfoUnavailable
@@ -24,6 +25,8 @@ enum IntegrationTestError: Error, CustomStringConvertible {
             return "FakeMirroring.app not found. Build with: swift build -c release"
         case .fakeMirroringLaunchFailed(let reason):
             return "FakeMirroring failed to launch: \(reason)"
+        case .fakeMirroringTerminateFailed:
+            return "FakeMirroring did not exit after terminate() and forceTerminate()"
         case .windowNotCapturable:
             return "FakeMirroring window not capturable after retries"
         case .describeReturnedNil:
