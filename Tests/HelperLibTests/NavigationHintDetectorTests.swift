@@ -97,4 +97,89 @@ struct NavigationHintDetectorTests {
         #expect(hints.isEmpty, "\"< Back\" is not a bare chevron — OCR typically splits them")
     }
 
+    @Test("emits tab bar hint from icon-only cluster in bottom band")
+    func tabBarHintFromIconCluster() {
+        // Icon-only tab bar (Instagram-style): no OCR text labels at all,
+        // only detected icon positions in the bottom band.
+        let iconPoints = [
+            makeTapPoint("", x: 41, y: 846),
+            makeTapPoint("", x: 205, y: 846),
+            makeTapPoint("", x: 369, y: 846),
+        ]
+        let hints = NavigationHintDetector.detect(
+            elements: [], iconPoints: iconPoints, windowHeight: windowHeight)
+        #expect(hints.count == 1)
+        #expect(hints[0].hasPrefix(NavigationHintDetector.tabBarHintPrefix),
+            "Three bottom-band icon points should emit a tab-bar hint")
+    }
+
+    @Test("no tab bar hint below three bottom-band points")
+    func noHintBelowThreeBandPoints() {
+        let iconPoints = [
+            makeTapPoint("", x: 41, y: 846),
+            makeTapPoint("", x: 205, y: 846),
+        ]
+        let hints = NavigationHintDetector.detect(
+            elements: [], iconPoints: iconPoints, windowHeight: windowHeight)
+        #expect(hints.isEmpty, "Two band points are below the tab-bar threshold")
+    }
+
+    @Test("labeled tab bar in the tab-bar band emits hint")
+    func labeledTabBarEmitsHint() {
+        let elements = [
+            makeTapPoint("Home", x: 41, y: 850),
+            makeTapPoint("Search", x: 205, y: 850),
+            makeTapPoint("Profile", x: 369, y: 850),
+        ]
+        let hints = NavigationHintDetector.detect(
+            elements: elements, windowHeight: windowHeight)
+        #expect(hints.count == 1)
+        #expect(hints[0].hasPrefix(NavigationHintDetector.tabBarHintPrefix),
+            "Three short labels in the tab-bar band should emit a tab-bar hint")
+    }
+
+    @Test("list rows above the tab-bar band are not tab-bar evidence")
+    func listRowsAboveBandEmitNoHint() {
+        // Settings-style chevron-less list scrolled near the bottom: rows at
+        // y=780/840/898 on a 900-pt window. Only two fall inside the bottom-12%
+        // tab-bar band (>=792), so no tab-bar hint fires — screen classification
+        // for list screens stays unchanged.
+        let elements = [
+            makeTapPoint("Notifications", y: 780),
+            makeTapPoint("General", y: 840),
+            makeTapPoint("Privacy", y: 898),
+        ]
+        let hints = NavigationHintDetector.detect(
+            elements: elements, windowHeight: windowHeight)
+        #expect(hints.isEmpty,
+            "Rows above the tab-bar band must not count toward the hint")
+    }
+
+    @Test("back-navigation text is recognized in lone and labeled forms")
+    func backNavigationTextRecognized() {
+        #expect(NavigationHintDetector.isBackNavigationText("<"))
+        #expect(NavigationHintDetector.isBackNavigationText(" ‹ "))
+        #expect(NavigationHintDetector.isBackNavigationText("< Back"))
+        #expect(NavigationHintDetector.isBackNavigationText("‹ Retour"))
+        #expect(!NavigationHintDetector.isBackNavigationText("Back"))
+        #expect(!NavigationHintDetector.isBackNavigationText("<html>"),
+            "A chevron glued to following text is not a back button label")
+        #expect(!NavigationHintDetector.isBackNavigationText("Réglages"))
+    }
+
+    @Test("sentence-like band text does not count as a tab label")
+    func multiWordBandContentEmitsNoHint() {
+        // Scrolled feed captions and action-bar sentences land in the band on
+        // pushed screens; tab items are 1-2 words, so these must not fire the hint.
+        let elements = [
+            makeTapPoint("Amazing sunset over the bridge", y: 850),
+            makeTapPoint("Nouveau post de Marie", y: 860),
+            makeTapPoint("Story du jour", y: 880),
+        ]
+        let hints = NavigationHintDetector.detect(
+            elements: elements, windowHeight: windowHeight)
+        #expect(hints.isEmpty,
+            "Multi-word band text is content, not tab-bar evidence")
+    }
+
 }

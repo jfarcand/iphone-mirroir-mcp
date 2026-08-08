@@ -187,7 +187,8 @@ enum RecipeParser {
             type: kv["type"] ?? "drill-down",
             backtrack: kv["backtrack"] ?? "tap-back-chevron",
             scrollBehavior: kv["scroll_behavior"] ?? "finite",
-            depthPattern: kv["depth_pattern"] ?? "linear"
+            depthPattern: kv["depth_pattern"] ?? "linear",
+            calibrationScrollLimit: kv["calibration_scroll_limit"].flatMap { Int($0) }
         )
     }
 

@@ -170,4 +170,133 @@ final class LandmarkPickerTests: XCTestCase {
         XCTAssertEqual(landmark, "Some content label",
             "Should fall back to structural element outside header when no structural in header zone")
     }
+
+    // MARK: - Stable Anchors / Excluded Patterns
+
+    func testStableAnchorPreferredOverHeaderZoneText() {
+        // "POLISHER" sits in the header zone (an ephemeral feed caption); the tab
+        // label "Recherche" at the bottom matches a declared stable anchor.
+        let elements = [
+            TapPoint(text: "POLISHER", tapX: 205, tapY: 150, confidence: 0.95),
+            TapPoint(text: "Recherche", tapX: 142, tapY: 846, confidence: 0.92),
+        ]
+
+        let landmark = LandmarkPicker.pickLandmark(
+            from: elements, stableAnchors: ["Accueil", "Recherche"])
+        XCTAssertEqual(landmark, "Recherche",
+            "Declared stable anchor should beat ephemeral header-zone text")
+    }
+
+    func testNavBarTitleTierUsedWhenNoAnchorVisible() {
+        // "Edit" is topmost in the header zone (would win Tier 1), but the nav
+        // bar title tier picks the longest header-zone text instead.
+        let elements = [
+            TapPoint(text: "Edit", tapX: 60, tapY: 130, confidence: 0.95),
+            TapPoint(text: "Notifications Center", tapX: 205, tapY: 180, confidence: 0.96),
+            TapPoint(text: "Feed caption text", tapX: 205, tapY: 400, confidence: 0.90),
+        ]
+
+        let landmark = LandmarkPicker.pickLandmark(
+            from: elements, stableAnchors: ["Accueil", "Recherche"])
+        XCTAssertEqual(landmark, "Notifications Center",
+            "Nav bar title tier should fire when no stable anchor is visible")
+    }
+
+    func testRequireStableReturnsNilOnFeedOnlyScreen() {
+        // Only feed-zone content: no anchor match, no header-zone nav bar title.
+        let elements = [
+            TapPoint(text: "Amazing sunset over the bridge", tapX: 205, tapY: 320, confidence: 0.90),
+            TapPoint(text: "Feed caption text", tapX: 205, tapY: 480, confidence: 0.88),
+        ]
+
+        let landmark = LandmarkPicker.pickLandmark(
+            from: elements, stableAnchors: ["Accueil", "Recherche"], requireStable: true)
+        XCTAssertNil(landmark,
+            "requireStable should return nil when no stable tier matches")
+    }
+
+    func testExcludedPatternsNeverPicked() {
+        // "POLISHER Post" would win Tier 1 (structural, header zone) but matches
+        // an excluded pattern; the picker falls through to the next tier.
+        let elements = [
+            TapPoint(text: "POLISHER Post", tapX: 205, tapY: 150, confidence: 0.95),
+            TapPoint(text: "Feed Item Label", tapX: 205, tapY: 400, confidence: 0.90),
+        ]
+
+        let landmark = LandmarkPicker.pickLandmark(
+            from: elements, excludedPatterns: ["polisher"])
+        XCTAssertEqual(landmark, "Feed Item Label",
+            "Candidates matching an excluded pattern should never be picked")
+    }
+
+    func testAnchorSubstringInsideCaptionNotMatched() {
+        // "Home" is a substring of the caption, but the tab label itself is not
+        // on screen: Tier 0 must not match, and requireStable must return nil
+        // instead of emitting a wait step that fails on replay.
+        let elements = [
+            TapPoint(text: "Homemade granola bars", tapX: 205, tapY: 320, confidence: 0.92),
+        ]
+
+        let landmark = LandmarkPicker.pickLandmark(
+            from: elements, stableAnchors: ["Home", "Search"], requireStable: true)
+        XCTAssertNil(landmark,
+            "An anchor substring inside feed content must not match Tier 0")
+    }
+
+    func testWholeTextAnchorMatchReturnsDeclaredAnchor() {
+        // The caption still contains "Home" as a substring, but the real tab
+        // label is also visible — only the whole-text match wins Tier 0.
+        let elements = [
+            TapPoint(text: "Homemade granola bars", tapX: 205, tapY: 320, confidence: 0.92),
+            TapPoint(text: "Home", tapX: 41, tapY: 846, confidence: 0.93),
+        ]
+
+        let landmark = LandmarkPicker.pickLandmark(
+            from: elements, stableAnchors: ["Home", "Search"], requireStable: true)
+        XCTAssertEqual(landmark, "Home",
+            "The tab label's own whole text should match Tier 0")
+    }
+
+    func testBackChevronNeverPickedAsLandmark() {
+        // "< Back" renders on every detail screen — even when it is the longest
+        // header-zone text, the nav-bar-title tier must return the real title.
+        let elements = [
+            TapPoint(text: "< Back", tapX: 60, tapY: 145, confidence: 0.97),
+            TapPoint(text: "Mode", tapX: 205, tapY: 190, confidence: 0.96),
+        ]
+
+        let landmark = LandmarkPicker.pickLandmark(
+            from: elements, stableAnchors: [], requireStable: true)
+        XCTAssertEqual(landmark, "Mode",
+            "Back-navigation chrome must not shadow the nav bar title")
+    }
+
+    func testLoneChevronExcludedFromDefaultLadder() {
+        // The all-default ladder must also refuse chevron chrome: with only a
+        // chevron and content text visible, the pick falls to the content.
+        let elements = [
+            TapPoint(text: "< Back", tapX: 60, tapY: 145, confidence: 0.97),
+            TapPoint(text: "Daily Average", tapX: 205, tapY: 400, confidence: 0.92),
+        ]
+
+        let landmark = LandmarkPicker.pickLandmark(from: elements)
+        XCTAssertEqual(landmark, "Daily Average",
+            "Chevron chrome is not a landmark in the default ladder either")
+    }
+
+    func testDefaultCallKeepsOriginalTierLadder() {
+        // Same fixture as testNavBarTitleTierUsedWhenNoAnchorVisible but with
+        // all-default arguments: the stable tiers (0/0.5) must not run, so the
+        // pick is the original Tier 1 result ("Edit", topmost structural header
+        // candidate) — labeled-app landmark selection is unchanged.
+        let elements = [
+            TapPoint(text: "Edit", tapX: 60, tapY: 130, confidence: 0.95),
+            TapPoint(text: "Notifications Center", tapX: 205, tapY: 180, confidence: 0.96),
+            TapPoint(text: "Feed caption text", tapX: 205, tapY: 400, confidence: 0.90),
+        ]
+
+        let landmark = LandmarkPicker.pickLandmark(from: elements)
+        XCTAssertEqual(landmark, "Edit",
+            "All-default calls must not route through the nav-bar-title tier")
+    }
 }

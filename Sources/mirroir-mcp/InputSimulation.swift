@@ -374,6 +374,13 @@ final class InputSimulation: Sendable {
     /// `NSWorkspace.frontmostApplication`, which is frozen in a server that
     /// never runs its main run loop (see `RunningAppLocator`).
     ///
+    /// When the target is already the active app, this returns without touching
+    /// focus at all: the System Events `set frontmost` call disturbs event
+    /// routing for a beat even when it is a no-op, and a click posted inside
+    /// that window is silently dropped (measured against FakeMirroring — the
+    /// same tap delivers with no AppleScript, or with AppleScript plus the
+    /// settle sleep, but never with AppleScript and no settle).
+    ///
     /// Uses AppleScript `set frontmost to true` via System Events for
     /// cross-Space activation (NSRunningApplication.activate() cannot trigger
     /// a macOS Space switch, deprecated in macOS 14).
@@ -385,8 +392,10 @@ final class InputSimulation: Sendable {
         let alreadyFront = target?.isActive ?? false
 
         if alreadyFront {
-            DebugLog.log("focus", "already frontmost, re-confirming")
-        } else if DebugLog.enabled {
+            DebugLog.log("focus", "target already active — skipping activation")
+            return false
+        }
+        if DebugLog.enabled {
             let front = RunningAppLocator.frontmostWindowOwner()?.bundleIdentifier ?? "nil"
             DebugLog.log("focus", "switching from \(front)")
         }
@@ -402,8 +411,8 @@ final class InputSimulation: Sendable {
         } else {
             // Fallback: use NSRunningApplication.activate() directly
             bridge.activate()
-            if !alreadyFront { usleep(EnvConfig.spaceSwitchSettleUs) }
-            return !alreadyFront
+            usleep(EnvConfig.spaceSwitchSettleUs)
+            return true
         }
 
         let script = NSAppleScript(source: """
@@ -420,15 +429,15 @@ final class InputSimulation: Sendable {
             DebugLog.log("focus", "AppleScript error: \(err)")
         }
 
-        if !alreadyFront {
-            usleep(EnvConfig.spaceSwitchSettleUs)
-        }
+        // The settle sleep is not just for Space switches: a click posted
+        // before the activation transition finishes is silently dropped.
+        usleep(EnvConfig.spaceSwitchSettleUs)
 
         if DebugLog.enabled {
             let after = RunningAppLocator.frontmostWindowOwner()?.bundleIdentifier ?? "nil"
             DebugLog.log("focus", "after activation frontApp=\(after)")
         }
-        return !alreadyFront
+        return true
     }
 
 }

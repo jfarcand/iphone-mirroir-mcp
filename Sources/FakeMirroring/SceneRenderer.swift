@@ -28,7 +28,12 @@ enum SceneRenderer {
     private static let buttonGap: CGFloat = 20
 
     /// Build the ScenarioData for a screen (no active obstacle).
-    static func render(_ screen: SimulatorScreen) -> ScenarioData {
+    /// `tabBarStyle` comes from the owning pack's spec — it is app-level,
+    /// not per-screen, so the caller passes it alongside the screen.
+    static func render(
+        _ screen: SimulatorScreen,
+        tabBarStyle: SimulatorTabBarStyle = .labels
+    ) -> ScenarioData {
         var rows: [(String, CGPoint)] = []
         var plainTexts: [(String, CGPoint)] = []
         var buttons: [(String, CGRect)] = []
@@ -89,6 +94,7 @@ enum SceneRenderer {
             header: screen.title,
             rows: rows,
             hasTabBar: screen.hasTabBar,
+            tabBarStyle: tabBarStyle,
             plainTexts: plainTexts,
             buttons: buttons,
             placeholders: placeholders,

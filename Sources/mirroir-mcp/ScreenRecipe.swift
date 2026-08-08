@@ -39,6 +39,25 @@ struct RecipeNavigationModel: Sendable {
     let scrollBehavior: String
     /// Depth pattern: linear, card-to-detail, flat, grid-to-detail, list-to-detail.
     let depthPattern: String
+    /// Cap on full-page calibration scrolls for screens matching this recipe;
+    /// nil = use the exploration budget default.
+    let calibrationScrollLimit: Int?
+
+    /// Memberwise init with a default for `calibrationScrollLimit` so recipes
+    /// that declare no cap fall back to nil (the exploration budget default applies).
+    init(
+        type: String,
+        backtrack: String,
+        scrollBehavior: String,
+        depthPattern: String,
+        calibrationScrollLimit: Int? = nil
+    ) {
+        self.type = type
+        self.backtrack = backtrack
+        self.scrollBehavior = scrollBehavior
+        self.depthPattern = depthPattern
+        self.calibrationScrollLimit = calibrationScrollLimit
+    }
 }
 
 /// Result of matching a screen's detected components against all loaded recipes.

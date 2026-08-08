@@ -61,14 +61,8 @@ enum TabTargetInjector {
 
         // Strategy 1: text matching
         for tabName in tabNames {
-            let tabLower = tabName.lowercased()
             guard let match = elements.first(where: { el in
-                let elLower = el.text.trimmingCharacters(in: .whitespaces).lowercased()
-                // Skip text-less elements (icon-only tab points carry text ""):
-                // `tabLower.contains("")` is always true, which would spuriously
-                // match every tab to the first icon and starve Strategy 2.
-                guard !elLower.isEmpty else { return false }
-                return (elLower == tabLower || elLower.contains(tabLower) || tabLower.contains(elLower))
+                matchesTabName(tabName, element: el)
                     && !visitedElements.contains(el.text)
                     && !visitedElements.contains(tabName)
             }) else { continue }
@@ -113,6 +107,66 @@ enum TabTargetInjector {
         }
 
         return results
+    }
+
+    /// Resolve the tap point that returns the explorer to the app's root tab.
+    /// Convention: the first APP.md-declared tab is the tab root; tapping it
+    /// returns home from any tab screen.
+    ///
+    /// Strategy 1 text-matches the first declared tab against the screen's
+    /// tab-zone elements only (labeled bars, same matching rules as
+    /// `findTargets`). Screen content routinely contains tab-name substrings
+    /// (nav titles, feed captions) and OCR order is top-to-bottom, so an
+    /// unconstrained match would tap mid-screen content instead of the bar.
+    /// Strategy 2 synthesizes anchor index 0 from the bar geometry (icon-only
+    /// bars). Returns nil when no tabs are declared or the tab-bar band shows
+    /// no evidence of a bar.
+    static func returnToRootTarget(
+        tabs: [String], tabLayout: TabLayout?, elements: [TapPoint],
+        icons: [IconDetector.DetectedIcon], windowSize: CGSize
+    ) -> TapPoint? {
+        guard let rootTab = tabs.first else { return nil }
+        let iconPoints = icons.map {
+            TapPoint(text: "", tapX: $0.tapX, tapY: $0.tapY, confidence: 1.0)
+        }
+        let allPoints = elements + iconPoints
+        let layout = tabLayout ?? TabLayout(orientation: .horizontal, edge: .bottom)
+        let zoneElements = elementsInTabZone(
+            elements: allPoints, layout: layout, windowSize: windowSize)
+
+        // Strategy 1: text matching against the first declared tab, restricted
+        // to the tab-bar zone so content matches cannot shadow the bar label.
+        if let match = zoneElements.first(where: { matchesTabName(rootTab, element: $0) }) {
+            return match
+        }
+
+        // Strategy 2: synthesized anchor index 0 (icon-only tab bars). Unlike
+        // the injection-path gate (`findTargets`, where a tapped anchor is
+        // validated by post-tap OCR), this tap is a blind recovery action with
+        // no verification of the target — so it demands the same evidence level
+        // that constitutes a tab-bar detection (`tabBarMinBandPoints`); the env
+        // knob can only raise that floor, never lower it.
+        let minEvidence = max(
+            EnvConfig.tabSynthesisMinZoneEvidence,
+            NavigationHintDetector.tabBarMinBandPoints
+        )
+        guard zoneElements.count >= minEvidence else { return nil }
+        return synthesizeAnchors(
+            tabCount: tabs.count, layout: layout,
+            zoneElements: zoneElements, windowSize: windowSize
+        ).first
+    }
+
+    /// Case-insensitive substring match between a declared tab name and an
+    /// OCR element's text.
+    /// Skip text-less elements (icon-only tab points carry text ""):
+    /// `tabLower.contains("")` is always true, which would spuriously
+    /// match every tab to the first icon and starve Strategy 2.
+    private static func matchesTabName(_ tabName: String, element: TapPoint) -> Bool {
+        let tabLower = tabName.lowercased()
+        let elLower = element.text.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !elLower.isEmpty else { return false }
+        return elLower == tabLower || elLower.contains(tabLower) || tabLower.contains(elLower)
     }
 
     /// Synthesize evenly-spaced tab anchor points for an icon-only tab bar.

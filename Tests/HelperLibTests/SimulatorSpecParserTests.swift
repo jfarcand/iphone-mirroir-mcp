@@ -236,6 +236,33 @@ final class SimulatorSpecParserTests: XCTestCase {
         XCTAssertEqual(spec?.screens["x"]?.hasTabBar, true)
     }
 
+    // MARK: - Tab bar style
+
+    func testParsesTabBarStyleIcons() {
+        let spec = SimulatorSpecParser.parse(
+            sections: [
+                "Simulator": "- root: x\n- tab_bar_style: icons",
+                "Simulator Screen x": "- title: X\n- tab_bar: true",
+            ],
+            frontMatter: ["app": "X"],
+            appName: "X"
+        )
+        XCTAssertEqual(spec?.tabBarStyle, .icons)
+    }
+
+    func testTabBarStyleDefaultsToLabels() {
+        let spec = SimulatorSpecParser.parse(
+            sections: [
+                "Simulator": "- root: x",
+                "Simulator Screen x": "- title: X\n- tab_bar: true",
+            ],
+            frontMatter: ["app": "X"],
+            appName: "X"
+        )
+        XCTAssertEqual(spec?.tabBarStyle, .labels,
+            "Absent tab_bar_style falls back to the labeled rendering")
+    }
+
     func testAsciiArrowAccepted() {
         let body = """
         - title: X

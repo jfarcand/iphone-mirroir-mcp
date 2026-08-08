@@ -5,6 +5,7 @@
 // ABOUTME: Produced by SceneRenderer (AppPack-driven) and overlay sceneData() methods.
 
 import AppKit
+import HelperLib
 
 /// A summary card for legacy Health/Santé-style scenarios.
 /// Kept as a public struct because FakeScreenDrawing.swift still
@@ -25,6 +26,8 @@ struct ScenarioData {
     /// Rows with ">" disclosure chevrons (settings-style list items).
     let rows: [(String, CGPoint)]
     let hasTabBar: Bool
+    /// How the tab bar renders when `hasTabBar` is true (labels vs icon-only).
+    var tabBarStyle: SimulatorTabBarStyle = .labels
     /// Free text labels without chevrons (captions, stats, links).
     var plainTexts: [(String, CGPoint)] = []
     /// Pill-shaped buttons with centered text.

@@ -13,6 +13,9 @@ enum BacktrackVerification {
     case verified
     /// Returned to a different known screen — graph state corrected.
     case corrected(fingerprint: String)
+    /// A .tab return landed on the tab root with a churned fingerprint —
+    /// tab-bar evidence on the first post-return OCR confirms root.
+    case tabRootDrift
     /// Explorer is lost — could not identify current screen after recovery attempts.
     case lost
 }
@@ -38,11 +41,18 @@ extension BFSExplorer {
     ///
     /// Prevents cascading errors when the explorer gets stuck on an unexpected
     /// screen (modal articles, deep sub-views, system sheets).
+    ///
+    /// `edgeType` is the classified type of the edge being reversed. For `.tab`
+    /// edges, fingerprint drift on the landed screen is checked on the FIRST
+    /// OCR — before any recovery taps, which would themselves navigate into
+    /// content on chevron-less tab roots (their blind fallback lands in the
+    /// stories row).
     func verifyBacktrack(
         expectedFP: String,
         afterElements: [TapPoint],
         describer: ScreenDescribing,
-        input: InputProviding
+        input: InputProviding,
+        edgeType: EdgeType? = nil
     ) -> BacktrackVerification {
         // OCR the screen after backtrack
         guard let result = ExplorerUtilities.dismissAlertIfPresent(
@@ -71,6 +81,24 @@ extension BFSExplorer {
         let ocrTexts = result.elements.map { "\($0.text)@(\(Int($0.tapX)),\(Int($0.tapY)))" }
         DebugLog.log("bfs", "backtrack-verify: screen mismatch — " +
             "\(result.elements.count) elements: \(ocrTexts.joined(separator: ", "))")
+
+        // Tab-return drift: feed content churns between visits, so a .tab
+        // return can land on the tab root with a changed fingerprint. Accept
+        // tab-bar evidence (hint present, no back chevron) on this first
+        // post-return OCR, before any recovery taps run. A concrete structural
+        // match to a KNOWN non-root screen overrides the band evidence — a tab
+        // bar is visible on every tab screen, so the evidence cannot
+        // discriminate which tab is showing.
+        if edgeType == .tab, BFSTabReturn.showsTabRootEvidence(hints: result.hints) {
+            let knownMatch = graph.findMatchingNode(elements: result.elements)
+            if knownMatch == nil || knownMatch == graph.rootFingerprint {
+                DebugLog.log("bfs", "backtrack-verify: tab-return drift — " +
+                    "tab-bar evidence on landed screen confirms root")
+                return .tabRootDrift
+            }
+            DebugLog.log("bfs", "backtrack-verify: tab-bar evidence present but screen " +
+                "matches known non-root \(knownMatch.map { String($0.prefix(8)) } ?? "") — not root")
+        }
 
         // Recovery 1: Try dismissing a modal (X, Close, Done in top 30% zone).
         // App Store modal sheets place the X at ~25% height, so 20% is too narrow.
@@ -184,26 +212,46 @@ extension BFSExplorer {
 
     /// Tap back and verify the result. Returns an ExploreStepResult if the explorer
     /// is lost (should stop exploring), or nil if backtrack succeeded.
+    /// `edgeType` is the classified type of the edge being reversed: `.tab`
+    /// edges return home by tapping the app's root tab instead of the chevron.
     func tapBackAndVerify(
         expectedFP: String,
         afterElements: [TapPoint],
         describer: ScreenDescribing,
-        input: InputProviding
+        input: InputProviding,
+        edgeType: EdgeType? = nil
     ) -> ExploreStepResult? {
-        backtracker.tapBack(
-            elements: afterElements, input: input, windowSize: windowSize,
-            fallback: currentLayoutZones.backButtonFallback
+        // Tab edges reverse by tapping the app's root tab — the tab bar is
+        // visible on the current screen, while icon-only tab roots (Instagram)
+        // have no back chevron and the blind fallback tap would land in
+        // content. Falls back to tapBack when no root-tab target resolves.
+        let tabReturned = edgeType == .tab && BFSTabReturn.tapRootTab(
+            appDescription: session.currentAppDescription,
+            elements: afterElements,
+            icons: graph.node(for: graph.currentFingerprint)?.icons ?? [],
+            windowSize: windowSize, input: input
         )
+        if !tabReturned {
+            backtracker.tapBack(
+                elements: afterElements, input: input, windowSize: windowSize,
+                fallback: currentLayoutZones.backButtonFallback
+            )
+        }
 
         let verification = verifyBacktrack(
             expectedFP: expectedFP, afterElements: afterElements,
-            describer: describer, input: input
+            describer: describer, input: input, edgeType: edgeType
         )
 
         switch verification {
         case .verified:
             graph.setCurrentFingerprint(expectedFP)
             return nil
+
+        case .tabRootDrift:
+            // The drift was accepted on the first post-return OCR (inside
+            // verifyBacktrack, before any recovery taps could navigate away).
+            return acceptTabReturnAtRoot(expectedFP: expectedFP)
 
         case .corrected(let actualFP):
             graph.setCurrentFingerprint(actualFP)
@@ -214,7 +262,10 @@ extension BFSExplorer {
             // the expected parent, continuing would tap elements on the wrong screen.
             if actualFP != graph.rootFingerprint && actualFP != expectedFP {
                 // Landed on a different known screen — try in-app tap-back to root,
-                // falling back to Spotlight only if that can't reach root.
+                // falling back to Spotlight only if that can't reach root. A .tab
+                // edge gets no special treatment here: a concrete structural match
+                // to a known non-root screen is affirmative evidence of NOT being
+                // at root, so only a genuine reposition can recover.
                 DebugLog.log("bfs", "backtrack corrected to non-root screen — returning to root for \(appName)")
                 _ = AppRootNavigator.resetToRoot(
                     appName: appName,
@@ -255,80 +306,16 @@ extension BFSExplorer {
         }
     }
 
-    // MARK: - Phase: Returning
-
-    /// Tap back one level toward root. Each step reduces depth by one.
-    func stepReturning(
-        depthRemaining: Int,
-        describer: ScreenDescribing,
-        input: InputProviding
-    ) -> ExploreStepResult {
-        // Get current screen elements for back button detection
-        let elements: [TapPoint]
-        if let result = ExplorerUtilities.dismissAlertIfPresent(
-            describer: describer, input: input
-        ) {
-            elements = result.elements
-        } else {
-            elements = []
-        }
-
-        // Use edge-type-aware backtracking: check what kind of edge
-        // brought us to this screen and reverse accordingly.
-        let currentFP = graph.currentFingerprint
-        let incomingEdge = graph.incomingEdge(to: currentFP)
-        var handled = false
-
-        if let edge = incomingEdge {
-            switch edge.edgeType {
-            case .modal:
-                if let dismiss = EdgeClassifier.findDismissTarget(
-                    elements: elements, screenHeight: windowSize.height
-                ) {
-                    _ = input.tap(x: dismiss.tapX, y: dismiss.tapY)
-                    usleep(EnvConfig.stepSettlingDelayMs * 1000)
-                    handled = true
-                }
-            case .tab:
-                // For tabs, find the source screen's tab element
-                if let sourceNode = graph.node(for: edge.fromFingerprint) {
-                    let tabBarZone = windowSize.height * EdgeClassifier.tabBarZoneFraction
-                    if let tabElement = sourceNode.elements.first(where: { $0.tapY >= tabBarZone }) {
-                        _ = input.tap(x: tabElement.tapX, y: tabElement.tapY)
-                        usleep(EnvConfig.stepSettlingDelayMs * 1000)
-                        handled = true
-                    }
-                }
-            case .toggle:
-                // Toggle doesn't need backtrack action, just proceed
-                handled = true
-            case .external, .dead:
-                _ = input.pressKey(keyName: "h", modifiers: ["command", "shift"])
-                usleep(EnvConfig.stepSettlingDelayMs * 1000)
-                handled = true
-            case .push, .same:
-                break
-            }
-        }
-
-        if !handled {
-            backtracker.tapBack(
-                elements: elements, input: input, windowSize: windowSize,
-            fallback: currentLayoutZones.backButtonFallback
-            )
-        }
-
-        let remaining = depthRemaining - 1
-        if remaining > 0 {
-            frontierManager.phase = .returning(depthRemaining: remaining)
-        } else {
-            frontierManager.phase = .atRoot
-            graph.setCurrentFingerprint(graph.rootFingerprint)
-        }
-
-        return .continue(
-            description: "Returning to root (\(remaining) level\(remaining == 1 ? "" : "s") remaining)"
-        )
+    /// Accept a drifted .tab return as being at root: tab-bar evidence stands
+    /// in for fingerprint equality because feed content churns between visits.
+    /// Returns nil (backtrack succeeded) when the expected screen is the root;
+    /// otherwise repositions the explorer at root and continues from there.
+    private func acceptTabReturnAtRoot(expectedFP: String) -> ExploreStepResult? {
+        DebugLog.log("bfs", "tab return: fingerprint drift accepted — tab-bar evidence confirms root")
+        graph.setCurrentFingerprint(graph.rootFingerprint)
+        guard expectedFP != graph.rootFingerprint else { return nil }
+        frontierManager.phase = .atRoot
+        return .continue(description: "Tab return drifted — tab-bar evidence confirms root, continuing from root")
     }
 
     // MARK: - Accessors

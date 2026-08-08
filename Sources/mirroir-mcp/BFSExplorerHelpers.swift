@@ -106,10 +106,12 @@ extension BFSExplorer {
 
         // Tab-driven navigation: inject APP.md tab targets at the front of the
         // plan (shared with the component-calibration path via TabTargetInjector).
+        // Globally-visited labels are unioned in so a tab explored once (breadth
+        // one-tap-global tracking) is never re-injected on subsequent screens.
         let appDesc = session.currentAppDescription
         return TabTargetInjector.inject(
             into: plan, classifiedPoints: classified.map { $0.point },
-            icons: icons, visitedElements: visitedElements,
+            icons: icons, visitedElements: visitedElements.union(graph.globalVisitedLabels),
             tabs: appDesc?.tabs ?? [], tabLayout: appDesc?.tabLayout, windowSize: windowSize)
     }
 
@@ -241,12 +243,18 @@ extension BFSExplorer {
         let componentPlan = ScreenPlanner.buildComponentPlan(
             components: components, visitedElements: [],
             scoutResults: [:], screenHeight: windowSize.height)
+        // Globally-visited labels are passed as visited so a tab explored once
+        // (breadth one-tap-global tracking) is never re-injected here either.
         let appDesc = session.currentAppDescription
         let plan = TabTargetInjector.inject(
             into: componentPlan, classifiedPoints: classified.map { $0.point },
-            icons: icons, visitedElements: [],
+            icons: icons, visitedElements: graph.globalVisitedLabels,
             tabs: appDesc?.tabs ?? [], tabLayout: appDesc?.tabLayout, windowSize: windowSize)
-        graph.setScreenPlan(for: fingerprint, plan: plan)
+        // Q-boost with persisted edge data (same helper as the per-viewport path)
+        // so both planning paths order identically on fresh:false runs.
+        graph.setScreenPlan(
+            for: fingerprint,
+            plan: applyQBoostIfAvailable(plan: plan, fingerprint: fingerprint))
 
         frontierManager.resetViewports(total: scrollData.scrollCount + 1)
         let explorableCount = components.filter { $0.definition.exploration.explorable }.count

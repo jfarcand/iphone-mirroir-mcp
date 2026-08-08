@@ -4,6 +4,7 @@
 // ABOUTME: Extracted from main.swift to keep file sizes under the 500-line limit.
 
 import AppKit
+import HelperLib
 
 /// Drawing methods for FakeScreenView. Separated from the main class to keep
 /// file sizes manageable while keeping all rendering logic in one place.
@@ -188,7 +189,11 @@ extension FakeScreenView {
         }
     }
 
-    func drawTabBar() {
+    /// Draw the bottom tab bar. `.labels` renders icon glyphs with text labels
+    /// beneath (OCR-anchored tapping); `.icons` renders the same glyphs at the
+    /// same positions with NO text, so OCR finds nothing in the bar and only
+    /// Vision saliency / icon detection can locate the tab targets.
+    func drawTabBar(style: SimulatorTabBarStyle) {
         let barY = bounds.height - tabBarHeight
         NSColor.white.setFill()
         NSRect(x: 0, y: barY, width: bounds.width, height: tabBarHeight).fill()
@@ -203,6 +208,8 @@ extension FakeScreenView {
             )
             NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
         }
+
+        guard style == .labels else { return }
 
         let labelFont = NSFont.systemFont(ofSize: 10, weight: .medium)
         let labelAttrs: [NSAttributedString.Key: Any] = [

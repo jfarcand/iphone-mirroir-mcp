@@ -28,8 +28,34 @@ enum LandmarkPicker {
 
     /// Pick the most distinctive OCR element as a landmark, filtering out status bar noise.
     /// Skips elements in the status bar zone (tapY < 80), time patterns, and bare numbers.
-    /// Uses a tiered selection: structural header > structural anywhere > any candidate.
-    static func pickLandmark(from elements: [TapPoint]) -> String? {
+    /// Candidates whose text contains an `excludedPatterns` entry (case-insensitive)
+    /// are removed before any tier runs.
+    ///
+    /// Tier ladder, checked in order:
+    /// - Tier 0: first candidate whose whole text equals a `stableAnchors` entry
+    ///   (case-insensitive, whitespace-trimmed) — returns the anchor's declared
+    ///   text. Whole-text matching keeps feed content that merely contains an
+    ///   anchor substring ("Home" inside "Homemade granola bars") from posing
+    ///   as the anchor's own label.
+    /// - Tier 0.5: the nav bar title from `StructuralFingerprint.extractNavBarTitle`,
+    ///   when that title also passes the candidate filter.
+    /// - Tier 1: structural candidates in header zone (100-250pt Y) — most stable.
+    /// - Tier 2: any structural candidate (topmost).
+    /// - Tier 3: topmost qualifying element (original behavior).
+    ///
+    /// Tiers 0/0.5 run only when the caller opted into stable-anchor selection
+    /// (non-empty `stableAnchors` or `requireStable`); calls with all-default
+    /// arguments keep the original Tier 1-3 ladder byte-for-byte.
+    ///
+    /// When `requireStable` is true and Tiers 0/0.5 find nothing, returns nil —
+    /// an omitted wait step beats an ephemeral one on infinite-scroll screens.
+    static func pickLandmark(
+        from elements: [TapPoint],
+        stableAnchors: [String] = [],
+        excludedPatterns: [String] = [],
+        requireStable: Bool = false
+    ) -> String? {
+        let exclusions = excludedPatterns.map { $0.lowercased() }
         let candidates = elements.filter { el in
             el.text.count >= landmarkMinLength &&
             el.text.count <= landmarkMaxLength &&
@@ -37,7 +63,41 @@ enum LandmarkPicker {
             el.tapY >= statusBarMaxY &&
             !isTimePattern(el.text) &&
             !isBareNumber(el.text) &&
-            !ActionStepFormatter.isExcludedLabel(el.text)
+            // Back-navigation chrome ("<", "< Back") renders on every detail
+            // screen — it can never identify the destination screen.
+            !NavigationHintDetector.isBackNavigationText(el.text) &&
+            !ActionStepFormatter.isExcludedLabel(el.text) &&
+            !exclusions.contains { el.text.lowercased().contains($0) }
+        }
+
+        // The stable tiers (0 and 0.5) run only when the caller supplied
+        // stable-anchor context: all-default calls keep the original ladder so
+        // labeled-app landmark picks are unchanged.
+        if !stableAnchors.isEmpty || requireStable {
+            // Tier 0: declared stable anchor visible on screen (e.g. APP.md tab
+            // name). Whole-text match — an anchor embedded inside longer text is
+            // feed content, not the anchor's own label.
+            for candidate in candidates {
+                let lowerText = candidate.text
+                    .trimmingCharacters(in: .whitespaces).lowercased()
+                if let anchor = stableAnchors.first(where: { $0.lowercased() == lowerText }) {
+                    return anchor
+                }
+            }
+
+            // Tier 0.5: nav bar title, when it also survives the candidate filter.
+            // Back-navigation chrome is dropped before extraction so a "< Back"
+            // button cannot shadow the actual title beside it.
+            let titleSource = elements.filter {
+                !NavigationHintDetector.isBackNavigationText($0.text)
+            }
+            if let title = StructuralFingerprint.extractNavBarTitle(from: titleSource),
+               candidates.contains(where: { $0.text == title }) {
+                return title
+            }
+
+            // No stable tier matched — omitting the wait step beats an ephemeral anchor
+            if requireStable { return nil }
         }
 
         // Tier 1: Structural candidates in header zone (100-250pt Y) — most stable

@@ -213,6 +213,70 @@ final class RecipeMatcherTests: XCTestCase {
         XCTAssertEqual(recipe?.explorationHints.count, 2)
     }
 
+    func testParsesCalibrationScrollLimit() {
+        let content = """
+        ---
+        version: 1
+        name: capped-recipe
+        platform: ios
+        ---
+
+        # Capped Recipe
+
+        ## Description
+
+        A recipe declaring a calibration scroll cap.
+
+        ## Required Components
+
+        - feed-post
+
+        ## Navigation Model
+
+        - type: infinite-scroll
+        - backtrack: tap-tab
+        - scroll_behavior: infinite
+        - depth_pattern: flat
+        - calibration_scroll_limit: 2
+        """
+
+        let recipe = RecipeParser.parse(content: content)
+        XCTAssertNotNil(recipe)
+        XCTAssertEqual(recipe?.navigationModel.calibrationScrollLimit, 2)
+    }
+
+    func testCalibrationScrollLimitDefaultsToNil() {
+        let content = """
+        ---
+        version: 1
+        name: uncapped-recipe
+        platform: ios
+        ---
+
+        # Uncapped Recipe
+
+        ## Description
+
+        A recipe without a calibration scroll cap.
+
+        ## Required Components
+
+        - table-row-disclosure
+
+        ## Navigation Model
+
+        - type: drill-down
+        - backtrack: tap-back-chevron
+        - scroll_behavior: finite
+        - depth_pattern: linear
+        """
+
+        let recipe = RecipeParser.parse(content: content)
+        XCTAssertNotNil(recipe)
+        XCTAssertNil(recipe?.navigationModel.calibrationScrollLimit,
+                     "Recipe without calibration_scroll_limit should parse to nil")
+    }
+
     func testParseReturnsNilForMissingName() {
         let content = """
         ---

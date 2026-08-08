@@ -43,6 +43,42 @@ final class MobileAppStrategyTests: XCTestCase {
         XCTAssertEqual(result, .tabRoot)
     }
 
+    func testClassifyTabRootFromTabBarHint() {
+        // Icon-only tab bar (Instagram-style): no text labels at the bottom,
+        // only the detector's tab-bar hint derived from icon positions.
+        let elements = makeElements(["Feed post", "Another post"])
+        let hints = [
+            "\(NavigationHintDetector.tabBarHintPrefix) 5 items detected in the "
+            + "bottom band — tap one to switch sections."
+        ]
+
+        let result = MobileAppStrategy.classifyScreen(elements: elements, hints: hints)
+
+        XCTAssertEqual(result, .tabRoot,
+            "Tab-bar hint should classify .tabRoot without bottom text labels")
+    }
+
+    func testChevronlessListWithBottomRowsStaysSettings() {
+        // Labeled-app invariance: a chevron-less Settings-style list whose last
+        // rows drift toward the bottom of the window must classify .settings —
+        // the detector's tab-bar hint (computed here exactly as production
+        // wires it) must not fire on rows above the bottom-12% tab-bar band.
+        let elements = [
+            TapPoint(text: "Général", tapX: 205, tapY: 200, confidence: 0.95),
+            TapPoint(text: "Notifications", tapX: 205, tapY: 400, confidence: 0.95),
+            TapPoint(text: "Confidentialité", tapX: 205, tapY: 600, confidence: 0.95),
+            TapPoint(text: "Batterie", tapX: 205, tapY: 780, confidence: 0.95),
+            TapPoint(text: "Stockage", tapX: 205, tapY: 840, confidence: 0.95),
+            TapPoint(text: "Luminosité", tapX: 205, tapY: 898, confidence: 0.95),
+        ]
+        let hints = NavigationHintDetector.detect(elements: elements, windowHeight: 900)
+
+        let result = MobileAppStrategy.classifyScreen(elements: elements, hints: hints)
+
+        XCTAssertEqual(result, .settings,
+            "List rows near the bottom must not flip a chevron-less list to .tabRoot")
+    }
+
     func testClassifyDetailScreen() {
         let elements = makeElements(["About", "Version 18.0"])
         let hints = ["Back navigation: \"<\" detected — tap it to go back."]

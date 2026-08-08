@@ -856,4 +856,47 @@ final class ScreenPlannerTests: XCTestCase {
         XCTAssertEqual(plan[0].displayLabel, "Home",
             "displayLabel should use firstText label rule, not raw tap target")
     }
+
+    // MARK: - Q-Value Boost Breadth-Front Invariant
+
+    func testApplyQBoostKeepsBreadthItemsInFront() {
+        let tab = RankedElement(
+            point: point("", x: 205, y: 846), score: 6.0,
+            reason: "tab-synth(Reels@2,horizontal)",
+            displayLabel: "Reels", isBreadthNavigation: true)
+        let feedItem = RankedElement(
+            point: point("Suggested post", y: 300), score: 6.5,
+            reason: "nav", displayLabel: "Suggested post")
+
+        let boosted = ScreenPlanner.applyQBoost(
+            plan: [tab, feedItem], qValues: ["Suggested post": 1.0])
+
+        // q=1.0 boosts the feed item to 8.5, above the tab's 6.0 — the breadth
+        // tab must still lead the plan, un-boosted.
+        XCTAssertEqual(boosted.count, 2)
+        XCTAssertEqual(boosted[0].displayLabel, "Reels")
+        XCTAssertEqual(boosted[0].score, 6.0,
+            "Breadth items must not receive a Q-boost")
+        XCTAssertEqual(boosted[1].displayLabel, "Suggested post")
+        XCTAssertGreaterThanOrEqual(boosted[1].score, 8.0,
+            "Non-breadth item should carry the Q-boosted score")
+    }
+
+    func testApplyQBoostPreservesDeclaredTabOrder() {
+        let declaredOrder = ["Accueil", "Recherche", "Reels"]
+        let tabs = declaredOrder.enumerated().map { index, name in
+            RankedElement(
+                point: point("", x: Double(41 + index * 82), y: 846), score: 6.0,
+                reason: "tab-synth(\(name)@\(index),horizontal)",
+                displayLabel: name, isBreadthNavigation: true)
+        }
+        // Q-values increasing in reverse declared order — a score re-sort would
+        // flip the tabs to Reels, Recherche, Accueil.
+        let qValues = ["Accueil": 0.0, "Recherche": 2.0, "Reels": 5.0]
+
+        let boosted = ScreenPlanner.applyQBoost(plan: tabs, qValues: qValues)
+
+        XCTAssertEqual(boosted.map { $0.displayLabel }, declaredOrder,
+            "Breadth tabs must keep their declared relative order")
+    }
 }

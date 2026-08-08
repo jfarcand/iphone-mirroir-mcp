@@ -123,6 +123,30 @@ final class EdgeClassifierTests: XCTestCase {
         XCTAssertEqual(result, .tab)
     }
 
+    func testClassifyTabForSynthesizedAnchor() {
+        // Icon-only tab root: the tapped element is a geometrically synthesized
+        // anchor carrying no OCR text — the tab-zone position alone classifies it.
+        let source = makeNode(
+            elements: [tap("Feed content", y: 300)],
+            screenType: .tabRoot
+        )
+
+        let destElements = [
+            tap("Search Results", y: 150),
+        ]
+
+        let result = EdgeClassifier.classify(
+            sourceNode: source,
+            destinationElements: destElements,
+            destinationHints: [],
+            tappedElement: tap("", x: 41, y: screenHeight * 0.95),
+            screenHeight: screenHeight
+        )
+
+        XCTAssertEqual(result, .tab,
+            "Text-less synthesized anchor in the tab zone should classify as .tab")
+    }
+
     func testClassifyTabRejectsNonTabRoot() {
         // Source is NOT tabRoot — bottom zone tap should still be push
         let source = makeNode(

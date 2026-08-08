@@ -24,7 +24,7 @@ extension FakeScreenView {
                 return SceneRenderer.render(obstacle)
             }
             if let screen = pack.currentScreen {
-                return SceneRenderer.render(screen)
+                return SceneRenderer.render(screen, tabBarStyle: pack.spec.tabBarStyle)
             }
         }
         // No app foreground — render an empty home-screen-style frame so the
@@ -61,6 +61,32 @@ extension FakeScreenView {
                 }
             }
             return false
+        }
+
+        // Tab bar tap zone: the bar is fixed chrome at the bottom of the view
+        // (not scrolled), drawn by drawTabBar at bounds.height - tabBarHeight
+        // with icons centered on tabBarIconXPositions. Map a tap in the bar
+        // band to the nearest icon column and navigate via the active screen's
+        // `.tab` elements in declaration order — this is what lets explorer
+        // taps (text-matched labels or synthesized icon anchors) switch tabs.
+        if data.hasTabBar, let screen = pack.currentScreen,
+           screenPoint.y >= bounds.height - tabBarHeight {
+            let tabs: [(text: String, leadsTo: String)] = screen.elements.compactMap {
+                if case .tab(let text, let leadsTo) = $0 { return (text, leadsTo) }
+                return nil
+            }
+            if !tabs.isEmpty,
+               let nearest = tabBarIconXPositions.enumerated()
+                   .min(by: { abs($0.element - screenPoint.x) < abs($1.element - screenPoint.x) }),
+               abs(nearest.element - screenPoint.x) <= 40,
+               nearest.offset < tabs.count {
+                let tab = tabs[nearest.offset]
+                NSLog("[fakemirror-tap] tab bar hit column=%d '%@' → %@",
+                      nearest.offset, tab.text, tab.leadsTo)
+                pack.navigate(to: tab.leadsTo)
+                needsDisplay = true
+                return true
+            }
         }
 
         // Back chevron tap zone: a generous top-left strip so OCR-driven taps

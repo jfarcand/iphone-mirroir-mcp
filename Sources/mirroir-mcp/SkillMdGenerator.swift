@@ -18,6 +18,8 @@ enum SkillMdGenerator {
     ///   - goal: Optional description of the flow (e.g. "check software version").
     ///   - screens: Captured screens in navigation order.
     ///   - recipeMatch: Optional matched screen recipe for archetype-aware generation.
+    ///   - appDescription: Optional APP.md description; its tab names become stable
+    ///     wait-step anchors and its skip list excludes landmark candidates.
     /// - Returns: A complete SKILL.md string with YAML front matter and markdown body.
     static func generate(
         appName: String, goal: String, screens: [ExploredScreen],
@@ -113,10 +115,20 @@ enum SkillMdGenerator {
         lines.append("\(stepNum). Launch **\(appName)**")
         stepNum += 1
 
+        // Infinite-scroll archetypes have ephemeral feed content: only stable
+        // anchors qualify as wait landmarks, otherwise the wait step is omitted.
+        let requireStable = recipeMatch?.recipe.navigationModel.scrollBehavior == "infinite"
+
         // Steps for each captured screen
         for screen in screens {
-            // Pick a landmark element for wait_for, skipping already-emitted landmarks
-            if let landmark = LandmarkPicker.pickLandmark(from: screen.elements) {
+            // Pick a landmark element for wait_for, skipping already-emitted landmarks.
+            // APP.md tab names act as stable anchors and its skip list as exclusions.
+            if let landmark = LandmarkPicker.pickLandmark(
+                from: screen.elements,
+                stableAnchors: appDescription?.tabs ?? [],
+                excludedPatterns: appDescription?.skipElements ?? [],
+                requireStable: requireStable
+            ) {
                 if !emittedLandmarks.contains(landmark) {
                     emittedLandmarks.insert(landmark)
                     lines.append("\(stepNum). Wait for \"\(landmark)\" to appear")

@@ -4,6 +4,7 @@
 // ABOUTME: Unit tests for BFSExplorer: layer-by-layer exploration, path replay, budget limits.
 // ABOUTME: Verifies BFS explores all elements at each depth before going deeper.
 
+import CoreGraphics
 import XCTest
 @testable import HelperLib
 @testable import mirroir_mcp
@@ -517,5 +518,118 @@ final class BFSExplorerTests: XCTestCase {
         let nextItem = graph.nextPlannedElement(for: fp)
         XCTAssertEqual(nextItem?.displayLabel, "Hidden1",
             "Hidden1 should still be the next planned element")
+    }
+
+    // MARK: - Tab-Aware Backtracking
+
+    private func makeTabAppDescription(tabs: [String]) -> AppDescription {
+        AppDescription(
+            appName: "TestApp", schemaVersion: 1, locale: "fr_CA", archetype: nil,
+            resetBeforeExplore: false, obstacleMode: .auto, context: "test",
+            obstacles: [], skipElements: [], credentials: [:], hints: [],
+            tabs: tabs, tabLayout: TabLayout(orientation: .horizontal, edge: .bottom),
+            simulator: nil
+        )
+    }
+
+    /// Session on an icon-only tab screen: root captured, then a tab screen
+    /// whose node carries detected band icons but no tab text labels.
+    private func setupTabSession() -> ExplorationSession {
+        let session = setupSession(rootTexts: ["General", "Privacy"])
+        session.setAppDescription(makeTabAppDescription(
+            tabs: ["Accueil", "Recherche", "Reels", "Boutique", "Profil"]))
+        let bandIcons = [
+            IconDetector.DetectedIcon(tapX: 142, tapY: 846, estimatedSize: 24),
+            IconDetector.DetectedIcon(tapX: 206, tapY: 846, estimatedSize: 30),
+            IconDetector.DetectedIcon(tapX: 343, tapY: 846, estimatedSize: 27),
+        ]
+        session.capture(
+            elements: makeElements(["Video feed", "Trending"]), hints: [],
+            icons: bandIcons, actionType: "tap", arrivedVia: "Reels",
+            screenshotBase64: "imgTab"
+        )
+        return session
+    }
+
+    func testTabEdgeBacktrackTapsFirstDeclaredTab() {
+        // Icon-only tab bar (Instagram-style): a .tab-edge backtrack must tap
+        // the first APP.md-declared tab's synthesized anchor — NOT the blind
+        // back-button fallback at (46,120), which lands in the stories row.
+        let session = setupTabSession()
+        let graph = session.currentGraph
+        let rootFP = graph.rootFingerprint
+
+        let explorer = BFSExplorer(
+            session: session, budget: makeBudget(),
+            windowSize: CGSize(width: 410, height: 898)
+        )
+        explorer.markStarted()
+
+        // The return lands on the root screen — fingerprint verifies directly.
+        let describer = MockExplorerDescriber(screens: [
+            makeScreen(["General", "Privacy"], img: "img0")
+        ])
+        let input = MockExplorerInput()
+
+        let result = explorer.tapBackAndVerify(
+            expectedFP: rootFP, afterElements: makeElements(["Video feed", "Trending"]),
+            describer: describer, input: input, edgeType: .tab
+        )
+
+        XCTAssertNil(result, "Tab return should verify against the root screen")
+        // Synthesized anchor 0 for 5 tabs on a 410-pt-wide window:
+        // x = (0+0.5)*410/5 = 41, y = median of detected band-icon Ys (846).
+        let firstTap = input.taps.first
+        XCTAssertEqual(firstTap?.x ?? -1, 41, accuracy: 2.0,
+            "Root-tab tap should land on synthesized anchor index 0")
+        XCTAssertEqual(firstTap?.y ?? -1, 846, accuracy: 2.0,
+            "Root-tab tap should use the detected icon-band Y")
+        XCTAssertFalse(
+            input.taps.contains { abs($0.x - 46) < 2 && abs($0.y - 120) < 2 },
+            "Must not blind-tap the back-button fallback (stories row)"
+        )
+    }
+
+    func testTabReturnAcceptsTabBarEvidenceOnFingerprintDrift() {
+        // Feed content churns between visits, so the root tab re-fingerprints
+        // on every return. Tab-bar evidence (hint present, no back chevron)
+        // must be accepted as at-root instead of escalating to AppRootNavigator.
+        let session = setupTabSession()
+        let graph = session.currentGraph
+        let rootFP = graph.rootFingerprint
+
+        let explorer = BFSExplorer(
+            session: session, budget: makeBudget(),
+            windowSize: CGSize(width: 410, height: 898)
+        )
+        explorer.markStarted()
+
+        // The return lands on churned feed content: unknown fingerprint, but
+        // the tab-bar hint is present and no back chevron was detected.
+        let driftedScreen = ScreenDescriber.DescribeResult(
+            elements: makeElements(["Nouveau post", "Story du jour"]),
+            hints: ["\(NavigationHintDetector.tabBarHintPrefix) 5 items detected "
+                + "in the bottom band — tap one to switch sections."],
+            screenshotBase64: "imgDrift"
+        )
+        let describer = MockExplorerDescriber(screens: [driftedScreen])
+        let input = MockExplorerInput()
+
+        let result = explorer.tapBackAndVerify(
+            expectedFP: rootFP, afterElements: makeElements(["Video feed", "Trending"]),
+            describer: describer, input: input, edgeType: .tab
+        )
+
+        XCTAssertNil(result, "Drifted tab return with tab-bar evidence should be accepted")
+        XCTAssertEqual(graph.currentFingerprint, rootFP,
+            "Explorer should treat the drifted screen as the tab root")
+        XCTAssertTrue(input.launches.isEmpty,
+            "Tab-bar evidence must prevent AppRootNavigator Spotlight escalation")
+        // The drift must be accepted on the FIRST post-return OCR — before the
+        // recovery ladder, whose blind fallback back-taps land in feed content.
+        XCTAssertEqual(input.taps.count, 1,
+            "Only the root-tab return tap may run — no recovery-ladder taps")
+        XCTAssertEqual(input.taps.first?.x ?? -1, 41, accuracy: 2.0)
+        XCTAssertEqual(input.taps.first?.y ?? -1, 846, accuracy: 2.0)
     }
 }

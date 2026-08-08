@@ -58,6 +58,7 @@ public enum SimulatorSpecParser {
             spotlightName: spotlightName,
             icon: icon,
             rootScreenID: rootScreenID,
+            tabBarStyle: parseTabBarStyle(rootProps["tab_bar_style"]),
             screens: screens,
             obstacles: obstacles
         )
@@ -240,6 +241,13 @@ public enum SimulatorSpecParser {
         case "false", "no", "0": return false
         default: return nil
         }
+    }
+
+    /// Parse the `## Simulator` block's `tab_bar_style` value. Unrecognized or
+    /// absent values fall back to `.labels` (the historical rendering).
+    private static func parseTabBarStyle(_ value: String?) -> SimulatorTabBarStyle {
+        guard let value else { return .labels }
+        return SimulatorTabBarStyle(rawValue: value.lowercased()) ?? .labels
     }
 
     private static func parseTrigger(_ raw: String) -> SimulatorObstacleTrigger {

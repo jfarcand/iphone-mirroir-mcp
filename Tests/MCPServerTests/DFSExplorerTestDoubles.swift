@@ -4,6 +4,7 @@
 // ABOUTME: Shared test doubles for DFSExplorer tests: mock describer, mock input, and element factory.
 // ABOUTME: These are used across multiple DFSExplorer test files.
 
+import AppKit
 import XCTest
 @testable import HelperLib
 @testable import mirroir_mcp
@@ -53,11 +54,31 @@ final class MockExplorerDescriber: ScreenDescribing, @unchecked Sendable {
     }
 }
 
+/// Stub window bridge reporting a fixed connected window. Lets explorer tests
+/// exercise the CalibrationScroller (bridge) path without a real target window.
+final class StubWindowBridge: WindowBridging, @unchecked Sendable {
+    let targetName = "stub"
+    private let size: CGSize
+
+    init(size: CGSize = CGSize(width: 410, height: 890)) {
+        self.size = size
+    }
+
+    func findProcess() -> NSRunningApplication? { nil }
+    func getWindowInfo() -> WindowInfo? {
+        WindowInfo(windowID: 0, position: .zero, size: size, pid: 0)
+    }
+    func getState() -> WindowState { .connected }
+    func getOrientation() -> DeviceOrientation? { .portrait }
+    func activate() {}
+}
+
 /// Mock input provider that records actions without performing them.
 final class MockExplorerInput: InputProviding, @unchecked Sendable {
     private var tapLog: [(x: Double, y: Double)] = []
     private var keyLog: [(key: String, modifiers: [String])] = []
     private var swipeLog: [(fromX: Double, fromY: Double, toX: Double, toY: Double)] = []
+    private var launchLog: [String] = []
     private let lock = NSLock()
 
     func tap(x: Double, y: Double, cursorMode: CursorMode?) -> String? {
@@ -89,7 +110,12 @@ final class MockExplorerInput: InputProviding, @unchecked Sendable {
         return TypeResult(success: true, warning: nil, error: nil)
     }
 
-    func launchApp(name: String) -> String? { nil }
+    func launchApp(name: String) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        launchLog.append(name)
+        return nil
+    }
     func openURL(_ url: String) -> String? { nil }
 
     var taps: [(x: Double, y: Double)] {
@@ -108,5 +134,11 @@ final class MockExplorerInput: InputProviding, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return swipeLog
+    }
+
+    var launches: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return launchLog
     }
 }

@@ -176,8 +176,11 @@ extension BFSExplorer {
         graph.markElementVisited(fingerprint: currentFP, elementText: label)
 
         // Mark breadth_navigation components (e.g. tab bar items) as globally visited
-        // so they are not re-tapped from every child screen.
-        if graph.isBreadthLabel(label) {
+        // so they are not re-tapped from every child screen. Gated on the plan
+        // item's breadth role, not just the label string: an organic content
+        // element whose OCR text happens to equal a registered tab name must not
+        // globally retire the real tab before it has been explored.
+        if ranked.isBreadthNavigation && graph.isBreadthLabel(label) {
             graph.markGloballyVisited(label: label)
             DebugLog.log("bfs", "globally visited breadth label: \"\(label)\"")
         }
@@ -280,7 +283,7 @@ extension BFSExplorer {
             DebugLog.log("bfs", "backtracking to \(currentFP.prefix(8)) after new screen")
             if let lostResult = tapBackAndVerify(
                 expectedFP: currentFP, afterElements: afterResult.elements,
-                describer: describer, input: input
+                describer: describer, input: input, edgeType: edgeType
             ) {
                 DebugLog.log("bfs", "BACKTRACK FAILED — phase changing, remaining plan items lost")
                 return lostResult
@@ -296,7 +299,7 @@ extension BFSExplorer {
             DebugLog.log("bfs", "backtracking to \(currentFP.prefix(8)) after revisit")
             if let lostResult = tapBackAndVerify(
                 expectedFP: currentFP, afterElements: afterResult.elements,
-                describer: describer, input: input
+                describer: describer, input: input, edgeType: edgeType
             ) {
                 DebugLog.log("bfs", "BACKTRACK FAILED on revisit — phase changing")
                 return lostResult

@@ -7,6 +7,16 @@
 import CoreGraphics
 import Foundation
 
+/// How the simulator renders the bottom tab bar for an app.
+/// Declared once per app via `- tab_bar_style: …` in the `## Simulator` section.
+public enum SimulatorTabBarStyle: String, Sendable, Equatable {
+    /// Icon glyphs with OCR-readable text labels beneath (default).
+    case labels
+    /// Icon glyphs only — no text anywhere in the bar. OCR finds nothing;
+    /// Vision saliency / icon detection must locate the tab targets.
+    case icons
+}
+
 /// Declarative scene graph extracted from an APP.md's `## Simulator …` sections.
 /// FakeMirroring builds a runnable AppPack from this at startup.
 public struct SimulatorSpec: Sendable, Equatable {
@@ -20,6 +30,8 @@ public struct SimulatorSpec: Sendable, Equatable {
     public let icon: String
     /// ID of the screen that becomes active on app launch.
     public let rootScreenID: String
+    /// How screens with `tab_bar: true` render their bottom bar.
+    public let tabBarStyle: SimulatorTabBarStyle
     /// All screens keyed by ID.
     public let screens: [String: SimulatorScreen]
     /// Modal obstacles that may be injected during exploration.
@@ -28,6 +40,7 @@ public struct SimulatorSpec: Sendable, Equatable {
     public init(
         appName: String, spotlightName: String, icon: String,
         rootScreenID: String,
+        tabBarStyle: SimulatorTabBarStyle = .labels,
         screens: [String: SimulatorScreen],
         obstacles: [SimulatorObstacle]
     ) {
@@ -35,6 +48,7 @@ public struct SimulatorSpec: Sendable, Equatable {
         self.spotlightName = spotlightName
         self.icon = icon
         self.rootScreenID = rootScreenID
+        self.tabBarStyle = tabBarStyle
         self.screens = screens
         self.obstacles = obstacles
     }

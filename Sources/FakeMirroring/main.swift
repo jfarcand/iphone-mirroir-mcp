@@ -109,7 +109,7 @@ final class FakeScreenView: NSView {
 
         // Status bar and tab bar are fixed (not scrolled)
         drawStatusBar()
-        if content.hasTabBar { drawTabBar() }
+        if content.hasTabBar { drawTabBar(style: content.tabBarStyle) }
 
         // Scrollable content area
         let ctx = NSGraphicsContext.current!.cgContext

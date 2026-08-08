@@ -103,12 +103,29 @@ final class BFSExplorer: @unchecked Sendable {
         profile.layoutZones(bridge?.getOrientation())
     }
 
+    /// Calibration scroll cap in effect for the current session. The matched
+    /// recipe's navigation model may declare a per-archetype cap (data-driven —
+    /// infinite-scroll feeds cap calibration low so full-page scans don't burn
+    /// the exploration budget); the budget's limit is the global default.
+    var effectiveCalibrationScrollLimit: Int {
+        session.currentRecipeMatch?.recipe.navigationModel.calibrationScrollLimit
+            ?? budget.calibrationScrollLimit
+    }
+
     /// Record start time and seed frontier with the root screen. Call once after initial capture.
     func markStarted() {
         lock.lock()
         startTime = Date()
         lock.unlock()
         coverageMonitor.start()
+        // Register APP.md tab names as breadth labels upfront. Icon-only tab
+        // anchors are synthesized by TabTargetInjector and never component-matched,
+        // so calibration's breadth-label registration never sees them — without
+        // this, markGloballyVisited-based one-tap-global tracking cannot fire and
+        // every new screen would re-inject the full tab list.
+        if let tabs = session.currentAppDescription?.tabs, !tabs.isEmpty {
+            graph.registerBreadthLabels(Set(tabs))
+        }
         if graph.started {
             let rootFP = graph.rootFingerprint
             frontierManager.seed(FrontierScreen(

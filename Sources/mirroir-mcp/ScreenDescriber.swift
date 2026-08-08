@@ -94,9 +94,15 @@ final class ScreenDescriber: Sendable {
             image: ocrImage, ocrElements: elements, windowSize: info.size
         )
 
-        // Detect navigation patterns and generate target-appropriate hints
+        // Detect navigation patterns and generate target-appropriate hints.
+        // Detected icon positions feed tab-bar detection so icon-only tab
+        // bars (no OCR text) still produce a tab-bar hint.
+        let iconPoints = icons.map {
+            TapPoint(text: "", tapX: $0.tapX, tapY: $0.tapY, confidence: 1.0)
+        }
         let hints = NavigationHintDetector.detect(
-            elements: elements, windowHeight: windowHeight, isMobile: isMobile
+            elements: elements, iconPoints: iconPoints,
+            windowHeight: windowHeight, isMobile: isMobile
         )
 
         let griddedData = GridOverlay.addOverlay(to: data, windowSize: info.size) ?? data

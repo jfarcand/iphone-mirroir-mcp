@@ -173,6 +173,37 @@ final class BFSExplorerTabInjectionTests: XCTestCase {
         XCTAssertEqual(recherche?.point.tapX ?? -1, 123, accuracy: 0.5)
     }
 
+    // MARK: - Breadth-label registration and global visited tracking
+
+    func testTabNamesRegisteredAsBreadthLabelsOnStart() {
+        // Synthesized tab anchors are never component-matched, so markStarted
+        // must register APP.md tab names as breadth labels for one-tap-global
+        // tracking to work.
+        let explorer = makeExplorer(tabs: ["Accueil", "Recherche", "Reels"])
+
+        XCTAssertTrue(explorer.graph.isBreadthLabel("Accueil"))
+        XCTAssertTrue(explorer.graph.isBreadthLabel("Recherche"))
+        XCTAssertTrue(explorer.graph.isBreadthLabel("Reels"))
+        XCTAssertFalse(explorer.graph.isBreadthLabel("Boutique"),
+            "Only declared tab names should be registered")
+    }
+
+    func testGloballyVisitedTabNotReinjected() {
+        // A tab explored once (marked globally visited) must not be re-injected
+        // into any subsequent screen plan.
+        let explorer = makeExplorer(tabs: instagramTabs)
+        explorer.graph.markGloballyVisited(label: "Accueil")
+
+        let plan = explorer.buildScreenPlan(
+            classified: [], visitedElements: [], icons: noisyFeedIcons)
+
+        XCTAssertFalse(plan.contains { $0.displayLabel == "Accueil" },
+            "Globally-visited tab must not reappear in a fresh screen plan")
+        // The remaining tabs are still injected at their index-based positions.
+        let synthesized = plan.filter { $0.reason.contains("tab-synth") }.map { $0.displayLabel }
+        XCTAssertEqual(Set(synthesized), Set(["Recherche", "Reels", "Boutique", "Profil"]))
+    }
+
     // MARK: - Resolver bypass for text-less synthesized anchors
 
     func testSynthesizedTabAnchorTappedAtPlannedCoordinatesWithoutTextMatch() {
@@ -215,5 +246,152 @@ final class BFSExplorerTabInjectionTests: XCTestCase {
             tabs: [], tabLayout: nil, windowSize: CGSize(width: 410, height: 890))
 
         XCTAssertTrue(result.isEmpty)
+    }
+
+    // MARK: - Return-to-root target resolution
+
+    private let windowSize = CGSize(width: 410, height: 890)
+    private let bottomLayout = TabLayout(orientation: .horizontal, edge: .bottom)
+
+    func testReturnToRootTargetPrefersTabZoneLabelOverContentMatch() {
+        // The root tab name appears three times: as the nav title (top), inside
+        // a feed caption (middle), and as the actual bar label (bottom). OCR
+        // order is top-to-bottom, so only the tab-zone constraint keeps the
+        // return tap on the bar.
+        let elements = [
+            TapPoint(text: "Accueil", tapX: 205, tapY: 120, confidence: 0.95),
+            TapPoint(text: "Publication sur Accueil", tapX: 205, tapY: 400, confidence: 0.90),
+            TapPoint(text: "Accueil", tapX: 41, tapY: 850, confidence: 0.92),
+        ]
+
+        let target = TabTargetInjector.returnToRootTarget(
+            tabs: instagramTabs, tabLayout: bottomLayout,
+            elements: elements, icons: [], windowSize: windowSize)
+
+        XCTAssertEqual(target?.tapX ?? -1, 41, accuracy: 0.5,
+            "Return target must be the tab-zone label, not the nav title")
+        XCTAssertEqual(target?.tapY ?? -1, 850, accuracy: 0.5)
+    }
+
+    func testReturnToRootTargetNilWhenOnlyContentMatchesTabName() {
+        // A feed caption contains the root tab name but no tab bar is visible:
+        // no zone match and no synthesis evidence → nil, so the caller falls
+        // back to chevron-based backtracking instead of tapping content.
+        let elements = [
+            TapPoint(text: "Accueil des nouveautés", tapX: 205, tapY: 400, confidence: 0.90),
+        ]
+
+        let target = TabTargetInjector.returnToRootTarget(
+            tabs: instagramTabs, tabLayout: bottomLayout,
+            elements: elements, icons: [], windowSize: windowSize)
+
+        XCTAssertNil(target,
+            "Content-only match outside the tab zone must not produce a return tap")
+    }
+
+    func testReturnToRootTargetSynthesizesAnchorZeroFromIconBand() {
+        // Icon-only bar: no text anywhere, three detected band icons → anchor 0.
+        let target = TabTargetInjector.returnToRootTarget(
+            tabs: instagramTabs, tabLayout: bottomLayout,
+            elements: [], icons: [
+                IconDetector.DetectedIcon(tapX: 142, tapY: 846, estimatedSize: 24),
+                IconDetector.DetectedIcon(tapX: 206, tapY: 846, estimatedSize: 30),
+                IconDetector.DetectedIcon(tapX: 343, tapY: 846, estimatedSize: 27),
+            ], windowSize: windowSize)
+
+        XCTAssertEqual(target?.tapX ?? -1, 41, accuracy: 0.5,
+            "Anchor 0 of 5 tabs on a 410-pt window is x = 0.5*410/5 = 41")
+        XCTAssertEqual(target?.tapY ?? -1, 846, accuracy: 0.5,
+            "Cross-axis Y comes from the detected icon band")
+    }
+
+    func testReturnToRootTargetRefusesSynthesisOnSparseBandEvidence() {
+        // A pushed screen whose bottom band holds a single stray element (an
+        // action-bar button) must not get a blind anchor-0 tap: the return
+        // synthesis demands tab-bar-level evidence (3+ band points).
+        let elements = [
+            TapPoint(text: "Envoyer", tapX: 205, tapY: 880, confidence: 0.90),
+        ]
+
+        let target = TabTargetInjector.returnToRootTarget(
+            tabs: instagramTabs, tabLayout: bottomLayout,
+            elements: elements, icons: [], windowSize: windowSize)
+
+        XCTAssertNil(target,
+            "One band element is not tab-bar evidence for a blind return tap")
+    }
+
+    // MARK: - Global visited gating on breadth role
+
+    /// Explorer at a calibrated root whose plan is the given single item,
+    /// ready for one `step()` call. The root screen carries a content row
+    /// whose OCR text equals the declared tab name "Recherche".
+    private func makeSteppingExplorer(
+        planItem: RankedElement
+    ) -> (BFSExplorer, MockExplorerDescriber, MockExplorerInput) {
+        let session = ExplorationSession()
+        session.start(appName: "TestApp", goal: "test")
+        session.setAppDescription(makeAppDescription(tabs: instagramTabs))
+        let rootElements = [
+            TapPoint(text: "General", tapX: 205, tapY: 200, confidence: 0.95),
+            TapPoint(text: "Recherche", tapX: 205, tapY: 300, confidence: 0.95),
+        ]
+        session.capture(
+            elements: rootElements, hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img0")
+        let explorer = BFSExplorer(session: session, budget: .default)
+        explorer.markStarted()
+        let graph = session.currentGraph
+        let rootFP = graph.rootFingerprint
+        graph.setScreenPlan(for: rootFP, plan: [planItem])
+        explorer.calibratedScreens.insert(rootFP)
+
+        let rootScreen = ScreenDescriber.DescribeResult(
+            elements: rootElements, screenshotBase64: "img0")
+        let destScreen = ScreenDescriber.DescribeResult(
+            elements: makeExplorerElements(["Détails du profil", "Abonnements"]),
+            screenshotBase64: "img1")
+        let describer = MockExplorerDescriber(
+            screens: [rootScreen, destScreen, rootScreen, rootScreen])
+        return (explorer, describer, MockExplorerInput())
+    }
+
+    func testContentTapMatchingTabNameDoesNotGloballyRetireTab() {
+        // An organic content row whose OCR text equals the declared tab name:
+        // tapping it must NOT mark the tab globally visited — the real tab
+        // stays injectable and explorable.
+        let contentRow = RankedElement(
+            point: TapPoint(text: "Recherche", tapX: 205, tapY: 300, confidence: 0.95),
+            score: 5.0, reason: "nav", displayLabel: "Recherche",
+            isBreadthNavigation: false)
+        let (explorer, describer, input) = makeSteppingExplorer(planItem: contentRow)
+        let graph = explorer.graph
+
+        _ = explorer.step(
+            describer: describer, input: input, strategy: MobileAppStrategy.self)
+
+        XCTAssertFalse(graph.globalVisitedLabels.contains("Recherche"),
+            "Content text colliding with a tab name must not globally retire the tab")
+        let plan = explorer.buildScreenPlan(
+            classified: [], visitedElements: [], icons: noisyFeedIcons)
+        XCTAssertTrue(plan.contains { $0.displayLabel == "Recherche" },
+            "The real Recherche tab must remain injectable after the content tap")
+    }
+
+    func testBreadthTabTapMarksGloballyVisited() {
+        // Tapping the actual injected tab target (breadth item) still retires
+        // it globally — one-tap-global tracking is preserved.
+        let tabAnchor = RankedElement(
+            point: TapPoint(text: "", tapX: 123, tapY: 846, confidence: 1.0),
+            score: 100, reason: "tab-synth(Recherche@1,horizontal)",
+            displayLabel: "Recherche", isBreadthNavigation: true)
+        let (explorer, describer, input) = makeSteppingExplorer(planItem: tabAnchor)
+        let graph = explorer.graph
+
+        _ = explorer.step(
+            describer: describer, input: input, strategy: MobileAppStrategy.self)
+
+        XCTAssertTrue(graph.globalVisitedLabels.contains("Recherche"),
+            "A breadth tab tap must mark the tab globally visited")
     }
 }

@@ -30,7 +30,10 @@ enum MobileAppStrategy: ExplorationStrategy {
         elements: [TapPoint], hints: [String]
     ) -> ScreenType {
         let hasBackChevron = hints.contains { $0.contains("Back navigation") }
+        // Text-label clustering catches labeled bars; the detector's tab-bar
+        // hint catches icon-only bars (Instagram) whose tabs carry no OCR text.
         let hasTabBar = detectTabBar(elements: elements)
+            || hints.contains { $0.hasPrefix(NavigationHintDetector.tabBarHintPrefix) }
 
         // Modal detection: "Close", "Done", "Cancel" in top area
         let topElements = elements.filter { $0.tapY < LandmarkPicker.headerZoneRange.upperBound }

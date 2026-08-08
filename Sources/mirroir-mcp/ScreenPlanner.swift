@@ -302,29 +302,41 @@ enum ScreenPlanner {
     /// Elements with higher Q-values (led to new screens in past runs) get priority.
     /// Elements with zero Q-value (dead taps in past runs) are demoted to the end.
     ///
+    /// Breadth-front invariant: breadth_navigation elements (APP.md tab targets
+    /// injected at the front of the plan) keep their existing relative order at
+    /// the front of the returned plan and are neither boosted nor re-sorted.
+    /// Unknown labels default to q=1.0 (+2.0 boost), so boosting everything
+    /// would let content items outrank the deliberately front-injected tabs.
+    ///
     /// - Parameters:
     ///   - plan: The ranked plan to boost.
     ///   - qValues: Map from element displayLabel to Q-value (from persisted graph).
-    /// - Returns: Plan re-sorted by Q-boosted score.
+    /// - Returns: Breadth items first (order preserved), remainder re-sorted by
+    ///   Q-boosted score.
     static func applyQBoost(
         plan: [RankedElement],
         qValues: [String: Double]
     ) -> [RankedElement] {
         guard !qValues.isEmpty else { return plan }
-        return plan
-            .map { element in
-                let q = qValues[element.displayLabel] ?? 1.0
-                let boost = q * qValueWeight
+        let breadthFront = plan.filter { $0.isBreadthNavigation }
+        var boosted: [RankedElement] = plan
+            .filter { !$0.isBreadthNavigation }
+            .map { (element: RankedElement) -> RankedElement in
+                let q: Double = qValues[element.displayLabel] ?? 1.0
+                let boost: Double = q * qValueWeight
+                let qLabel: String = String(format: "%.1f", q)
+                let reason: String = element.reason + ", q=" + qLabel
                 return RankedElement(
                     point: element.point,
                     score: element.score + boost,
-                    reason: element.reason + ", q=\(String(format: "%.1f", q))",
+                    reason: reason,
                     displayLabel: element.displayLabel,
                     isBreadthNavigation: element.isBreadthNavigation
                 )
             }
-            // Same score-first ordering as the initial plan rank — see
-            // comment on the primary sort site above.
-            .sorted { $0.score != $1.score ? $0.score > $1.score : $0.point.tapY < $1.point.tapY }
+        // Same score-first ordering as the initial plan rank — see
+        // comment on the primary sort site above.
+        boosted.sort { $0.score != $1.score ? $0.score > $1.score : $0.point.tapY < $1.point.tapY }
+        return breadthFront + boosted
     }
 }

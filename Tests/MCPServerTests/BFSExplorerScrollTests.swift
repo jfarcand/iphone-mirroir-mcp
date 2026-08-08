@@ -383,6 +383,117 @@ final class BFSExplorerScrollTests: XCTestCase {
             "Should have performed at least one scroll-down swipe")
     }
 
+    // MARK: - Calibration Scroll Cap From Recipe
+
+    /// A matched recipe declaring calibrationScrollLimit=2 must cap calibration
+    /// scrolling at 2 forward swipes even when every scroll reveals novel
+    /// elements (infinite feed) and the budget default (15) would allow more.
+    func testCalibrationScrollCappedByRecipeLimit() {
+        let session = ExplorationSession()
+        session.start(appName: "TestApp", goal: "test")
+        session.capture(
+            elements: makeElements(["Post1"]), hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
+        )
+
+        let recipe = ScreenRecipe(
+            name: "feed", platform: "ios", description: "Feed",
+            requiredComponents: ["feed-post"],
+            supportingComponents: [], forbiddenComponents: [],
+            navigationModel: RecipeNavigationModel(
+                type: "infinite-scroll", backtrack: "tap-tab",
+                scrollBehavior: "infinite", depthPattern: "flat",
+                calibrationScrollLimit: 2),
+            explorationHints: [])
+        session.setRecipeMatch(RecipeMatch(recipe: recipe, score: 10, reason: "test"))
+
+        let budget = ExplorationBudget(
+            maxDepth: 2, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 1,
+            skipPatterns: ExplorationBudget.default.skipPatterns
+        )
+        // No bridge → scrollAndCollect uses the simple scroll loop.
+        let explorer = BFSExplorer(session: session, budget: budget)
+        XCTAssertEqual(explorer.effectiveCalibrationScrollLimit, 2,
+            "Recipe cap should override the budget default (15)")
+
+        // Every scroll reveals a new post — only the cap can stop the loop.
+        var texts = ["Post1"]
+        let screens: [ScreenDescriber.DescribeResult] = (2...20).map { i in
+            texts.append("Post\(i)")
+            return makeScreen(texts)
+        }
+        let describer = MockExplorerDescriber(screens: screens)
+        let input = MockExplorerInput()
+
+        let graph = session.currentGraph
+        let data = explorer.scrollAndCollect(
+            fingerprint: graph.rootFingerprint, describer: describer, input: input
+        )
+
+        XCTAssertEqual(data.scrollCount, 2, "Recipe cap should stop calibration at 2 scrolls")
+        // Forward calibration swipes go top-to-bottom on screen (fromY > toY);
+        // scroll-back swipes are the reverse.
+        let forwardSwipes = input.swipes.filter { $0.fromY > $0.toY }
+        XCTAssertEqual(forwardSwipes.count, 2,
+            "Should perform exactly 2 forward calibration swipes")
+    }
+
+    /// Same recipe cap, but through the bridge path: with a bridge present,
+    /// scrollAndCollect delegates to describeFullPage/CalibrationScroller and
+    /// must pass the effective (recipe-capped) limit as maxScrolls.
+    func testCalibrationScrollCapReachesCalibrationScroller() {
+        let session = ExplorationSession()
+        session.start(appName: "TestApp", goal: "test")
+        session.capture(
+            elements: makeElements(["Post1"]), hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img0"
+        )
+
+        let recipe = ScreenRecipe(
+            name: "feed", platform: "ios", description: "Feed",
+            requiredComponents: ["feed-post"],
+            supportingComponents: [], forbiddenComponents: [],
+            navigationModel: RecipeNavigationModel(
+                type: "infinite-scroll", backtrack: "tap-tab",
+                scrollBehavior: "infinite", depthPattern: "flat",
+                calibrationScrollLimit: 2),
+            explorationHints: [])
+        session.setRecipeMatch(RecipeMatch(recipe: recipe, score: 10, reason: "test"))
+
+        let budget = ExplorationBudget(
+            maxDepth: 2, maxScreens: 30, maxTimeSeconds: 300,
+            maxActionsPerScreen: 5, scrollLimit: 1,
+            skipPatterns: ExplorationBudget.default.skipPatterns
+        )
+        let explorer = BFSExplorer(
+            session: session, budget: budget, bridge: StubWindowBridge()
+        )
+
+        // Every scroll reveals a new post — only the cap can stop the scroller.
+        var texts = ["Post1"]
+        var screens: [ScreenDescriber.DescribeResult] = [makeScreen(texts)]
+        for i in 2...20 {
+            texts.append("Post\(i)")
+            screens.append(makeScreen(texts))
+        }
+        let describer = MockExplorerDescriber(screens: screens)
+        let input = MockExplorerInput()
+
+        let graph = session.currentGraph
+        let data = explorer.scrollAndCollect(
+            fingerprint: graph.rootFingerprint, describer: describer, input: input
+        )
+
+        XCTAssertTrue(data.usedCalibrationScroller,
+            "A bridge must route calibration through CalibrationScroller")
+        XCTAssertEqual(data.scrollCount, 2,
+            "CalibrationScroller must receive the recipe-capped maxScrolls")
+        let forwardSwipes = input.swipes.filter { $0.fromY > $0.toY }
+        XCTAssertEqual(forwardSwipes.count, 2,
+            "Should perform exactly 2 forward calibration swipes via the bridge path")
+    }
+
     /// Without skipCalibration, scroll-exhausted screens should NOT scroll further.
     func testScrollExhaustedBlocksWithoutSkipCalibration() {
         let session = ExplorationSession()
