@@ -51,10 +51,26 @@ final class FrontierManager: @unchecked Sendable {
 
     /// Pop the next frontier screen or return nil if exhausted. Also resets
     /// `actionsOnCurrentScreen` since a new screen means a fresh action budget.
+    ///
+    /// Deep-lineage screens (reached through an APP.md `## Deep Tabs` tab) are
+    /// preferred over FIFO order: the first unconsumed deep-lineage entry is
+    /// swapped to the cursor position, so a declared deep subtree is explored
+    /// before sibling breadth. With no deep-lineage entries pending — the
+    /// universal case for apps without a `## Deep Tabs` section — dequeue
+    /// order is plain FIFO, unchanged.
     func dequeueNext() -> FrontierScreen? {
         lock.lock()
         defer { lock.unlock() }
         guard _frontierIndex < _frontier.count else { return nil }
+        let cursor = _frontier[_frontierIndex]
+        if cursor.depth > 0, !cursor.isDeepLineage,
+           let deepIndex = _frontier[_frontierIndex...].firstIndex(where: { $0.isDeepLineage }) {
+            // Move (not swap) the deep entry to the cursor so the remaining
+            // breadth entries keep their relative FIFO order. The root seed
+            // (depth 0) is never jumped — exploration always starts there.
+            let deep = _frontier.remove(at: deepIndex)
+            _frontier.insert(deep, at: _frontierIndex)
+        }
         let target = _frontier[_frontierIndex]
         _frontierIndex += 1
         _actionsOnCurrentScreen = 0

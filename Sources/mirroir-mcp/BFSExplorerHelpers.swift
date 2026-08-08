@@ -294,7 +294,12 @@ extension BFSExplorer {
             if visited.contains(item.displayLabel) || globalVisited.contains(item.displayLabel) {
                 continue
             }
-            if strategy.shouldSkip(elementText: item.point.text, budget: budget) {
+            // Skip-check the display label, not the raw OCR text: synthesized
+            // icon-only tab anchors carry empty text and only the label names
+            // them ("Créer"), so a text-only check lets Skip-listed tabs
+            // through to the tap.
+            let skipKey = item.point.text.isEmpty ? item.displayLabel : item.point.text
+            if strategy.shouldSkip(elementText: skipKey, budget: budget) {
                 graph.markElementVisited(fingerprint: currentFP, elementText: item.displayLabel)
                 continue
             }

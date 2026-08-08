@@ -47,17 +47,36 @@ enum AppSwitcherDismissal {
         }
         usleep(EnvConfig.toolSettlingDelayUs)
 
-        // 2. Capture foreground OCR — fingerprint for card matching.
-        guard let appOcr = describer.describe(), !appOcr.elements.isEmpty else {
-            return "Failed to capture foreground OCR for '\(appName)'"
+        // 2. Capture foreground OCR — fingerprint for card matching. A cold
+        // launch shows a near-textless splash screen first; a fingerprint taken
+        // there is too sparse to match the card later (the locator requires
+        // minimum matched-text evidence), so wait for the UI to render real
+        // content before accepting the capture. Warm launches pass on the
+        // first attempt.
+        var foregroundOcr: ScreenDescriber.DescribeResult?
+        for attempt in 1 ... EnvConfig.appForegroundReadyRetries {
+            if let capture = describer.describe(),
+               capture.elements.count >= EnvConfig.appForegroundReadyMinElements {
+                foregroundOcr = capture
+                break
+            }
+            DebugLog.log("reset_app",
+                "foreground OCR sparse (attempt \(attempt)) — waiting for app to render")
+            usleep(EnvConfig.toolSettlingDelayUs * 2)
+        }
+        guard let appOcr = foregroundOcr, !appOcr.elements.isEmpty else {
+            return "Failed to capture foreground OCR for '\(appName)' — app never rendered content"
         }
 
-        // 3. Open App Switcher.
+        // 3. Open App Switcher, then wait out the card entry animation: the
+        // just-foregrounded app's card slides from center to its resting slot
+        // right of center. OCR captured mid-slide aims the dismiss drag at a
+        // position the card has already left (see appSwitcherOpenSettleUs).
         guard menuBridge.triggerMenuAction(menu: "View", item: "App Switcher") else {
             _ = menuBridge.triggerMenuAction(menu: "View", item: "Home Screen")
             return "Failed to open App Switcher. Is '\(bridge.targetName)' running?"
         }
-        usleep(EnvConfig.toolSettlingDelayUs)
+        usleep(EnvConfig.appSwitcherOpenSettleUs)
 
         // 4. Capture App Switcher OCR.
         guard let switcherOcr = describer.describe() else {
@@ -83,9 +102,12 @@ enum AppSwitcherDismissal {
         }
         DebugLog.log("reset_app", "located '\(appName)' card at x=\(Int(cardX)) via OCR match")
 
-        // 6. Drag the card upward.
+        // 6. Drag the card upward. The end point must stay inside the mirrored
+        // content: window-relative y=0 is the macOS title-bar edge, and a drag
+        // released there is a cancelled touch to iOS — the card snaps back
+        // (observed on-device: to-y=0 never dismissed, to-y=80 did).
         let cardY = Double(windowSize.height) * EnvConfig.appSwitcherCardYFraction
-        let toY = max(0, cardY - EnvConfig.appSwitcherSwipeDistance)
+        let toY = max(EnvConfig.appSwitcherSwipeTopMarginPt, cardY - EnvConfig.appSwitcherSwipeDistance)
         if let error = input.drag(
             fromX: cardX, fromY: cardY,
             toX: cardX, toY: toY,
@@ -94,19 +116,26 @@ enum AppSwitcherDismissal {
             _ = menuBridge.triggerMenuAction(menu: "View", item: "Home Screen")
             return "Failed to swipe app card: \(error)"
         }
-        usleep(EnvConfig.toolSettlingDelayUs)
-
         // 6b. Verify the card actually dismissed. The drag posts successfully
         // (CGEvent=OK) even when the flick fails to fling the card off-screen,
-        // so re-OCR the switcher and re-locate the app: if its card still
-        // matches, report failure rather than the false success that previously
-        // masked a stuck card.
+        // so re-OCR the switcher after the re-layout settles. "Still present"
+        // requires BOTH signals: the content-fingerprint re-locates (stray
+        // token overlap alone kept reporting long-dismissed cards as present)
+        // AND the switcher's own app-name label for this app is still rendered
+        // in the label band — every genuinely stuck card shows its label;
+        // every observed false positive lacked it.
+        usleep(EnvConfig.appSwitcherOpenSettleUs)
         if let postDrag = describer.describe(),
            AppSwitcherCardLocator.locateCardX(
                appElements: appOcr.elements,
                switcherElements: postDrag.elements,
                windowWidth: Double(windowSize.width)
-           ) != nil {
+           ) != nil,
+           AppSwitcherCardLocator.labelBandContains(
+               appName: appName,
+               switcherElements: postDrag.elements,
+               windowHeight: Double(windowSize.height)
+           ) {
             _ = menuBridge.triggerMenuAction(menu: "View", item: "Home Screen")
             return "Swiped '\(appName)' card but it is still in the App Switcher — dismissal did not take"
         }

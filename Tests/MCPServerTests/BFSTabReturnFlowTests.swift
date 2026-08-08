@@ -39,7 +39,7 @@ final class BFSTabReturnFlowTests: XCTestCase {
             resetBeforeExplore: false, obstacleMode: .auto, context: "test",
             obstacles: [], skipElements: [], credentials: [:], hints: [],
             tabs: tabs, tabLayout: TabLayout(orientation: .horizontal, edge: .bottom),
-            simulator: nil
+            deepTabs: [], simulator: nil
         )
     }
 

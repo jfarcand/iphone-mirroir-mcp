@@ -120,6 +120,51 @@ final class AppForegroundDetectorTests: XCTestCase {
         XCTAssertLessThan(similarity, AppForegroundDetector.matchThreshold)
     }
 
+    // MARK: - Foreign-app guard
+
+    func testForeignAppDetectedWithZeroOverlap() {
+        // The incident case: a failed pre-explore reset left Mail foreground;
+        // its screen shares no tokens with the target's graph — must be foreign.
+        persistRoot([
+            tap("Votre story"), tap("Suggestions pour vous"),
+            tap("festival_de_la_poutine"), tap("Recherche"),
+        ])
+        let mail = [
+            tap("Boîte de réception"), tap("Votre liste de visionnement"),
+            tap("Se désabonner"), tap("Provient d'une liste de distribution"),
+        ]
+        XCTAssertTrue(
+            AppForegroundDetector.looksForeign(elements: mail, appName: appName),
+            "A screen with no token overlap must be treated as a foreign app")
+    }
+
+    func testChurnedFeedIsNotForeign() {
+        // Feed content rotates run to run, but chrome tokens persist — a churned
+        // view of the target must never be declared foreign (it would abort
+        // legitimate explores).
+        persistRoot([
+            tap("Votre story"), tap("Suggestions pour vous"),
+            tap("old_username_a"), tap("old caption text one"),
+            tap("old_username_b"), tap("old caption text two"),
+        ])
+        let churned = [
+            tap("Votre story"),  // stable chrome survives
+            tap("new_username_c"), tap("completely new caption"),
+            tap("new_username_d"), tap("another new caption"),
+            tap("yet another post line"),
+        ]
+        XCTAssertFalse(
+            AppForegroundDetector.looksForeign(elements: churned, appName: appName),
+            "Shared chrome must keep a churned target screen above the foreign floor")
+    }
+
+    func testNoGraphIsNeverForeign() {
+        let anything = [tap("Boîte de réception"), tap("Se désabonner")]
+        XCTAssertFalse(
+            AppForegroundDetector.looksForeign(elements: anything, appName: appName),
+            "First-ever explores have no fingerprint — must not be blocked")
+    }
+
     // MARK: - Jaccard math directly
 
     func testJaccardIgnoresIconPlaceholdersAndEmpty() {

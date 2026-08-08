@@ -72,7 +72,7 @@ final class ExplorerTrapRecoveryTests: XCTestCase {
             appName: "Instagram", schemaVersion: 1, locale: "fr_CA", archetype: nil,
             resetBeforeExplore: false, obstacleMode: .auto, context: "test",
             obstacles: cameraObstacles, skipElements: [], credentials: [:], hints: [],
-            tabs: [], tabLayout: nil, simulator: nil)
+            tabs: [], tabLayout: nil, deepTabs: [], simulator: nil)
     }
 
     func testBFSReturnsTrappedAndResetsToRootOnReArmingCamera() {

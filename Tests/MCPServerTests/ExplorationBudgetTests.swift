@@ -162,4 +162,56 @@ final class ExplorationBudgetTests: XCTestCase {
         XCTAssertTrue(budget.shouldSkipElement(text: "Subscribe Now"))
         XCTAssertTrue(budget.shouldSkipElement(text: "Purchase"))
     }
+
+    // MARK: - Regex Skip Patterns
+
+    private func makeBudget(patterns: [String]) -> ExplorationBudget {
+        ExplorationBudget(
+            maxDepth: 3, maxScreens: 10, maxTimeSeconds: 60,
+            maxActionsPerScreen: 5, scrollLimit: 3, skipPatterns: patterns)
+    }
+
+    func testSlashWrappedPatternMatchesAsRegex() {
+        // The Instagram like-count row whose "Aimé par" prefix OCR drops:
+        // "et N autres" must match for any count without a literal "autres"
+        // entry that would also block an "Autres" nav label.
+        let budget = makeBudget(patterns: [#"/et \d+ autres/"#])
+
+        XCTAssertTrue(budget.shouldSkipElement(
+            text: "rearcand, egignac, colin.stcyr_ et 64 autres"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "marie et 3 autres"))
+        XCTAssertFalse(budget.shouldSkipElement(text: "Autres"),
+            "A bare nav label must not match the count-specific regex")
+        XCTAssertFalse(budget.shouldSkipElement(text: "et autres choses"),
+            "Without a count the regex must not match")
+    }
+
+    func testRegexMatchingIsCaseInsensitive() {
+        let budget = makeBudget(patterns: [#"/et \d+ autres/"#])
+        XCTAssertTrue(budget.shouldSkipElement(text: "Rearcand ET 12 AUTRES"))
+    }
+
+    func testInvalidRegexFallsBackToLiteralSubstring() {
+        // "/[/" does not compile; the whole entry is then matched literally,
+        // so only text containing the literal "/[/" is skipped.
+        let budget = makeBudget(patterns: ["/[/"])
+
+        XCTAssertTrue(budget.shouldSkipElement(text: "path /[/ fragment"))
+        XCTAssertFalse(budget.shouldSkipElement(text: "ordinary label"))
+    }
+
+    func testPlainEntriesStillMatchAsSubstrings() {
+        let budget = makeBudget(patterns: ["Plus tard", #"/et \d+ autres/"#])
+
+        XCTAssertTrue(budget.shouldSkipElement(text: "Plus tard • Télécharger"))
+        XCTAssertTrue(budget.shouldSkipElement(text: "a et 5 autres b"))
+        XCTAssertFalse(budget.shouldSkipElement(text: "Paramètres"))
+    }
+
+    func testLoneSlashIsNotTreatedAsRegex() {
+        // "/" is a plausible literal label; only /.../ with content in between
+        // (length > 2) enters the regex path.
+        let budget = makeBudget(patterns: ["/"])
+        XCTAssertTrue(budget.shouldSkipElement(text: "On/Off"))
+    }
 }

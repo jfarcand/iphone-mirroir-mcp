@@ -14,6 +14,11 @@ struct FrontierScreen: Sendable {
     let pathFromRoot: [PathSegment]
     /// BFS depth (0 = root).
     let depth: Int
+    /// True when this screen was reached through an APP.md `## Deep Tabs` tab
+    /// (directly or via an ancestor). `FrontierManager.dequeueNext` prefers
+    /// deep-lineage screens so a declared deep subtree (e.g. Profil →
+    /// Paramètres) spends exploration budget before sibling breadth.
+    var isDeepLineage: Bool = false
 }
 
 /// One step in the path from root to a frontier screen.

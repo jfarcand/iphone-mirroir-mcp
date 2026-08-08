@@ -163,6 +163,74 @@ final class AppSwitcherCardLocatorTests: XCTestCase {
         }
     }
 
+    func testSingleShortTokenDoesNotLocate() {
+        // One stray common word shared with a neighboring card must not count
+        // as finding the app's card — this exact ghost match made the
+        // post-dismiss verification report an already-dismissed card as still
+        // present (the dismissed app's rich fingerprint intersected the
+        // remaining cards on a single short token).
+        let app: [TapPoint] = [
+            tap("Votre story", x: 60), tap("dans", x: 200),
+            tap("un long caption de publication instagram", x: 210),
+        ]
+        let switcher: [TapPoint] = [tap("dans", x: 206)]
+        XCTAssertNil(
+            AppSwitcherCardLocator.locateCardX(
+                appElements: app, switcherElements: switcher, windowWidth: 410
+            ),
+            "A single short-token intersection is not evidence of the card")
+    }
+
+    func testRichOverlapStillLocatesAboveMinScore() {
+        // A genuine card preview shares several full lines — comfortably above
+        // the minimum-evidence floor.
+        let app: [TapPoint] = [
+            tap("Votre story", x: 60), tap("festival_de_la_poutine", x: 150),
+            tap("Suggestions pour vous", x: 210),
+        ]
+        let switcher: [TapPoint] = [
+            tap("Votre story", x: 338), tap("festival_de_la_poutine", x: 355),
+            tap("Suggestions pour vous", x: 369),
+        ]
+        let located = AppSwitcherCardLocator.locateCardX(
+            appElements: app, switcherElements: switcher, windowWidth: 410)
+        XCTAssertNotNil(located, "Rich multi-line overlap must still locate the card")
+        XCTAssertEqual(located ?? -1, 355, accuracy: 1.0)
+    }
+
+    // MARK: - Label band
+
+    func testLabelBandContainsExactAppName() {
+        let elements = [
+            tap("Instagram", x: 169, y: 145),
+            tap("Votre story", x: 338, y: 309),
+        ]
+        XCTAssertTrue(AppSwitcherCardLocator.labelBandContains(
+            appName: "Instagram", switcherElements: elements, windowHeight: 898))
+    }
+
+    func testLabelBandMatchesTruncatedPrefix() {
+        // Edge cards clip their labels ("Insta…" OCRs as "Insta").
+        let elements = [tap("Insta", x: 380, y: 142)]
+        XCTAssertTrue(AppSwitcherCardLocator.labelBandContains(
+            appName: "Instagram", switcherElements: elements, windowHeight: 898))
+    }
+
+    func testLabelBandIgnoresContentZoneText() {
+        // The app name appearing INSIDE a card's content (Instagram's own logo
+        // wordmark at feed top renders around y=220 in the card preview) is not
+        // a label — only the band above the cards counts.
+        let elements = [tap("Instagram", x: 199, y: 223)]
+        XCTAssertFalse(AppSwitcherCardLocator.labelBandContains(
+            appName: "Instagram", switcherElements: elements, windowHeight: 898))
+    }
+
+    func testLabelBandRejectsOtherAppLabels() {
+        let elements = [tap("La Presse", x: 169, y: 144), tap("Mail", x: 336, y: 143)]
+        XCTAssertFalse(AppSwitcherCardLocator.labelBandContains(
+            appName: "Instagram", switcherElements: elements, windowHeight: 898))
+    }
+
     func testFailsClosedWhenTwoCardsMatchEqually() {
         // Two non-edge cards with equal distinctive overlap — indistinguishable,
         // so the locator must fail closed rather than drag-quit a guess.

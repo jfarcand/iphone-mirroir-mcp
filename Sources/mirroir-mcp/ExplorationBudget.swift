@@ -36,7 +36,18 @@ struct ExplorationBudget: Sendable {
     let maxScoutsPerScreen: Int
 
     /// Element text patterns that should never be tapped (destructive or dangerous actions).
+    /// Plain entries match as case-insensitive substrings. Entries wrapped in
+    /// slashes (`/et \d+ autres/`) compile as case-insensitive regular
+    /// expressions — needed where a literal substring would over-block (a bare
+    /// "autres" would also skip an "Autres" nav label) or where the text varies
+    /// ("et 64 autres" for any count). An entry whose regex fails to compile
+    /// falls back to literal substring matching of the whole entry.
     let skipPatterns: [String]
+
+    /// Regex entries from `skipPatterns`, compiled once at init.
+    private let skipRegexes: [NSRegularExpression]
+    /// Substring entries from `skipPatterns`, lowercased once at init.
+    private let skipSubstrings: [String]
 
     /// Memberwise init with a default value for `maxScoutsPerScreen` to preserve backward
     /// compatibility at all existing call sites that predate the scout phase feature.
@@ -58,6 +69,21 @@ struct ExplorationBudget: Sendable {
         self.calibrationScrollLimit = calibrationScrollLimit
         self.maxScoutsPerScreen = maxScoutsPerScreen
         self.skipPatterns = skipPatterns
+
+        var regexes: [NSRegularExpression] = []
+        var substrings: [String] = []
+        for pattern in skipPatterns {
+            if pattern.count > 2, pattern.hasPrefix("/"), pattern.hasSuffix("/"),
+               let regex = try? NSRegularExpression(
+                   pattern: String(pattern.dropFirst().dropLast()),
+                   options: [.caseInsensitive]) {
+                regexes.append(regex)
+            } else {
+                substrings.append(pattern.lowercased())
+            }
+        }
+        self.skipRegexes = regexes
+        self.skipSubstrings = substrings
     }
 
     /// Default budget suitable for most mobile app explorations.
@@ -115,11 +141,14 @@ struct ExplorationBudget: Sendable {
     }
 
     /// Check if an element should be skipped based on its text.
-    /// Case-insensitive containment check against skip patterns.
+    /// Substring entries match by case-insensitive containment; `/.../` entries
+    /// match as case-insensitive regular expressions (see `skipPatterns`).
     func shouldSkipElement(text: String) -> Bool {
         let lowered = text.lowercased()
-        return skipPatterns.contains { pattern in
-            lowered.contains(pattern.lowercased())
+        if skipSubstrings.contains(where: { lowered.contains($0) }) {
+            return true
         }
+        let range = NSRange(text.startIndex..., in: text)
+        return skipRegexes.contains { $0.firstMatch(in: text, range: range) != nil }
     }
 }

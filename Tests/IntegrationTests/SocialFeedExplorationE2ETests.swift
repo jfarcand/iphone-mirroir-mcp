@@ -255,25 +255,42 @@ final class SocialFeedExplorationE2ETests: XCTestCase {
         XCTAssertTrue(explorer.completed,
             "Explorer should complete within budget. Steps:\n  \(trail(run.steps))")
 
-        // Every declared tab was plan-tapped once (breadth one-tap-global tracking).
+        // Skip-listed tabs (e.g. the Créer composer tab) are declared for anchor
+        // geometry but must never be tapped; only the rest are coverage targets.
+        let budget = ExplorationBudget.default.mergedWith(ctx.description.skipElements)
+        let explorableTabs = ctx.tabs.filter { !budget.shouldSkipElement(text: $0) }
+        let skippedTabs = ctx.tabs.filter { budget.shouldSkipElement(text: $0) }
+        XCTAssertGreaterThanOrEqual(explorableTabs.count, 3,
+            "Most tabs must remain explorable. Skipped: \(skippedTabs)")
+
+        // Every explorable tab was plan-tapped once (breadth one-tap-global tracking).
         let visited = explorer.graph.globalVisitedLabels
-        for tab in ctx.tabs {
+        for tab in explorableTabs {
             XCTAssertTrue(visited.contains(tab),
                 "Tab \"\(tab)\" was never plan-tapped as a breadth target. " +
                 "Globally visited: \(visited.sorted()). Steps:\n  \(trail(run.steps))")
         }
 
-        // Every non-root tab produced an edge — a screen reached via that label.
-        // The root tab's own tap is a same-screen dead tap, so it records no edge.
+        // Every explorable non-root tab produced an edge — a screen reached via
+        // that label. The root tab's own tap is a same-screen dead tap (no edge).
         let snapshot = explorer.graph.finalize()
-        for tab in ctx.tabs where tab != ctx.rootTitle {
+        for tab in explorableTabs where tab != ctx.rootTitle {
             XCTAssertTrue(snapshot.edges.contains { $0.displayLabel == tab },
                 "No screen was reached via tab \"\(tab)\". Edges: " +
                 snapshot.edges.map { $0.displayLabel }.joined(separator: ", "))
         }
-        XCTAssertGreaterThanOrEqual(snapshot.nodes.count, ctx.tabs.count,
-            "Root + each non-root tab screen should be distinct graph nodes. " +
-            "Got \(snapshot.nodes.count) nodes")
+        XCTAssertGreaterThanOrEqual(snapshot.nodes.count, explorableTabs.count,
+            "Root + each explorable non-root tab screen should be distinct graph " +
+            "nodes. Got \(snapshot.nodes.count) nodes")
+
+        // Safety: a Skip-listed tab must never be tapped and never gain an edge —
+        // on the real app the composer tab opens the camera flow.
+        for tab in skippedTabs {
+            XCTAssertFalse(visited.contains(tab),
+                "Skip-listed tab \"\(tab)\" was tapped — Skip must gate plan taps")
+            XCTAssertFalse(snapshot.edges.contains { $0.displayLabel == tab },
+                "Skip-listed tab \"\(tab)\" produced a navigation edge")
+        }
 
         // Exactly once: the executed action log (cache skips excluded) must not
         // contain any tab label twice. Frontier path replays are not plan

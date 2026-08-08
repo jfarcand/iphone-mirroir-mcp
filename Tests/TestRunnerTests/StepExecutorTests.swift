@@ -344,8 +344,19 @@ final class StepExecutorTests: XCTestCase {
     /// OCR with the card gone — so `AppSwitcherCardLocator` returns nil and the
     /// dismissal is confirmed rather than reported as a stuck card.
     private func resetDescribeSequence(cardText: String) -> [ScreenDescriber.DescribeResult?] {
+        // Several clustered lines: a real screen renders enough text to pass
+        // the foreground-readiness gate (appForegroundReadyMinElements), and a
+        // real card preview shares several lines with the foreground capture —
+        // AppSwitcherCardLocator requires minimum matched-text evidence, so a
+        // lone short token must not locate a card.
         let withCard = ScreenDescriber.DescribeResult(
-            elements: [TapPoint(text: cardText, tapX: 200, tapY: 400, confidence: 0.95)],
+            elements: [
+                TapPoint(text: cardText, tapX: 200, tapY: 400, confidence: 0.95),
+                TapPoint(text: "General preview row", tapX: 205, tapY: 430, confidence: 0.95),
+                TapPoint(text: "Second preview row", tapX: 203, tapY: 460, confidence: 0.95),
+                TapPoint(text: "Third preview row", tapX: 207, tapY: 490, confidence: 0.95),
+                TapPoint(text: "Fourth preview row", tapX: 204, tapY: 520, confidence: 0.95),
+            ],
             screenshotBase64: "")
         let cardGone = ScreenDescriber.DescribeResult(
             elements: [TapPoint(text: "OtherApp", tapX: 200, tapY: 400, confidence: 0.95)],
@@ -409,7 +420,13 @@ final class StepExecutorTests: XCTestCase {
         // step), but the AX menu action returns false → helper aborts before
         // opening App Switcher and reports the menu failure.
         describer.describeResult = ScreenDescriber.DescribeResult(
-            elements: [TapPoint(text: "Settings", tapX: 200, tapY: 400, confidence: 0.95)],
+            elements: [
+                TapPoint(text: "Settings", tapX: 200, tapY: 400, confidence: 0.95),
+                TapPoint(text: "General row", tapX: 205, tapY: 430, confidence: 0.95),
+                TapPoint(text: "Display row", tapX: 203, tapY: 460, confidence: 0.95),
+                TapPoint(text: "Privacy row", tapX: 207, tapY: 490, confidence: 0.95),
+                TapPoint(text: "Battery row", tapX: 204, tapY: 520, confidence: 0.95),
+            ],
             screenshotBase64: ""
         )
         bridge.menuActionResult = false
@@ -459,10 +476,16 @@ final class StepExecutorTests: XCTestCase {
         // App Switcher OCR has cards, but none of them match the launched
         // app's foreground text — locator returns nil → must NOT fall back
         // to a hard-coded x-fraction and drag a guess.
-        let foreground = TapPoint(text: "AmbiguousApp", tapX: 200, tapY: 400, confidence: 0.95)
+        let foreground = [
+            TapPoint(text: "AmbiguousApp", tapX: 200, tapY: 400, confidence: 0.95),
+            TapPoint(text: "First content row", tapX: 205, tapY: 430, confidence: 0.95),
+            TapPoint(text: "Second content row", tapX: 203, tapY: 460, confidence: 0.95),
+            TapPoint(text: "Third content row", tapX: 207, tapY: 490, confidence: 0.95),
+            TapPoint(text: "Fourth content row", tapX: 204, tapY: 520, confidence: 0.95),
+        ]
         let switcherCard = TapPoint(text: "SomethingElse", tapX: 300, tapY: 300, confidence: 0.9)
         describer.describeResults = [
-            ScreenDescriber.DescribeResult(elements: [foreground], screenshotBase64: ""),
+            ScreenDescriber.DescribeResult(elements: foreground, screenshotBase64: ""),
             ScreenDescriber.DescribeResult(elements: [switcherCard], screenshotBase64: ""),
         ]
 

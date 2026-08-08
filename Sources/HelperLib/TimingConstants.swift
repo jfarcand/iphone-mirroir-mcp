@@ -205,10 +205,38 @@ public enum TimingConstants {
     public static let appSwitcherSwipeDistance: Double = 600.0
 
     /// Swipe duration for dismissing app cards in the App Switcher (milliseconds).
-    /// Must be a fast flick: iOS reads a slow drag as scrolling the card carousel
-    /// rather than flinging the card off-screen, so the card is never dismissed.
-    /// Verified on-device — a ~120ms flick force-quits; 200ms does not.
-    public static let appSwitcherSwipeDurationMs: Int = 120
+    /// Calibration history: ~120ms force-quit on earlier iOS while 200ms did
+    /// not; after the trackpad-faithful gesture synthesis changes, 120ms drags
+    /// post successfully but iOS 26 no longer takes the dismissal ("card still
+    /// in the App Switcher"), while ~400ms deliberate drags dismissed reliably
+    /// (verified on-device against iOS 26.5.1, three consecutive dismissals).
+    /// A vertical drag at this duration does not scroll the carousel — the
+    /// carousel pans horizontally.
+    public static let appSwitcherSwipeDurationMs: Int = 400
+
+    /// Minimum window-relative Y (points) where a card-dismiss drag may end.
+    /// Window y=0 is the macOS title-bar edge — releasing a drag there is a
+    /// cancelled touch to iOS and the card snaps back. 80pt keeps the release
+    /// inside the mirrored content (device-verified dismissal end point).
+    public static let appSwitcherSwipeTopMarginPt: Double = 80.0
+
+    /// Minimum OCR elements for a foreground capture to serve as a card-match
+    /// fingerprint. A cold-launch splash screen yields fewer; real app UIs
+    /// render well above this.
+    public static let appForegroundReadyMinElements: Int = 5
+
+    /// Attempts to capture a content-rich foreground fingerprint before
+    /// giving up (cold launches render within 2-4 seconds).
+    public static let appForegroundReadyRetries: Int = 4
+
+    /// Settle delay after opening the App Switcher before capturing OCR for
+    /// card location (microseconds). On iOS 26 the just-foregrounded app's
+    /// card enters centered and then slides to its resting slot right of
+    /// center while the previous app settles in the middle; OCR captured
+    /// mid-slide aims the dismiss drag at a position the card has already
+    /// left (device-verified: ~1s after opening the card still reads near
+    /// center; the settled layout is what the drag must target).
+    public static let appSwitcherOpenSettleUs: UInt32 = 2_500_000
 
     /// Maximum horizontal swipes to search for an app card in the App Switcher carousel.
     /// Covers ~15 apps (3 visible per view × 5 swipes).

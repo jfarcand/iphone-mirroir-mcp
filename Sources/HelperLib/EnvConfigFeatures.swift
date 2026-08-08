@@ -54,6 +54,22 @@ extension EnvConfig {
         readInt("appSwitcherSwipeDurationMs", default: TimingConstants.appSwitcherSwipeDurationMs)
     }
 
+    public static var appSwitcherSwipeTopMarginPt: Double {
+        readDouble("appSwitcherSwipeTopMarginPt", default: TimingConstants.appSwitcherSwipeTopMarginPt)
+    }
+
+    public static var appSwitcherOpenSettleUs: UInt32 {
+        readUInt32("appSwitcherOpenSettleUs", default: TimingConstants.appSwitcherOpenSettleUs)
+    }
+
+    public static var appForegroundReadyMinElements: Int {
+        readInt("appForegroundReadyMinElements", default: TimingConstants.appForegroundReadyMinElements)
+    }
+
+    public static var appForegroundReadyRetries: Int {
+        readInt("appForegroundReadyRetries", default: TimingConstants.appForegroundReadyRetries)
+    }
+
     public static var appSwitcherMaxSwipes: Int {
         readInt("appSwitcherMaxSwipes", default: TimingConstants.appSwitcherMaxSwipes)
     }

@@ -63,6 +63,28 @@ enum AppForegroundDetector {
         return .unmatched(similarity: bestSimilarity)
     }
 
+    /// Similarity floor below which the current screen is treated as a FOREIGN
+    /// app rather than a churned view of the target. The target's own screens
+    /// always share some chrome tokens with the persisted graph even when feed
+    /// content fully rotates; a different app (Mail, Messages) shares
+    /// essentially none. Tapping into a foreign app is never acceptable — a
+    /// failed pre-explore reset once left Mail foreground and the explorer
+    /// tapped Instagram tab anchors into Mail's toolbar.
+    static let foreignAppSimilarityFloor: Double = 0.05
+
+    /// Whether the current screen looks like a DIFFERENT app than `appName`.
+    /// Conservative on purpose: with no persisted graph there is nothing to
+    /// compare against, so the screen is never declared foreign (first-ever
+    /// explores must proceed). Spotlight is not foreign — it precedes launch.
+    static func looksForeign(elements: [TapPoint], appName: String) -> Bool {
+        switch detect(elements: elements, appName: appName) {
+        case .unmatched(let similarity):
+            return similarity < foreignAppSimilarityFloor
+        case .alreadyForeground, .spotlightVisible, .noPersistedGraph:
+            return false
+        }
+    }
+
     /// Jaccard similarity between two element sets, comparing normalized text.
     /// "icon" placeholders and empty strings are excluded — only meaningful labels count.
     static func jaccardSimilarity(current: [TapPoint], root: [TapPoint]) -> Double {

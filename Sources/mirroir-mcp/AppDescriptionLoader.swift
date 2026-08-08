@@ -123,6 +123,7 @@ enum AppDescriptionLoader {
             hints: description.hints,
             tabs: description.tabs,
             tabLayout: description.tabLayout,
+            deepTabs: description.deepTabs,
             simulator: description.simulator
         )
     }

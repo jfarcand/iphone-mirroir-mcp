@@ -314,6 +314,46 @@ final class AppDescriptionTests: XCTestCase {
         XCTAssertEqual(desc?.hints[0], "First hint")
     }
 
+    func testParseDeepTabs() {
+        let content = """
+        ---
+        version: 1
+        app: MyApp
+        ---
+
+        # MyApp
+
+        ## Structure
+
+        Social app with 3 tabs: Home, Search, Profile.
+
+        ## Deep Tabs
+
+        - Profile
+        """
+
+        let desc = AppDescriptionParser.parse(content: content)
+        XCTAssertEqual(desc?.deepTabs, ["Profile"])
+    }
+
+    func testDeepTabsDefaultToEmpty() {
+        let content = """
+        ---
+        version: 1
+        app: MyApp
+        ---
+
+        # MyApp
+
+        ## Structure
+
+        Social app with 2 tabs: Home, Profile.
+        """
+
+        let desc = AppDescriptionParser.parse(content: content)
+        XCTAssertEqual(desc?.deepTabs, [])
+    }
+
 }
 // Loader-level integration (filesystem walk + diacritics match) was removed:
 // parallel XCTest runs can't safely share a CWD swap, and the walk itself is

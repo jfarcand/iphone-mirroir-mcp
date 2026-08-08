@@ -283,21 +283,21 @@ extension MirroirMCP {
                 input: ctx.input,
                 describer: ctx.describer
             ) {
-                // Non-fatal: the force-quit fails closed (it never drags an
-                // unverified card, so it cannot quit the wrong app). Rather than
-                // abort the explore, log and continue — the app is already
-                // relaunched, just exploring from its current state instead of a
-                // freshly-reset one.
+                // Non-fatal here because the Spotlight launch below re-fronts
+                // the target and the post-launch foreground guard aborts if it
+                // did not take. A failed dismissal is NOT free of side effects:
+                // the drag can tap-select a different card (observed: Mail),
+                // so continuing without the guard would tap into a foreign app.
                 DebugLog.log("explore",
                     "reset_before_explore skipped for '\(appName)': \(resetError) — "
-                    + "exploring from current state")
+                    + "relying on relaunch + foreground guard")
             }
         }
 
         // Skip Spotlight launch if iPhone is already showing the target app.
         // reset_before_explore always relaunches; otherwise we OCR-fingerprint
         // the current screen against the persisted graph root and skip on match.
-        let firstResult: ScreenDescriber.DescribeResult
+        var firstResult: ScreenDescriber.DescribeResult
         if !mustReset,
            let preLaunch = ctx.describer.describe(),
            case .alreadyForeground(let similarity) = AppForegroundDetector.detect(
@@ -309,6 +309,28 @@ extension MirroirMCP {
             switch launchAndWait(appName: appName, ctx: ctx) {
             case .success(let result):
                 firstResult = result
+            case .failure(let failure):
+                return .error(failure.message)
+            }
+        }
+
+        // Foreground guard: never explore a screen that looks like a DIFFERENT
+        // app. A subverted launch (Spotlight over a stuck App Switcher, a
+        // failed reset that tap-selected another card) can leave a foreign app
+        // frontmost — tapping exploration anchors into someone's Mail is the
+        // failure mode this exists to stop. One relaunch retry, then abort.
+        if AppForegroundDetector.looksForeign(elements: firstResult.elements, appName: appName) {
+            DebugLog.log("explore",
+                "foreground looks foreign to '\(appName)' — retrying launch before aborting")
+            switch launchAndWait(appName: appName, ctx: ctx) {
+            case .success(let retry):
+                if AppForegroundDetector.looksForeign(elements: retry.elements, appName: appName) {
+                    return .error(
+                        "Aborting explore: the foreground screen does not look like "
+                        + "'\(appName)' even after relaunching. Bring the app to the "
+                        + "foreground manually and retry.")
+                }
+                firstResult = retry
             case .failure(let failure):
                 return .error(failure.message)
             }

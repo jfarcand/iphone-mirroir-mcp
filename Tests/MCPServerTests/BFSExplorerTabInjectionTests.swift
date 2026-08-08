@@ -32,7 +32,7 @@ final class BFSExplorerTabInjectionTests: XCTestCase {
             appName: "TestApp", schemaVersion: 1, locale: "fr_CA", archetype: nil,
             resetBeforeExplore: false, obstacleMode: .auto, context: "test",
             obstacles: [], skipElements: [], credentials: [:], hints: [],
-            tabs: tabs, tabLayout: tabLayout, simulator: nil
+            tabs: tabs, tabLayout: tabLayout, deepTabs: [], simulator: nil
         )
     }
 
@@ -236,6 +236,45 @@ final class BFSExplorerTabInjectionTests: XCTestCase {
         XCTAssertEqual(resolved?.displayLabel, "Reels")
         XCTAssertEqual(resolved?.point.tapX ?? -1, 205, accuracy: 0.5)
         XCTAssertEqual(resolved?.point.tapY ?? -1, 846, accuracy: 0.5)
+    }
+
+    func testSkipListedSynthesizedAnchorIsNeverResolved() {
+        // A Skip-listed tab (e.g. a Créer composer tab) is declared for anchor
+        // geometry but must never be tapped. Synthesized anchors carry empty
+        // point text, so the skip gate must check the display label — a
+        // text-only check silently lets every icon-only tab through.
+        let session = ExplorationSession()
+        session.start(appName: "TestApp", goal: "test")
+        session.setAppDescription(makeAppDescription(tabs: instagramTabs))
+        session.capture(
+            elements: makeExplorerElements(["Feed item"]), hints: [], icons: [],
+            actionType: nil, arrivedVia: nil, screenshotBase64: "img0")
+        let budget = ExplorationBudget.default.mergedWith(["Créer"])
+        let explorer = BFSExplorer(session: session, budget: budget)
+        explorer.markStarted()
+
+        let graph = session.currentGraph
+        let fp = graph.rootFingerprint
+        let composer = RankedElement(
+            point: TapPoint(text: "", tapX: 205, tapY: 846, confidence: 1.0),
+            score: 100, reason: "tab-synth(Créer@2,horizontal)",
+            displayLabel: "Créer", isBreadthNavigation: true)
+        let profil = RankedElement(
+            point: TapPoint(text: "", tapX: 369, tapY: 846, confidence: 1.0),
+            score: 100, reason: "tab-synth(Profil@4,horizontal)",
+            displayLabel: "Profil", isBreadthNavigation: true)
+        graph.setScreenPlan(for: fp, plan: [composer, profil])
+
+        let viewport = makeExplorerElements(["Feed item"])
+        let resolved = explorer.resolveNextPlanItem(
+            currentFP: fp, viewportElements: viewport,
+            describer: MockExplorerDescriber(screens: [
+                ScreenDescriber.DescribeResult(elements: viewport, screenshotBase64: "img")
+            ]),
+            input: MockExplorerInput(), strategy: MobileAppStrategy.self)
+
+        XCTAssertEqual(resolved?.displayLabel, "Profil",
+            "The Skip-listed anchor must be passed over for the next explorable tab")
     }
 
     // MARK: - No tabs declared

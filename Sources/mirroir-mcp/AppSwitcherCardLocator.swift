@@ -42,6 +42,14 @@ enum AppSwitcherCardLocator {
     /// closed (return nil) rather than drag a guess and quit the wrong app.
     static let ambiguityMargin: Double = 1.5
 
+    /// Minimum total matched text length for the winning cluster. A genuine
+    /// card preview shares many lines with the foreground capture (or at least
+    /// one long distinctive token); one or two short common tokens (a stray
+    /// French word on a neighboring card) can otherwise form a single-cluster
+    /// "unambiguous" hit — which made the post-dismiss verification report a
+    /// long-gone card as still present.
+    static let minClusterScore: Int = 10
+
     /// Locate the X coordinate of the just-launched app's card in App Switcher
     /// OCR by matching against the app's foreground OCR text. Returns nil — so
     /// the caller fails closed and never drags — when no card can be located
@@ -95,7 +103,7 @@ enum AppSwitcherCardLocator {
             }
             .sorted { $0.score > $1.score }
 
-        guard let best = scored.first else { return nil }
+        guard let best = scored.first, best.score >= minClusterScore else { return nil }
         // Fail closed on a near-tie between two cards.
         if scored.count >= 2 {
             let runnerUp = scored[1].score
@@ -104,6 +112,31 @@ enum AppSwitcherCardLocator {
             }
         }
         return best.xs[best.xs.count / 2]
+    }
+
+    /// Window-height fraction bounding the switcher's app-name label band.
+    /// iOS renders each card's app name above the card (~y=140-150 on a 898pt
+    /// window); labels never appear below ~20% of the window.
+    static let labelBandMaxYFraction: Double = 0.20
+
+    /// Whether the switcher OCR shows `appName` in the card label band.
+    /// The label is the switcher's own rendering of the app's display name —
+    /// a far stronger card-presence signal than content-fingerprint matching,
+    /// which stray token overlap can fool. Truncated labels ("Insta…") are
+    /// matched by prefix (≥4 chars) against the app name.
+    static func labelBandContains(
+        appName: String, switcherElements: [TapPoint], windowHeight: Double
+    ) -> Bool {
+        let name = normalize(appName)
+        guard name.count >= 2 else { return false }
+        let maxY = windowHeight * labelBandMaxYFraction
+        return switcherElements.contains { el in
+            guard el.tapY <= maxY else { return false }
+            let label = normalize(el.text)
+            if label == name { return true }
+            // OCR of a clipped edge-card label: a ≥4-char prefix of the name.
+            return label.count >= 4 && name.hasPrefix(label)
+        }
     }
 
     private static func normalize(_ text: String) -> String {

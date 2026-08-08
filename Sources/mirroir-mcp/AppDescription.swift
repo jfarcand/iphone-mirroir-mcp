@@ -50,6 +50,11 @@ struct AppDescription: Sendable {
     /// When present, `TabTargetInjector` synthesizes evenly-spaced tab anchors
     /// along the declared axis/edge when text matching fails (icon-only bars).
     let tabLayout: TabLayout?
+    /// Tabs whose subtree deserves exploration budget before sibling breadth
+    /// (from a `## Deep Tabs` section, e.g. a profile tab that gates the
+    /// settings chain). Screens reached through these tabs are dequeued from
+    /// the frontier ahead of FIFO order; empty list keeps pure FIFO.
+    let deepTabs: [String]
     /// Optional declarative scene graph extracted from `## Simulator …` sections.
     /// Present once the app has been ported to the FakeMirroring simulator;
     /// nil for guidance-only APP.md files that haven't been ported yet.
@@ -147,6 +152,7 @@ enum AppDescriptionParser {
         let hints = parseList(sections["Tips"] ?? "")
         let tabs = parseTabs(structure: sections["Structure"] ?? "", sections: sections)
         let tabLayout = parseTabLayout(sections["Tab Layout"] ?? "")
+        let deepTabs = parseList(sections["Deep Tabs"] ?? "")
         let simulator = SimulatorSpecParser.parse(
             sections: sections, frontMatter: frontMatter, appName: appName)
 
@@ -164,6 +170,7 @@ enum AppDescriptionParser {
             hints: hints,
             tabs: tabs,
             tabLayout: tabLayout,
+            deepTabs: deepTabs,
             simulator: simulator
         )
     }

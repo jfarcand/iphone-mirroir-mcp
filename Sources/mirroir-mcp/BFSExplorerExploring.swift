@@ -274,8 +274,16 @@ extension BFSExplorer {
                 let newPath = screen.pathFromRoot + [PathSegment(
                     elementText: target.text, tapX: target.tapX, tapY: target.tapY
                 )]
+                // Deep lineage is inherited: a screen reached through a
+                // `## Deep Tabs` tab, or through any descendant of one, keeps
+                // frontier priority so the whole subtree explores first.
+                let deepTabs = session.currentAppDescription?.deepTabs ?? []
+                let viaDeepTab = deepTabs.contains {
+                    $0.caseInsensitiveCompare(label) == .orderedSame
+                }
                 frontierManager.enqueue(FrontierScreen(
-                    fingerprint: fp, pathFromRoot: newPath, depth: childDepth
+                    fingerprint: fp, pathFromRoot: newPath, depth: childDepth,
+                    isDeepLineage: screen.isDeepLineage || viaDeepTab
                 ))
             }
 

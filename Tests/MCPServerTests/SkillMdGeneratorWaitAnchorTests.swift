@@ -31,7 +31,7 @@ final class SkillMdGeneratorWaitAnchorTests: XCTestCase {
             appName: "TestApp", schemaVersion: 1, locale: nil, archetype: nil,
             resetBeforeExplore: false, obstacleMode: .auto, context: "",
             obstacles: [], skipElements: [], credentials: [:], hints: [],
-            tabs: tabs, tabLayout: nil, simulator: nil)
+            tabs: tabs, tabLayout: nil, deepTabs: [], simulator: nil)
     }
 
     // MARK: - Infinite-Scroll Wait Omission
