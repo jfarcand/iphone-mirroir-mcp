@@ -98,6 +98,27 @@ jobs:
           swift build -c release --product FakeMirroring
           ./scripts/package-fake-app.sh
 
+      - name: Ensure display fits the FakeMirroring window
+        # GH macOS runners boot with a display too short for the 410x930
+        # window: the bottom ~60pt (the simulated tab bar) is clipped
+        # off-screen and CGEvent taps there never land. Grow the virtual
+        # display before launching FakeMirroring.
+        run: |
+          brew install --quiet jakehilborn/jakehilborn/displayplacer || brew install --quiet displayplacer || true
+          echo "--- displays before ---"
+          displayplacer list 2>/dev/null | grep -E "Persistent|Resolution" || true
+          SCREEN_ID=$(displayplacer list 2>/dev/null | awk -F': ' '/Persistent screen id/{print $2; exit}')
+          if [ -n "$SCREEN_ID" ]; then
+            for RES in 1920x1080 1680x1050 1600x1200; do
+              if displayplacer "id:$SCREEN_ID res:$RES" 2>/dev/null; then
+                echo "display set to $RES"
+                break
+              fi
+            done
+          fi
+          echo "--- displays after ---"
+          displayplacer list 2>/dev/null | grep -E "Resolution" || true
+
       - name: Launch FakeMirroring
         run: |
           open .build/release/FakeMirroring.app
