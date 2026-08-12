@@ -464,6 +464,35 @@ final class MCPServerRoutingTests: XCTestCase {
         XCTAssertNotNil(result["tools"])
     }
 
+    /// The revision's stdio transport forbids a server from writing JSON-RPC
+    /// requests to stdout, so nothing may be initiated while serving one.
+    func testServerInitiatedRequestsForbiddenWhileServingModernRequest() {
+        let server = makeServer()
+        _ = server.handleRequest(modernRequest(method: "tools/list"))
+        XCTAssertFalse(server.mayInitiateRequest(),
+            "2026-07-28 forbids server-initiated requests on stdio")
+
+        // A legacy request lifts the restriction again — that era allows them.
+        _ = server.handleRequest(makeRequest(method: "tools/list"))
+        XCTAssertTrue(server.mayInitiateRequest())
+    }
+
+    func testSamplingRequiresClientDeclaredCapability() {
+        let server = makeServer()
+        _ = server.handleRequest(makeRequest(
+            method: "initialize",
+            params: .object(["capabilities": .object([:])])
+        ))
+        XCTAssertFalse(server.clientSupportsSampling(),
+            "a client that declared no sampling must not be asked")
+
+        _ = server.handleRequest(makeRequest(
+            method: "initialize",
+            params: .object(["capabilities": .object(["sampling": .object([:])])])
+        ))
+        XCTAssertTrue(server.clientSupportsSampling())
+    }
+
     /// `sampling` is a client capability. Advertising it as a server capability
     /// tells the client nothing and misreports what this server offers.
     func testInitializeAdvertisesOnlyServerCapabilities() {

@@ -20,6 +20,10 @@ final class MCPServer: Sendable {
     /// Capabilities the client declared in its `initialize` handshake, which
     /// tell us which server-initiated requests it can answer.
     private let clientCapabilities = OSAllocatedUnfairLock(initialState: JSONValue?.none)
+    /// Whether the request being served right now came from a modern client.
+    /// The run loop serves one request at a time, so this describes the request
+    /// a tool handler is running under.
+    private let servingModernRequest = OSAllocatedUnfairLock(initialState: false)
     init(policy: PermissionPolicy) {
         self.policy = policy
         encoder = JSONEncoder()
@@ -122,6 +126,10 @@ final class MCPServer: Sendable {
                 )
             }
         }
+
+        // Tool handlers consult this to know whether server-initiated requests
+        // are permitted while this request is in flight.
+        servingModernRequest.withLock { $0 = isModern }
 
         switch request.method {
         case "initialize":
@@ -328,8 +336,16 @@ final class MCPServer: Sendable {
     // MARK: - Server-to-Client Sampling
 
     /// Whether the client declared the `sampling` capability when it connected.
-    private func clientSupportsSampling() -> Bool {
+    func clientSupportsSampling() -> Bool {
         clientCapabilities.withLock { $0?.member("sampling") != nil }
+    }
+
+    /// Whether a server-initiated request may be written to stdout right now.
+    /// The `2026-07-28` stdio transport forbids it outright: a server writes
+    /// only responses and notifications, and reaches the client through
+    /// `InputRequiredResult` instead.
+    func mayInitiateRequest() -> Bool {
+        !servingModernRequest.withLock { $0 }
     }
 
     /// Send a sampling/createMessage request to the MCP client and wait for the response.
@@ -338,16 +354,22 @@ final class MCPServer: Sendable {
     /// the client's response from stdin. Safe to call from within a tool handler because
     /// the server's main loop is blocked waiting for the handler to return.
     ///
-    /// Only clients that declared `sampling` during the `initialize` handshake are
-    /// asked. That also keeps us within the `2026-07-28` stdio rules: a modern
-    /// client never performs the handshake, and on that revision a server must
-    /// not write JSON-RPC requests to stdout at all — server-to-client
-    /// interaction goes through `InputRequiredResult` instead, which this server
-    /// does not implement.
+    /// Two conditions gate it. The `2026-07-28` stdio transport forbids a server
+    /// from writing JSON-RPC requests to stdout at all, so nothing is sent while
+    /// serving a request from that revision — it reaches the client through
+    /// `InputRequiredResult`, which this server does not implement. Beyond that,
+    /// only clients that declared `sampling` in their `initialize` handshake are
+    /// asked, since sampling is a client capability.
     ///
     /// - Parameter params: Sampling parameters (messages, max tokens, system prompt).
     /// - Returns: The sampling response text, or nil if the client doesn't support sampling.
     func sendSamplingRequest(_ params: SamplingParams) -> String? {
+        guard mayInitiateRequest() else {
+            DebugLog.log(
+                "sampling",
+                "Serving a 2026-07-28 request — that revision forbids server-initiated requests")
+            return nil
+        }
         guard clientSupportsSampling() else {
             DebugLog.log("sampling", "Client did not declare sampling support — skipping request")
             return nil
