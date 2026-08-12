@@ -309,6 +309,40 @@ else
 fi
 
 # ============================================================
+# Test 11: Modern revision (2026-07-28) result envelopes
+# ============================================================
+echo ""
+echo -e "${BLUE}==== Test: Modern Revision Result Envelopes ====${NC}"
+
+MODERN_META='"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"compliance","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}'
+
+MODERN_RESPONSE=$(printf '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{%s}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{%s}}\n' \
+    "$MODERN_META" "$MODERN_META" | $BINARY 2>/dev/null)
+
+if echo "$MODERN_RESPONSE" | python3 -c "
+import sys, json
+results = {json.loads(line)['id']: json.loads(line)['result'] for line in sys.stdin if line.strip()}
+
+# server/discover and tools/list are cacheable methods: the revision makes ttlMs
+# and cacheScope required, and a client rejects the whole result without them.
+for rid, method in ((1, 'server/discover'), (2, 'tools/list')):
+    result = results[rid]
+    assert result.get('resultType') == 'complete', f'{method}: missing resultType'
+    ttl = result.get('ttlMs')
+    assert isinstance(ttl, (int, float)) and ttl >= 0 and float(ttl).is_integer(), \
+        f'{method}: ttlMs must be a non-negative integer, got {ttl!r}'
+    scope = result.get('cacheScope')
+    assert scope in ('public', 'private'), f'{method}: bad cacheScope {scope!r}'
+
+assert len(results[2]['tools']) > 0, 'modern tools/list returned 0 tools'
+print('OK')
+" 2>&1 | grep -q "OK"; then
+    record_test "Modern tools/list and server/discover carry cache directives" true
+else
+    record_test "Modern tools/list and server/discover carry cache directives" false
+fi
+
+# ============================================================
 # Summary
 # ============================================================
 echo ""

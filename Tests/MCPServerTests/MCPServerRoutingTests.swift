@@ -344,8 +344,9 @@ final class MCPServerRoutingTests: XCTestCase {
             return XCTFail("Expected serverInfo")
         }
         XCTAssertEqual(info["name"], .string("mirroir-mcp"))
-        // Cacheable per the spec.
+        // Cacheable per the spec: both directives are required, not optional.
         XCTAssertNotNil(result["ttlMs"])
+        XCTAssertEqual(result["cacheScope"], .string("public"))
     }
 
     func testModernToolsListIncludesResultType() {
@@ -360,6 +361,24 @@ final class MCPServerRoutingTests: XCTestCase {
         XCTAssertNotNil(result["tools"])
     }
 
+    /// `2026-07-28` makes `ttlMs`/`cacheScope` required on `tools/list`; a client
+    /// validating against that schema rejects the entire result if either is
+    /// missing, so tool discovery fails outright.
+    func testModernToolsListCarriesCacheDirectives() {
+        let server = makeServer()
+        let response = server.handleRequest(modernRequest(method: "tools/list"))
+        guard let response, case .object(let result) = response.result else {
+            return XCTFail("Expected object result")
+        }
+        guard case .number(let ttl)? = result["ttlMs"] else {
+            return XCTFail("modern tools/list must carry ttlMs")
+        }
+        XCTAssertGreaterThanOrEqual(ttl, 0, "ttlMs must be a non-negative integer")
+        XCTAssertEqual(ttl, ttl.rounded(), "ttlMs must be an integer")
+        XCTAssertEqual(result["cacheScope"], .string("private"),
+            "the tool set is filtered per-machine by the permission policy")
+    }
+
     func testLegacyToolsListOmitsResultType() {
         let server = makeServer()
         // No modern _meta → legacy request → no resultType (clients treat absence as complete).
@@ -368,6 +387,8 @@ final class MCPServerRoutingTests: XCTestCase {
             return XCTFail("Expected object result")
         }
         XCTAssertNil(result["resultType"], "legacy responses must not include resultType")
+        XCTAssertNil(result["ttlMs"], "cache directives are a modern-revision field")
+        XCTAssertNil(result["cacheScope"], "cache directives are a modern-revision field")
     }
 
     func testModernUnsupportedVersionReturnsError() {

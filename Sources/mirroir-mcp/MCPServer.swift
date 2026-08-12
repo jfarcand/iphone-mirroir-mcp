@@ -71,6 +71,11 @@ final class MCPServer: Sendable {
     /// How long a client may cache a `server/discover` response (1 hour).
     private static let discoverTtlMs = 3_600_000
 
+    /// How long a client may cache a `tools/list` response (1 minute). Short by
+    /// design: the visible tool set is derived from the permission policy on
+    /// disk, so an edited `permissions.json` must take effect promptly.
+    private static let toolsListTtlMs = 60_000
+
     func handleRequest(_ request: JSONRPCRequest) -> JSONRPCResponse? {
         // Notifications have no id — the spec says receivers MUST NOT respond
         if request.id == nil {
@@ -133,6 +138,26 @@ final class MCPServer: Sendable {
         return .object(withType)
     }
 
+    /// Add the cache directives a modern (`2026-07-28`) list result must carry.
+    /// The revision makes `ttlMs` and `cacheScope` required on `tools/list` and
+    /// `server/discover` — a client validating against that schema rejects the
+    /// whole result when either is absent.
+    private func cacheable(
+        _ fields: [String: JSONValue], ttlMs: Int, scope: CacheScope
+    ) -> [String: JSONValue] {
+        var withDirectives = fields
+        withDirectives["ttlMs"] = .number(Double(ttlMs))
+        withDirectives["cacheScope"] = .string(scope.rawValue)
+        return withDirectives
+    }
+
+    /// Whether a cached result may be shared across users (`public`) or belongs
+    /// to the client that fetched it (`private`).
+    private enum CacheScope: String {
+        case publicScope = "public"
+        case privateScope = "private"
+    }
+
     /// First required modern `_meta` field that is absent, or nil if all present.
     private func missingRequiredMetaField(_ request: JSONRPCRequest) -> String? {
         let meta = request.params?.member("_meta")
@@ -158,7 +183,7 @@ final class MCPServer: Sendable {
     /// and identity so a client can pick a version without a round-trip error.
     private func handleDiscover(_ request: JSONRPCRequest) -> JSONRPCResponse {
         let supported = Self.supportedProtocolVersions.map { JSONValue.string($0) }
-        let result: JSONValue = .object([
+        var fields: [String: JSONValue] = [
             "resultType": .string("complete"),
             "supportedVersions": .array(supported),
             "capabilities": .object([
@@ -171,10 +196,11 @@ final class MCPServer: Sendable {
             "instructions": .string(
                 "Drive a real iPhone via macOS iPhone Mirroring: see the screen "
                 + "(describe_screen), tap/swipe/type, and author replayable skills."),
-            "ttlMs": .number(Double(Self.discoverTtlMs)),
-            "cacheScope": .string("public"),
-        ])
-        return JSONRPCResponse(id: request.id, result: result, error: nil)
+        ]
+        // Identity and capabilities are the same for every client, so the
+        // response is shareable.
+        fields = cacheable(fields, ttlMs: Self.discoverTtlMs, scope: .publicScope)
+        return JSONRPCResponse(id: request.id, result: .object(fields), error: nil)
     }
 
     /// Legacy (`initialize`-handshake) protocol versions, most recent first.
@@ -219,7 +245,13 @@ final class MCPServer: Sendable {
                     ])
                 }
         }
-        let result = completeResult(["tools": .array(toolList)], modern: modern)
+        var fields: [String: JSONValue] = ["tools": .array(toolList)]
+        if modern {
+            // The visible tool set is filtered by this machine's permission
+            // policy, so the cached list belongs to the client that fetched it.
+            fields = cacheable(fields, ttlMs: Self.toolsListTtlMs, scope: .privateScope)
+        }
+        let result = completeResult(fields, modern: modern)
         return JSONRPCResponse(id: request.id, result: result, error: nil)
     }
 
