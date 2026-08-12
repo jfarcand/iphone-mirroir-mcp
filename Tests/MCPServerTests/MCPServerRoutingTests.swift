@@ -340,10 +340,15 @@ final class MCPServerRoutingTests: XCTestCase {
               case .object = caps["tools"] else {
             return XCTFail("Expected tools capability")
         }
-        guard case .object(let info) = result["serverInfo"] else {
-            return XCTFail("Expected serverInfo")
+        // Identity lives in result `_meta`, the revision's canonical location
+        // for it — `DiscoverResult` itself has no serverInfo field.
+        guard case .object(let meta) = result["_meta"],
+              case .object(let info)? = meta["io.modelcontextprotocol/serverInfo"] else {
+            return XCTFail("Expected _meta serverInfo")
         }
         XCTAssertEqual(info["name"], .string("mirroir-mcp"))
+        XCTAssertNotNil(info["version"], "Implementation requires name and version")
+        XCTAssertNil(result["serverInfo"], "identity belongs in _meta, not top level")
         // Cacheable per the spec: both directives are required, not optional.
         XCTAssertNotNil(result["ttlMs"])
         XCTAssertEqual(result["cacheScope"], .string("public"))
@@ -359,6 +364,32 @@ final class MCPServerRoutingTests: XCTestCase {
         XCTAssertEqual(result["resultType"], .string("complete"),
             "modern result responses must carry resultType")
         XCTAssertNotNil(result["tools"])
+    }
+
+    /// The revision says servers should report their identity on every modern
+    /// result, in `_meta` under the reserved reverse-DNS key.
+    func testModernResultsCarryServerInfoMeta() {
+        let server = makeServer()
+        for method in ["tools/list", "ping"] {
+            guard let response = server.handleRequest(modernRequest(method: method)),
+                  case .object(let result) = response.result,
+                  case .object(let meta)? = result["_meta"],
+                  case .object(let info)? = meta["io.modelcontextprotocol/serverInfo"] else {
+                return XCTFail("\(method): expected _meta serverInfo")
+            }
+            XCTAssertEqual(info["name"], .string("mirroir-mcp"), "\(method): server name")
+            XCTAssertNotNil(info["version"], "\(method): server version")
+        }
+    }
+
+    func testLegacyResultsOmitServerInfoMeta() {
+        let server = makeServer()
+        // Legacy clients learn the identity from the initialize handshake.
+        guard let response = server.handleRequest(makeRequest(method: "tools/list")),
+              case .object(let result) = response.result else {
+            return XCTFail("Expected object result")
+        }
+        XCTAssertNil(result["_meta"], "legacy results carry no modern _meta envelope")
     }
 
     /// `2026-07-28` makes `ttlMs`/`cacheScope` required on `tools/list`; a client
@@ -397,7 +428,9 @@ final class MCPServerRoutingTests: XCTestCase {
         guard let response, let error = response.error else {
             return XCTFail("Expected error")
         }
-        XCTAssertEqual(error.code, -32004, "unsupported version → UnsupportedProtocolVersionError")
+        // -32022 is the spec-allocated code; the -32000..-32019 range is
+        // implementation-defined and carries no cross-implementation meaning.
+        XCTAssertEqual(error.code, -32022, "unsupported version → UnsupportedProtocolVersionError")
         guard case .object(let data)? = error.data,
               case .array(let supported) = data["supported"] else {
             return XCTFail("Expected data.supported list")
@@ -408,13 +441,27 @@ final class MCPServerRoutingTests: XCTestCase {
 
     func testModernMissingRequiredMetaFieldReturnsInvalidParams() {
         let server = makeServer()
-        // protocolVersion present but clientInfo missing → malformed modern request.
+        // protocolVersion present but clientCapabilities missing → malformed
+        // modern request; the revision requires that field.
         let response = server.handleRequest(
-            modernRequest(method: "tools/list", includeClientInfo: false))
+            modernRequest(method: "tools/list", includeClientCapabilities: false))
         guard let response, let error = response.error else {
             return XCTFail("Expected error")
         }
         XCTAssertEqual(error.code, -32602, "missing required _meta field → Invalid params")
+    }
+
+    /// `clientInfo` is optional in the revision's request envelope — rejecting a
+    /// request that omits it would turn away conformant clients.
+    func testModernRequestWithoutClientInfoIsAccepted() {
+        let server = makeServer()
+        let response = server.handleRequest(
+            modernRequest(method: "tools/list", includeClientInfo: false))
+        guard let response, case .object(let result) = response.result else {
+            return XCTFail("Expected object result")
+        }
+        XCTAssertNil(response.error, "clientInfo is optional, not required")
+        XCTAssertNotNil(result["tools"])
     }
 
     func testInitializeNeverNegotiatesModernVersion() {

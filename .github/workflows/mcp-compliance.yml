@@ -11,6 +11,8 @@ on:
       - 'Tests/MCPServerTests/**'
       - 'Tests/HelperLibTests/MCPProtocolTests.swift'
       - 'scripts/ci/ensure-mcp-compliance.sh'
+      - 'scripts/ci/mcp-modern-conformance.py'
+      - 'scripts/ci/mcp-schema-2026-07-28.json'
       - '.github/workflows/mcp-compliance.yml'
   pull_request:
     branches: [ main ]
@@ -20,6 +22,8 @@ on:
       - 'Tests/MCPServerTests/**'
       - 'Tests/HelperLibTests/MCPProtocolTests.swift'
       - 'scripts/ci/ensure-mcp-compliance.sh'
+      - 'scripts/ci/mcp-modern-conformance.py'
+      - 'scripts/ci/mcp-schema-2026-07-28.json'
       - '.github/workflows/mcp-compliance.yml'
   workflow_dispatch:
 
@@ -57,6 +61,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      # Validates modern-revision results against the specification's schema.
+      - name: Install schema validator
+        run: pip install jsonschema
 
       - name: Build release binary
         run: swift build -c release

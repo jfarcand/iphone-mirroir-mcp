@@ -61,12 +61,22 @@ final class MCPServer: Sendable {
     /// dual-era: it serves both. See `handleRequest`.
     static let supportedProtocolVersions = ["2026-07-28", "2025-11-25", "2024-11-05"]
 
-    /// Reserved `_meta` keys a modern (`2026-07-28`) client puts on every request.
+    /// Reserved `_meta` keys of the modern (`2026-07-28`) revision. The first
+    /// three ride on every client request; `serverInfo` is the canonical place
+    /// for server identity on a result.
     private enum MetaKey {
         static let protocolVersion = "io.modelcontextprotocol/protocolVersion"
         static let clientInfo = "io.modelcontextprotocol/clientInfo"
         static let clientCapabilities = "io.modelcontextprotocol/clientCapabilities"
+        static let serverInfo = "io.modelcontextprotocol/serverInfo"
     }
+
+    /// Server identity, which the spec says to report on every modern result.
+    /// `Implementation` requires both `name` and `version`.
+    private static let serverInfo: JSONValue = .object([
+        "name": .string("mirroir-mcp"),
+        "version": .string(MirroirVersion.current),
+    ])
 
     /// How long a client may cache a `server/discover` response (1 hour).
     private static let discoverTtlMs = 3_600_000
@@ -128,13 +138,16 @@ final class MCPServer: Sendable {
         }
     }
 
-    /// Wrap a modern result object with `resultType: "complete"`. Legacy
-    /// (`initialize`-era) responses omit `resultType`; clients treat its
-    /// absence as `"complete"` for backward compatibility.
+    /// Wrap a modern result object with `resultType: "complete"` and the server
+    /// identity every modern result should carry. Legacy (`initialize`-era)
+    /// responses omit both; clients treat an absent `resultType` as
+    /// `"complete"` for backward compatibility, and learn the server identity
+    /// from the `initialize` handshake instead.
     private func completeResult(_ fields: [String: JSONValue], modern: Bool) -> JSONValue {
         guard modern else { return .object(fields) }
         var withType = fields
         withType["resultType"] = .string("complete")
+        withType["_meta"] = .object([MetaKey.serverInfo: Self.serverInfo])
         return .object(withType)
     }
 
@@ -159,14 +172,16 @@ final class MCPServer: Sendable {
     }
 
     /// First required modern `_meta` field that is absent, or nil if all present.
+    /// The revision requires only `protocolVersion` (already established by the
+    /// time this runs) and `clientCapabilities` — `clientInfo` is optional, so
+    /// rejecting a request that omits it would turn away conformant clients.
     private func missingRequiredMetaField(_ request: JSONRPCRequest) -> String? {
         let meta = request.params?.member("_meta")
-        if meta?.member(MetaKey.clientInfo) == nil { return MetaKey.clientInfo }
         if meta?.member(MetaKey.clientCapabilities) == nil { return MetaKey.clientCapabilities }
         return nil
     }
 
-    /// `UnsupportedProtocolVersionError` (-32004) with the versions we support.
+    /// `UnsupportedProtocolVersionError` with the versions we support.
     private func unsupportedVersionError(id: RequestID?, requested: String) -> JSONRPCResponse {
         let supported = Self.supportedProtocolVersions.map { JSONValue.string($0) }
         let data: JSONValue = .object([
@@ -175,32 +190,38 @@ final class MCPServer: Sendable {
         ])
         return JSONRPCResponse(
             id: id, result: nil,
-            error: JSONRPCError(code: -32004, message: "Unsupported protocol version", data: data)
+            error: JSONRPCError(
+                code: Self.unsupportedProtocolVersionCode,
+                message: "Unsupported protocol version", data: data)
         )
     }
+
+    /// Spec-allocated code for `UnsupportedProtocolVersionError`. It has to come
+    /// from the `-32020`…`-32099` specification range: the `-32000`…`-32019`
+    /// range is implementation-defined, so a code there carries no meaning
+    /// across implementations and a client cannot recognise the version
+    /// mismatch it signals.
+    private static let unsupportedProtocolVersionCode = -32022
 
     /// Modern `server/discover` — advertise supported versions, capabilities,
     /// and identity so a client can pick a version without a round-trip error.
     private func handleDiscover(_ request: JSONRPCRequest) -> JSONRPCResponse {
         let supported = Self.supportedProtocolVersions.map { JSONValue.string($0) }
         var fields: [String: JSONValue] = [
-            "resultType": .string("complete"),
             "supportedVersions": .array(supported),
             "capabilities": .object([
                 "tools": .object([:]),
-            ]),
-            "serverInfo": .object([
-                "name": .string("mirroir-mcp"),
-                "version": .string(MirroirVersion.current),
             ]),
             "instructions": .string(
                 "Drive a real iPhone via macOS iPhone Mirroring: see the screen "
                 + "(describe_screen), tap/swipe/type, and author replayable skills."),
         ]
         // Identity and capabilities are the same for every client, so the
-        // response is shareable.
+        // response is shareable. `server/discover` exists only in the modern
+        // revision, so its result always carries the modern envelope.
         fields = cacheable(fields, ttlMs: Self.discoverTtlMs, scope: .publicScope)
-        return JSONRPCResponse(id: request.id, result: .object(fields), error: nil)
+        return JSONRPCResponse(
+            id: request.id, result: completeResult(fields, modern: true), error: nil)
     }
 
     /// Legacy (`initialize`-handshake) protocol versions, most recent first.
