@@ -464,6 +464,22 @@ final class MCPServerRoutingTests: XCTestCase {
         XCTAssertNotNil(result["tools"])
     }
 
+    /// `sampling` is a client capability. Advertising it as a server capability
+    /// tells the client nothing and misreports what this server offers.
+    func testInitializeAdvertisesOnlyServerCapabilities() {
+        let server = makeServer()
+        let response = server.handleRequest(makeRequest(
+            method: "initialize",
+            params: .object(["protocolVersion": .string("2025-11-25")])
+        ))
+        guard let response, case .object(let result) = response.result,
+              case .object(let capabilities)? = result["capabilities"] else {
+            return XCTFail("Expected capabilities")
+        }
+        XCTAssertNotNil(capabilities["tools"], "tools is the capability we implement")
+        XCTAssertNil(capabilities["sampling"], "sampling is a client capability")
+    }
+
     func testInitializeNeverNegotiatesModernVersion() {
         let server = makeServer()
         // A legacy initialize must not yield the handshake-less modern version,

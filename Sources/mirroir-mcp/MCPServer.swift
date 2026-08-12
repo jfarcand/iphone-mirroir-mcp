@@ -17,6 +17,9 @@ final class MCPServer: Sendable {
     private let policy: PermissionPolicy
     /// Counter for server-initiated request IDs (sampling, etc.).
     private let requestCounter = OSAllocatedUnfairLock(initialState: 0)
+    /// Capabilities the client declared in its `initialize` handshake, which
+    /// tell us which server-initiated requests it can answer.
+    private let clientCapabilities = OSAllocatedUnfairLock(initialState: JSONValue?.none)
     init(policy: PermissionPolicy) {
         self.policy = policy
         encoder = JSONEncoder()
@@ -240,11 +243,16 @@ final class MCPServer: Sendable {
             negotiatedVersion = Self.legacyProtocolVersions[0]
         }
 
+        // Remember what the client can do — sampling is a client capability,
+        // and we may only ask for it if the client offered it.
+        clientCapabilities.withLock { $0 = request.params?.member("capabilities") }
+
         let result: JSONValue = .object([
             "protocolVersion": .string(negotiatedVersion),
+            // `tools` is the only capability we implement. Sampling belongs to
+            // the client, so it is never advertised here.
             "capabilities": .object([
                 "tools": .object([:]),
-                "sampling": .object([:]),
             ]),
             "serverInfo": .object([
                 "name": .string("mirroir-mcp"),
@@ -319,15 +327,32 @@ final class MCPServer: Sendable {
 
     // MARK: - Server-to-Client Sampling
 
+    /// Whether the client declared the `sampling` capability when it connected.
+    private func clientSupportsSampling() -> Bool {
+        clientCapabilities.withLock { $0?.member("sampling") != nil }
+    }
+
     /// Send a sampling/createMessage request to the MCP client and wait for the response.
     ///
     /// This is a server-initiated request: we write a JSON-RPC request to stdout and read
     /// the client's response from stdin. Safe to call from within a tool handler because
     /// the server's main loop is blocked waiting for the handler to return.
     ///
+    /// Only clients that declared `sampling` during the `initialize` handshake are
+    /// asked. That also keeps us within the `2026-07-28` stdio rules: a modern
+    /// client never performs the handshake, and on that revision a server must
+    /// not write JSON-RPC requests to stdout at all — server-to-client
+    /// interaction goes through `InputRequiredResult` instead, which this server
+    /// does not implement.
+    ///
     /// - Parameter params: Sampling parameters (messages, max tokens, system prompt).
     /// - Returns: The sampling response text, or nil if the client doesn't support sampling.
     func sendSamplingRequest(_ params: SamplingParams) -> String? {
+        guard clientSupportsSampling() else {
+            DebugLog.log("sampling", "Client did not declare sampling support — skipping request")
+            return nil
+        }
+
         let requestId = requestCounter.withLock { counter -> Int in
             counter += 1
             return counter
