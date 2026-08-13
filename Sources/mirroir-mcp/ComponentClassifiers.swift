@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 //
 // ABOUTME: Classifier implementations bridging heuristic and LLM-based component detection.
-// ABOUTME: SamplingClassifier uses MCP sampling to ask the client LLM for component classification.
+// ABOUTME: AgentClassifier asks the configured AI agent to classify screen components.
 
 import Foundation
 import HelperLib
@@ -15,21 +15,25 @@ enum ComponentDetectionMode: String, Sendable {
     case llmFallback = "llm_fallback"
 
     /// Build the appropriate component classifier for this detection mode.
-    func buildClassifier(server: MCPServer) -> any ComponentClassifying {
+    /// - Parameter agentConfig: The resolved AI agent, or nil when none is
+    ///   configured — every mode then classifies heuristically, since there is
+    ///   no model to ask.
+    func buildClassifier(agentConfig: AgentConfig?) -> any ComponentClassifying {
         let heuristic = HeuristicClassifier()
-        let sampling = { SamplingClassifier(server: server) }
+        guard let agentConfig else { return heuristic }
+        let agent = { AgentClassifier(agentConfig: agentConfig) }
         switch self {
         case .heuristic:
             return heuristic
         case .llmFirstScreen:
             return CompositeClassifier(
-                primary: sampling(), fallback: heuristic, primaryOnlyForFirstScreen: true)
+                primary: agent(), fallback: heuristic, primaryOnlyForFirstScreen: true)
         case .llmEveryScreen:
             return CompositeClassifier(
-                primary: sampling(), fallback: heuristic, primaryOnlyForFirstScreen: false)
+                primary: agent(), fallback: heuristic, primaryOnlyForFirstScreen: false)
         case .llmFallback:
             return CompositeClassifier(
-                primary: heuristic, fallback: sampling(), primaryOnlyForFirstScreen: false)
+                primary: heuristic, fallback: agent(), primaryOnlyForFirstScreen: false)
         }
     }
 }
@@ -52,14 +56,24 @@ final class HeuristicClassifier: ComponentClassifying, @unchecked Sendable {
     }
 }
 
-/// Uses MCP sampling to ask the client LLM to classify screen components.
-/// Sends a screenshot + OCR elements + component catalog to the client,
-/// parses the structured JSON response back into ScreenComponents.
-final class SamplingClassifier: ComponentClassifying, @unchecked Sendable {
-    private let server: MCPServer
+/// Asks the configured AI agent to classify screen components, sending the OCR
+/// elements and component catalog and parsing the structured JSON reply back
+/// into ScreenComponents.
+///
+/// The agent is reached directly through the provider stack — the same path
+/// `VisionScreenDescriber` and the exploration advisor use — rather than
+/// borrowing the MCP client's model. That keeps classification working
+/// whatever the client is: sampling requires a `sampling` capability many
+/// clients (Claude Code among them) never declare, and the `2026-07-28`
+/// revision forbids the server-initiated request it depends on outright.
+final class AgentClassifier: ComponentClassifying, @unchecked Sendable {
+    /// Ceiling for the classification reply; a full catalog answer runs well under this.
+    private static let maxTokens = 2000
 
-    init(server: MCPServer) {
-        self.server = server
+    private let agentConfig: AgentConfig
+
+    init(agentConfig: AgentConfig) {
+        self.agentConfig = agentConfig
     }
 
     func classify(
@@ -69,19 +83,19 @@ final class SamplingClassifier: ComponentClassifying, @unchecked Sendable {
     ) -> [ScreenComponent]? {
         let prompt = buildPrompt(classified: classified, definitions: definitions)
 
-        let params = SamplingParams(
-            messages: [SamplingMessage(role: "user", content: .text(prompt))],
-            maxTokens: 2000,
-            systemPrompt: "You analyze iOS app screens and classify OCR elements into UI components. " +
-                "Respond ONLY with valid JSON, no markdown formatting."
-        )
-
-        guard let responseText = server.sendSamplingRequest(params) else {
-            DebugLog.log("sampling", "Sampling request failed, falling back to heuristics")
+        guard let responseText = requestChatCompletion(
+            systemPrompt: "You analyze iOS app screens and classify OCR elements into UI components. "
+                + "Respond ONLY with valid JSON, no markdown formatting.",
+            userPrompt: prompt,
+            maxTokens: Self.maxTokens,
+            agentConfig: agentConfig,
+            timeoutSeconds: EnvConfig.embacleTimeoutSeconds
+        ) else {
+            DebugLog.log("classifier", "Agent request failed, falling back to heuristics")
             return nil
         }
 
-        return parseSamplingResponse(
+        return parseClassificationResponse(
             responseText,
             classified: classified,
             definitions: definitions,
@@ -134,7 +148,7 @@ final class SamplingClassifier: ComponentClassifying, @unchecked Sendable {
 
     /// Parse the LLM's JSON response into ScreenComponents.
     /// Falls back to nil if the response is not valid JSON.
-    private func parseSamplingResponse(
+    private func parseClassificationResponse(
         _ responseText: String,
         classified: [ClassifiedElement],
         definitions: [ComponentDefinition],

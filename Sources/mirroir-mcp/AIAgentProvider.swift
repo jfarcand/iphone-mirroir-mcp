@@ -116,6 +116,15 @@ enum AIAgentRegistry {
             maxTokens: EnvConfig.defaultAIMaxTokens, command: nil, args: nil),
     ]
 
+    /// Agent used when none is named in the environment.
+    static let defaultAgentName = "embacle"
+
+    /// Resolve the agent this installation is configured to use, or nil when
+    /// the configured name matches nothing.
+    static func resolveConfigured() -> AgentConfig? {
+        resolve(name: EnvConfig.agent.isEmpty ? defaultAgentName : EnvConfig.agent)
+    }
+
     /// Resolve an agent name to its configuration.
     /// Resolution order: built-in → ollama prefix → local profile → global profile.
     static func resolve(name: String) -> AgentConfig? {
@@ -264,6 +273,74 @@ enum AIAgentRegistry {
             }
         }
     }
+}
+
+// MARK: - Shared Chat Completion
+
+/// Ask the configured agent a text-only question and return its reply.
+///
+/// Wraps the OpenAI-compatible `/v1/chat/completions` shape every provider
+/// speaks, so a caller needing a one-shot completion states the prompts and
+/// nothing else. Requests travel over whichever transport
+/// `sendAgentHTTPRequest` selects — the embedded embacle FFI when available,
+/// HTTP otherwise.
+///
+/// - Returns: The assistant's text, or nil when the agent is unreachable or
+///   answers in a shape with no message content.
+func requestChatCompletion(
+    systemPrompt: String,
+    userPrompt: String,
+    maxTokens: Int,
+    agentConfig: AgentConfig,
+    timeoutSeconds: Int
+) -> String? {
+    let baseURL = agentConfig.baseURL ?? defaultAgentBaseURL
+    guard let url = URL(string: baseURL + "/v1/chat/completions") else { return nil }
+
+    let requestBody: [String: Any] = [
+        "model": agentConfig.model ?? defaultAgentModel,
+        "max_tokens": maxTokens,
+        "messages": [
+            ["role": "system", "content": systemPrompt],
+            ["role": "user", "content": userPrompt],
+        ],
+    ]
+    guard let body = try? JSONSerialization.data(withJSONObject: requestBody) else { return nil }
+
+    var headers = ["Content-Type": "application/json"]
+    if let apiKeyEnv = agentConfig.apiKeyEnvVar,
+       let apiKey = ProcessInfo.processInfo.environment[apiKeyEnv],
+       !apiKey.isEmpty {
+        headers["Authorization"] = "Bearer \(apiKey)"
+    }
+
+    guard let responseData = sendAgentHTTPRequest(
+        url: url, headers: headers, body: body, timeoutSeconds: timeoutSeconds
+    ) else { return nil }
+
+    return extractChatCompletionText(from: responseData)
+}
+
+/// Endpoint used when a target declares no `baseURL`.
+let defaultAgentBaseURL = "http://localhost:3000"
+
+/// Model used when a target declares none. `copilot_headless` is embacle's
+/// default and the only one guaranteed to accept image payloads.
+let defaultAgentModel = "copilot_headless"
+
+/// Pull the assistant text out of an OpenAI-compatible chat completions body.
+/// Falls back to the raw body so a provider answering in another shape still
+/// surfaces something the caller can parse or log.
+func extractChatCompletionText(from data: Data) -> String? {
+    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let choices = json["choices"] as? [[String: Any]],
+          let first = choices.first,
+          let message = first["message"] as? [String: Any],
+          let content = message["content"] as? String
+    else {
+        return String(data: data, encoding: .utf8)
+    }
+    return content
 }
 
 // MARK: - Shared HTTP Helper

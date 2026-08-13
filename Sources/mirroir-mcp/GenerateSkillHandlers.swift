@@ -427,7 +427,8 @@ extension MirroirMCP {
                     "(nav=\(recipe.navigationModel.type), strategy=\(refined.rawValue))")
             }
             let detectionMode = ComponentDetectionMode(rawValue: EnvConfig.componentDetection) ?? .llmFirstScreen
-            let classifier = detectionMode.buildClassifier(server: server)
+            let classifier = detectionMode.buildClassifier(
+                agentConfig: AIAgentRegistry.resolveConfigured())
             let advisor: any ExplorationAdvising = EmbacleFFI.isAvailable
                 ? VisionExplorationAdvisor() : HeuristicExplorationAdvisor()
             explorer = BFSExplorer(

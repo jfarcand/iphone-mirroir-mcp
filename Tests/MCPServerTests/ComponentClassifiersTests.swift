@@ -1,14 +1,14 @@
 // Copyright 2026 jfarcand@apache.org
 // Licensed under the Apache License, Version 2.0
 //
-// ABOUTME: Unit tests for SamplingBridge: classifier implementations and composite strategies.
+// ABOUTME: Unit tests for the component classifiers: heuristic, agent, and composite strategies.
 // ABOUTME: Verifies HeuristicClassifier, CompositeClassifier, and detection mode configuration.
 
 import XCTest
 @testable import HelperLib
 @testable import mirroir_mcp
 
-final class SamplingBridgeTests: XCTestCase {
+final class ComponentClassifiersTests: XCTestCase {
 
     // MARK: - Helpers
 
@@ -150,6 +150,36 @@ final class SamplingBridgeTests: XCTestCase {
 
     func testDetectionModeFromInvalidString() {
         XCTAssertNil(ComponentDetectionMode(rawValue: "invalid"))
+    }
+
+    // MARK: - Classifier construction
+
+    /// Every LLM mode classifies through the agent when one is configured.
+    func testLLMModesBuildAgentBackedClassifier() {
+        guard let config = AIAgentRegistry.resolve(name: "embacle") else {
+            return XCTFail("embacle is a built-in agent")
+        }
+        for mode in [ComponentDetectionMode.llmFirstScreen, .llmEveryScreen, .llmFallback] {
+            XCTAssertTrue(
+                mode.buildClassifier(agentConfig: config) is CompositeClassifier,
+                "\(mode.rawValue) pairs the agent with a heuristic fallback")
+        }
+        XCTAssertTrue(
+            ComponentDetectionMode.heuristic.buildClassifier(agentConfig: config)
+                is HeuristicClassifier,
+            "the heuristic mode never consults an agent")
+    }
+
+    /// With no agent configured there is no model to ask, so every mode
+    /// classifies heuristically rather than building a classifier that cannot work.
+    func testNoAgentConfiguredFallsBackToHeuristicForEveryMode() {
+        for mode in [
+            ComponentDetectionMode.heuristic, .llmFirstScreen, .llmEveryScreen, .llmFallback,
+        ] {
+            XCTAssertTrue(
+                mode.buildClassifier(agentConfig: nil) is HeuristicClassifier,
+                "\(mode.rawValue) without an agent must classify heuristically")
+        }
     }
 }
 

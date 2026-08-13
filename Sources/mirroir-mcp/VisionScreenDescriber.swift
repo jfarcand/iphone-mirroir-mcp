@@ -115,7 +115,7 @@ final class VisionScreenDescriber: @unchecked Sendable {
     private func sendVisionRequest(
         imageBase64: String, imageWidth: Int, imageHeight: Int
     ) -> String? {
-        let baseURL = agentConfig.baseURL ?? "http://localhost:3000"
+        let baseURL = agentConfig.baseURL ?? defaultAgentBaseURL
         guard let url = URL(string: baseURL + "/v1/chat/completions") else { return nil }
 
         let systemPrompt = loadDiagnosisPrompt(filename: "screen-describe.md")
@@ -165,20 +165,7 @@ final class VisionScreenDescriber: @unchecked Sendable {
             return nil
         }
 
-        return extractResponseText(from: responseData)
-    }
-
-    /// Extract text content from an OpenAI-compatible chat completions response.
-    private func extractResponseText(from data: Data) -> String? {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = json["choices"] as? [[String: Any]],
-              let first = choices.first,
-              let message = first["message"] as? [String: Any],
-              let content = message["content"] as? String
-        else {
-            return String(data: data, encoding: .utf8)
-        }
-        return content
+        return extractChatCompletionText(from: responseData)
     }
 
     /// Resolve the vision-capable model name.
@@ -190,8 +177,8 @@ final class VisionScreenDescriber: @unchecked Sendable {
             return override
         }
         if agentConfig.provider == .embacle {
-            return "copilot_headless"
+            return defaultAgentModel
         }
-        return agentConfig.model ?? "copilot_headless"
+        return agentConfig.model ?? defaultAgentModel
     }
 }
