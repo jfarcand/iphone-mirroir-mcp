@@ -154,33 +154,64 @@ final class ComponentClassifiersTests: XCTestCase {
 
     // MARK: - Classifier construction
 
-    /// Every LLM mode classifies through the agent when one is configured.
-    func testLLMModesBuildAgentBackedClassifier() {
-        guard let config = AIAgentRegistry.resolve(name: "embacle") else {
-            return XCTFail("embacle is a built-in agent")
+    /// A client that can sample is asked directly — nothing needs configuring
+    /// on this machine for that path to work.
+    func testSamplingPreferredWhenClientDeclaresIt() {
+        let server = MCPServer(policy: PermissionPolicy(skipPermissions: true, config: nil))
+        _ = server.handleRequest(JSONRPCRequest(
+            id: .number(1), method: "initialize",
+            params: .object(["capabilities": .object(["sampling": .object([:])])])
+        ))
+        XCTAssertTrue(server.clientSupportsSampling(), "precondition: client declared sampling")
+
+        let classifier = ComponentDetectionMode.llmEveryScreen.buildClassifier(
+            server: server, agentConfig: AIAgentRegistry.resolve(name: "embacle"))
+        guard let composite = classifier as? CompositeClassifier else {
+            return XCTFail("expected a composite classifier")
         }
-        for mode in [ComponentDetectionMode.llmFirstScreen, .llmEveryScreen, .llmFallback] {
-            XCTAssertTrue(
-                mode.buildClassifier(agentConfig: config) is CompositeClassifier,
-                "\(mode.rawValue) pairs the agent with a heuristic fallback")
-        }
-        XCTAssertTrue(
-            ComponentDetectionMode.heuristic.buildClassifier(agentConfig: config)
-                is HeuristicClassifier,
-            "the heuristic mode never consults an agent")
+        XCTAssertTrue(composite.primary is SamplingClassifier,
+            "a sampling-capable client is asked before the locally configured agent")
     }
 
-    /// With no agent configured there is no model to ask, so every mode
-    /// classifies heuristically rather than building a classifier that cannot work.
-    func testNoAgentConfiguredFallsBackToHeuristicForEveryMode() {
+    /// A client that cannot sample still gets LLM classification, through the
+    /// agent configured here.
+    func testAgentUsedWhenClientCannotSample() {
+        let server = MCPServer(policy: PermissionPolicy(skipPermissions: true, config: nil))
+        _ = server.handleRequest(JSONRPCRequest(
+            id: .number(1), method: "initialize",
+            params: .object(["capabilities": .object(["roots": .object([:])])])
+        ))
+        XCTAssertFalse(server.clientSupportsSampling(), "precondition: no sampling declared")
+
+        let classifier = ComponentDetectionMode.llmEveryScreen.buildClassifier(
+            server: server, agentConfig: AIAgentRegistry.resolve(name: "embacle"))
+        guard let composite = classifier as? CompositeClassifier else {
+            return XCTFail("expected a composite classifier")
+        }
+        XCTAssertTrue(composite.primary is AgentClassifier,
+            "without sampling the locally configured agent answers")
+    }
+
+    /// With no model reachable by either transport, every mode classifies
+    /// heuristically rather than building a classifier that cannot work.
+    func testNoModelReachableFallsBackToHeuristicForEveryMode() {
         for mode in [
             ComponentDetectionMode.heuristic, .llmFirstScreen, .llmEveryScreen, .llmFallback,
         ] {
             XCTAssertTrue(
-                mode.buildClassifier(agentConfig: nil) is HeuristicClassifier,
-                "\(mode.rawValue) without an agent must classify heuristically")
+                mode.buildClassifier(server: nil, agentConfig: nil) is HeuristicClassifier,
+                "\(mode.rawValue) with no model must classify heuristically")
         }
     }
+
+    func testHeuristicModeNeverConsultsAModel() {
+        XCTAssertTrue(
+            ComponentDetectionMode.heuristic.buildClassifier(
+                server: nil, agentConfig: AIAgentRegistry.resolve(name: "embacle")
+            ) is HeuristicClassifier,
+            "the heuristic mode never consults a model")
+    }
+
 }
 
 // MARK: - Test Doubles

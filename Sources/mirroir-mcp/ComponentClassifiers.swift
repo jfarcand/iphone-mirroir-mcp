@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 //
 // ABOUTME: Classifier implementations bridging heuristic and LLM-based component detection.
-// ABOUTME: AgentClassifier asks the configured AI agent to classify screen components.
+// ABOUTME: LLM classification runs over MCP sampling or the configured agent, whichever is reachable.
 
 import Foundation
 import HelperLib
@@ -15,13 +15,37 @@ enum ComponentDetectionMode: String, Sendable {
     case llmFallback = "llm_fallback"
 
     /// Build the appropriate component classifier for this detection mode.
-    /// - Parameter agentConfig: The resolved AI agent, or nil when none is
-    ///   configured — every mode then classifies heuristically, since there is
-    ///   no model to ask.
-    func buildClassifier(agentConfig: AgentConfig?) -> any ComponentClassifying {
+    ///
+    /// Two transports can reach a model, and the one chosen depends on what is
+    /// actually available:
+    ///
+    /// - **Sampling** asks the client's own model. Nothing needs configuring on
+    ///   this machine, so it is preferred whenever the client declares the
+    ///   capability — that declaration is the client volunteering to serve these
+    ///   requests.
+    /// - **Agent** asks the model configured here, reaching every client
+    ///   including those that cannot sample.
+    ///
+    /// With neither available there is no model to ask, and every mode
+    /// classifies heuristically rather than building a classifier that cannot work.
+    ///
+    /// - Parameters:
+    ///   - server: The MCP server, used to reach the client's model. Nil where
+    ///     no server is in play, such as CLI invocations.
+    ///   - agentConfig: The resolved AI agent, or nil when none is configured.
+    func buildClassifier(
+        server: MCPServer?, agentConfig: AgentConfig?
+    ) -> any ComponentClassifying {
         let heuristic = HeuristicClassifier()
-        guard let agentConfig else { return heuristic }
-        let agent = { AgentClassifier(agentConfig: agentConfig) }
+        let model: (() -> any ComponentClassifying)?
+        if let server, server.clientSupportsSampling() {
+            model = { SamplingClassifier(server: server) }
+        } else if let agentConfig {
+            model = { AgentClassifier(agentConfig: agentConfig) }
+        } else {
+            model = nil
+        }
+        guard let agent = model else { return heuristic }
         switch self {
         case .heuristic:
             return heuristic
@@ -56,16 +80,58 @@ final class HeuristicClassifier: ComponentClassifying, @unchecked Sendable {
     }
 }
 
+/// Asks the MCP client's own model to classify screen components, over the
+/// protocol's sampling capability.
+///
+/// Needs nothing configured on this machine — the model belongs to the client —
+/// so it serves users who have no agent of their own. Only clients that declare
+/// `sampling` are asked, and the `2026-07-28` revision routes such requests
+/// through MRTR rather than a server-initiated write; `MCPServer` enforces both.
+final class SamplingClassifier: ComponentClassifying, @unchecked Sendable {
+    /// Ceiling for the classification reply; a full catalog answer runs well under this.
+    private static let maxTokens = 2000
+
+    private let server: MCPServer
+
+    init(server: MCPServer) {
+        self.server = server
+    }
+
+    func classify(
+        classified: [ClassifiedElement],
+        definitions: [ComponentDefinition],
+        screenHeight: Double
+    ) -> [ScreenComponent]? {
+        let prompt = ClassificationPrompt.build(classified: classified, definitions: definitions)
+
+        let params = SamplingParams(
+            messages: [SamplingMessage(role: "user", content: .text(prompt))],
+            maxTokens: Self.maxTokens,
+            systemPrompt: ClassificationPrompt.systemPrompt
+        )
+
+        guard let responseText = server.sendSamplingRequest(params) else {
+            DebugLog.log("sampling", "Sampling request failed, falling back to heuristics")
+            return nil
+        }
+
+        return ClassificationPrompt.parse(
+            responseText,
+            classified: classified,
+            definitions: definitions,
+            screenHeight: screenHeight
+        )
+    }
+}
+
 /// Asks the configured AI agent to classify screen components, sending the OCR
 /// elements and component catalog and parsing the structured JSON reply back
 /// into ScreenComponents.
 ///
 /// The agent is reached directly through the provider stack — the same path
-/// `VisionScreenDescriber` and the exploration advisor use — rather than
-/// borrowing the MCP client's model. That keeps classification working
-/// whatever the client is: sampling requires a `sampling` capability many
-/// clients (Claude Code among them) never declare, and the `2026-07-28`
-/// revision forbids the server-initiated request it depends on outright.
+/// `VisionScreenDescriber` and the exploration advisor use. It needs a model
+/// configured on this machine, and in exchange works with every client,
+/// including the many (Claude Code among them) that never declare `sampling`.
 final class AgentClassifier: ComponentClassifying, @unchecked Sendable {
     /// Ceiling for the classification reply; a full catalog answer runs well under this.
     private static let maxTokens = 2000
@@ -81,11 +147,10 @@ final class AgentClassifier: ComponentClassifying, @unchecked Sendable {
         definitions: [ComponentDefinition],
         screenHeight: Double
     ) -> [ScreenComponent]? {
-        let prompt = buildPrompt(classified: classified, definitions: definitions)
+        let prompt = ClassificationPrompt.build(classified: classified, definitions: definitions)
 
         guard let responseText = requestChatCompletion(
-            systemPrompt: "You analyze iOS app screens and classify OCR elements into UI components. "
-                + "Respond ONLY with valid JSON, no markdown formatting.",
+            systemPrompt: ClassificationPrompt.systemPrompt,
             userPrompt: prompt,
             maxTokens: Self.maxTokens,
             agentConfig: agentConfig,
@@ -95,16 +160,26 @@ final class AgentClassifier: ComponentClassifying, @unchecked Sendable {
             return nil
         }
 
-        return parseClassificationResponse(
+        return ClassificationPrompt.parse(
             responseText,
             classified: classified,
             definitions: definitions,
             screenHeight: screenHeight
         )
     }
+}
+
+/// The classification question and the shape of its answer, shared by every
+/// classifier that asks a model — so the prompt and the parser cannot drift
+/// apart between the sampling and agent transports.
+enum ClassificationPrompt {
+    /// Instruction given to the model before the element listing.
+    static let systemPrompt =
+        "You analyze iOS app screens and classify OCR elements into UI components. "
+        + "Respond ONLY with valid JSON, no markdown formatting."
 
     /// Build the prompt for the client LLM describing available components and current elements.
-    private func buildPrompt(
+    static func build(
         classified: [ClassifiedElement],
         definitions: [ComponentDefinition]
     ) -> String {
@@ -148,7 +223,7 @@ final class AgentClassifier: ComponentClassifying, @unchecked Sendable {
 
     /// Parse the LLM's JSON response into ScreenComponents.
     /// Falls back to nil if the response is not valid JSON.
-    private func parseClassificationResponse(
+    static func parse(
         _ responseText: String,
         classified: [ClassifiedElement],
         definitions: [ComponentDefinition],
@@ -220,8 +295,10 @@ final class AgentClassifier: ComponentClassifying, @unchecked Sendable {
 /// When `primaryOnlyForFirstScreen` is true, the primary classifier is used only for
 /// the first screen, and the fallback handles all subsequent screens.
 final class CompositeClassifier: ComponentClassifying, @unchecked Sendable {
-    private let primary: ComponentClassifying
-    private let fallback: ComponentClassifying
+    /// The classifier consulted first. Readable so callers and tests can see
+    /// which transport was selected without invoking a model.
+    let primary: ComponentClassifying
+    let fallback: ComponentClassifying
     private let primaryOnlyForFirstScreen: Bool
     private var screensSeen: Int = 0
     private let lock = NSLock()
