@@ -129,8 +129,11 @@ pub struct CrossSurfaceArgs {
 pub struct CrossSurfaceCapture {
     /// CSS / Playwright selector whose `textContent()` is scraped.
     pub selector: String,
-    /// File path the scraped text is written to (should be one of
-    /// `response_files`). `${MIRROIR_SAMPLE_DIR}` is resolved at load time.
+    /// File path the scraped text is written to. Must be one of
+    /// `response_files` — a capture pointing anywhere else is rejected with
+    /// [`crate::error::RunnerError::CrossSurfaceCaptureTargetNotListed`], since
+    /// its text would never be read and a stale file would be compared instead.
+    /// `${MIRROIR_SAMPLE_DIR}` is resolved at load time.
     pub to: String,
 }
 

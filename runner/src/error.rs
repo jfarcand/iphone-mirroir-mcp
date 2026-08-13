@@ -372,6 +372,20 @@ pub enum RunnerError {
         count: usize,
     },
 
+    /// `cross_surface:` capture writes somewhere the step never reads. The
+    /// capture produces one of the compared baselines, so a `to` outside
+    /// `response_files` — a typo, usually — would leave the scraped text
+    /// unread and compare a stale or missing file in its place.
+    #[error(
+        "cross_surface capture writes to `{to}`, which is not one of response_files {response_files:?}"
+    )]
+    CrossSurfaceCaptureTargetNotListed {
+        /// Path the capture would have written.
+        to: String,
+        /// The files the step actually compares.
+        response_files: Vec<String>,
+    },
+
     /// An archetype reference in `mirroir.yaml` could not be parsed.
     ///
     /// Valid forms: `<pack>/<name>[@<version>]`, `./<path>`, `user/<name>[@<version>]`.

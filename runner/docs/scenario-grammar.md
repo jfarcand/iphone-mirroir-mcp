@@ -313,7 +313,13 @@ preceding web batch (reusing the `judge:` Playwright capture path), so the web
 baseline is produced at run time rather than hand-authored. Without it, all
 `response_files` must already exist.
 
-Errors: `CrossSurfaceTooFewFiles`, `CrossSurfaceMismatch`.
+`to` **must** be one of the `response_files`, and the step fails when it is not:
+a capture aimed elsewhere writes text nothing reads, leaving the comparison to
+run against whatever sits at the listed path — a stale baseline from an earlier
+run compares clean and the check passes for the wrong reason.
+
+Errors: `CrossSurfaceTooFewFiles`, `CrossSurfaceCaptureTargetNotListed`,
+`CrossSurfaceMismatch`.
 
 ---
 

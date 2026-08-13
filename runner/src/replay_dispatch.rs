@@ -19,12 +19,25 @@ use crate::replay::ReplayOptions;
 /// # Errors
 ///
 /// * [`RunnerError::CrossSurfaceTooFewFiles`] when fewer than two files are listed.
+/// * [`RunnerError::CrossSurfaceCaptureTargetNotListed`] when a `capture.to` is
+///   not one of the compared files.
 /// * [`RunnerError::Io`] when a response file can't be read.
 /// * [`RunnerError::CrossSurfaceMismatch`] when a pair falls below threshold.
 pub fn dispatch_cross_surface(args: &CrossSurfaceArgs) -> Result<()> {
     if args.response_files.len() < 2 {
         return Err(RunnerError::CrossSurfaceTooFewFiles {
             count: args.response_files.len(),
+        });
+    }
+    // Checked before any file is read: a capture aimed outside the compared set
+    // leaves its text unread, and the comparison silently falls back to whatever
+    // sits at the listed path — a stale baseline from an earlier run passes.
+    if let Some(capture) = args.capture.as_ref()
+        && !args.response_files.contains(&capture.to)
+    {
+        return Err(RunnerError::CrossSurfaceCaptureTargetNotListed {
+            to: capture.to.clone(),
+            response_files: args.response_files.clone(),
         });
     }
     let threshold = args.min_similarity.unwrap_or(0.7);
@@ -199,6 +212,7 @@ mod tests {
     use std::result::Result as StdResult;
 
     use serde_yaml::from_str;
+    use tempfile::tempdir;
 
     use super::*;
     use crate::parser::step_args::{CrossSurfaceArgs, CrossSurfaceCapture};
@@ -248,6 +262,49 @@ mod tests {
             skip_playwright: true,
         };
         assert!(cross_surface_capture(&with_cap, &buffer, skip).is_none());
+    }
+
+    #[test]
+    fn capture_target_outside_response_files_is_rejected() -> TestResult {
+        // Typo: the capture writes `b.web.txt`, the step compares `b.txt`. The
+        // scraped text would go unread and `b.txt` — stale or missing — would be
+        // compared in its place.
+        let SkillStep::CrossSurface(args) = cross_surface(Some(CrossSurfaceCapture {
+            selector: "main".to_owned(),
+            to: "b.web.txt".to_owned(),
+        })) else {
+            return Err("expected a cross_surface step".to_owned());
+        };
+        match dispatch_cross_surface(&args) {
+            Err(RunnerError::CrossSurfaceCaptureTargetNotListed { to, response_files }) => {
+                if to != "b.web.txt" || !response_files.contains(&"b.txt".to_owned()) {
+                    return Err(format!("wrong error payload: {to} / {response_files:?}"));
+                }
+                Ok(())
+            }
+            other => Err(format!("expected capture-target error, got {other:?}")),
+        }
+    }
+
+    #[test]
+    fn capture_target_listed_in_response_files_is_accepted() -> TestResult {
+        // The valid form must still reach the comparison: identical bodies pass.
+        let dir = tempdir().map_err(|e| e.to_string())?;
+        let a = dir.path().join("a.txt");
+        let b = dir.path().join("b.txt");
+        for path in [&a, &b] {
+            fs::write(path, "same body text").map_err(|e| e.to_string())?;
+        }
+        let b_path = b.display().to_string();
+        let args = CrossSurfaceArgs {
+            response_files: vec![a.display().to_string(), b_path.clone()],
+            min_similarity: Some(0.5),
+            capture: Some(CrossSurfaceCapture {
+                selector: "main".to_owned(),
+                to: b_path,
+            }),
+        };
+        dispatch_cross_surface(&args).map_err(|e| format!("valid capture rejected: {e}"))
     }
 
     #[test]
