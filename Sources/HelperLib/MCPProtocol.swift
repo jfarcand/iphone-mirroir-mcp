@@ -299,10 +299,37 @@ public struct MCPToolDefinition: Sendable {
 public struct MCPToolResult: Sendable {
     public let content: [MCPContent]
     public let isError: Bool
+    /// Requests the client must fulfil before this tool can finish, keyed by
+    /// server-assigned identifiers. Non-empty turns the response into an
+    /// `InputRequiredResult`: the call ends, the client answers and retries.
+    public let inputRequests: [String: MCPInputRequest]
+    /// Opaque state echoed back on the retry, carrying whatever the tool needs
+    /// to resume. Meaningless to the client, which must not inspect it.
+    public let requestState: String?
 
-    public init(content: [MCPContent], isError: Bool) {
+    public init(
+        content: [MCPContent],
+        isError: Bool,
+        inputRequests: [String: MCPInputRequest] = [:],
+        requestState: String? = nil
+    ) {
         self.content = content
         self.isError = isError
+        self.inputRequests = inputRequests
+        self.requestState = requestState
+    }
+
+    /// A result asking the client to fulfil `inputRequests` and retry, carrying
+    /// `requestState` so the retry can pick up where this call stopped.
+    ///
+    /// The revision requires at least one of the two, so a caller supplying
+    /// neither would produce an invalid result.
+    public static func inputRequired(
+        _ inputRequests: [String: MCPInputRequest], requestState: String? = nil
+    ) -> MCPToolResult {
+        MCPToolResult(
+            content: [], isError: false,
+            inputRequests: inputRequests, requestState: requestState)
     }
 
     public static func text(_ text: String) -> MCPToolResult {
@@ -315,6 +342,25 @@ public struct MCPToolResult: Sendable {
 
     public static func error(_ message: String) -> MCPToolResult {
         MCPToolResult(content: [.text(message)], isError: true)
+    }
+}
+
+/// A server-to-client request carried in an `InputRequiredResult`.
+///
+/// The `2026-07-28` revision replaced server-initiated requests with this
+/// pattern: rather than writing a request to stdout, the server embeds it in
+/// its result and the client fulfils it before retrying the original call.
+/// `method` is one of `sampling/createMessage`, `elicitation/create`, or
+/// `roots/list`.
+public struct MCPInputRequest: Sendable {
+    /// The client method being asked for.
+    public let method: String
+    /// Parameters for that method.
+    public let params: JSONValue
+
+    public init(method: String, params: JSONValue) {
+        self.method = method
+        self.params = params
     }
 }
 

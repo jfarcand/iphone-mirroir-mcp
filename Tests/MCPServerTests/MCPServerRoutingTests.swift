@@ -523,6 +523,85 @@ final class MCPServerRoutingTests: XCTestCase {
         XCTAssertTrue(server.clientSupportsSampling())
     }
 
+    // MARK: - Multi round-trip requests (MRTR)
+
+    /// A tool that needs client input ends the call with an `input_required`
+    /// result carrying the requests and the state to resume from.
+    func testToolNeedingInputReturnsInputRequiredResult() {
+        let server = makeServer()
+        server.registerTool(MCPToolDefinition(
+            name: "needs_input", description: "asks", inputSchema: [:],
+            handler: { _ in
+                .inputRequired(
+                    ["classify": MCPInputRequest(
+                        method: "sampling/createMessage",
+                        params: .object(["maxTokens": .number(100)]))],
+                    requestState: "opaque-blob")
+            }))
+
+        let response = server.handleRequest(modernRequest(
+            method: "tools/call",
+            extraParams: ["name": .string("needs_input"), "arguments": .object([:])]))
+        guard let response, case .object(let result) = response.result else {
+            return XCTFail("Expected object result")
+        }
+        XCTAssertNil(response.error)
+        XCTAssertEqual(result["resultType"], .string("input_required"))
+        XCTAssertEqual(result["requestState"], .string("opaque-blob"))
+        guard case .object(let requests)? = result["inputRequests"],
+              case .object(let classify)? = requests["classify"] else {
+            return XCTFail("Expected inputRequests entry")
+        }
+        XCTAssertEqual(classify["method"], .string("sampling/createMessage"))
+        XCTAssertNil(result["content"], "an input_required result carries no tool content")
+    }
+
+    /// The exchange exists only in the stateless revision. A legacy client cannot
+    /// fulfil the requests or retry with them, so it is told plainly.
+    func testInputRequiredRefusedOnLegacyRequest() {
+        let server = makeServer()
+        server.registerTool(MCPToolDefinition(
+            name: "needs_input", description: "asks", inputSchema: [:],
+            handler: { _ in .inputRequired(["k": MCPInputRequest(method: "roots/list", params: .object([:]))]) }))
+
+        let response = server.handleRequest(makeRequest(
+            method: "tools/call",
+            params: .object(["name": .string("needs_input"), "arguments": .object([:])])))
+        guard let response, let error = response.error else {
+            return XCTFail("Expected an error for a legacy client")
+        }
+        XCTAssertEqual(error.code, -32603)
+        XCTAssertTrue(error.message.contains("2026-07-28"), "names the revision required")
+    }
+
+    /// On the retry the client echoes the state and supplies the answers; both
+    /// must reach the handler.
+    func testRetryCarriesInputResponsesAndRequestState() {
+        let server = makeServer()
+        let request = modernRequest(
+            method: "tools/call",
+            extraParams: [
+                "name": .string("t"), "arguments": .object([:]),
+                "requestState": .string("blob"),
+                "inputResponses": .object([
+                    "classify": .object(["content": .object(["text": .string("answer")])]),
+                ]),
+            ])
+
+        XCTAssertEqual(MCPServer.requestState(in: request), "blob")
+        let responses = MCPServer.inputResponses(in: request)
+        XCTAssertEqual(responses.count, 1)
+        XCTAssertNotNil(responses["classify"], "the answer is keyed by the request identifier")
+    }
+
+    func testFirstAttemptCarriesNoInputState() {
+        let request = modernRequest(
+            method: "tools/call",
+            extraParams: ["name": .string("t"), "arguments": .object([:])])
+        XCTAssertNil(MCPServer.requestState(in: request))
+        XCTAssertTrue(MCPServer.inputResponses(in: request).isEmpty)
+    }
+
     /// `sampling` is a client capability. Advertising it as a server capability
     /// tells the client nothing and misreports what this server offers.
     func testInitializeAdvertisesOnlyServerCapabilities() {

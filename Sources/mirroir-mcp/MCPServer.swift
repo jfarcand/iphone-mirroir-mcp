@@ -337,12 +337,68 @@ final class MCPServer: Sendable {
         let arguments = request.params?.getArguments() ?? [:]
         let toolResult = tool.handler(arguments)
 
+        if !toolResult.inputRequests.isEmpty || toolResult.requestState != nil {
+            return inputRequiredResponse(request, toolResult: toolResult, modern: modern)
+        }
+
         let content: JSONValue = .array(toolResult.content.map { $0.toJSON() })
         let result = completeResult([
             "content": content,
             "isError": .bool(toolResult.isError),
         ], modern: modern)
         return JSONRPCResponse(id: request.id, result: result, error: nil)
+    }
+
+    /// Build the `InputRequiredResult` for a tool that needs the client to
+    /// answer something before it can finish.
+    ///
+    /// Only the stateless revision defines this exchange. A legacy client has no
+    /// way to fulfil the requests or retry with them, so asking it would strand
+    /// the call — it gets an error naming the shortfall instead.
+    private func inputRequiredResponse(
+        _ request: JSONRPCRequest, toolResult: MCPToolResult, modern: Bool
+    ) -> JSONRPCResponse {
+        guard modern else {
+            return JSONRPCResponse(
+                id: request.id, result: nil,
+                error: JSONRPCError(
+                    code: -32603,
+                    message: "Tool needs client input, which requires protocol revision "
+                        + "\(Self.modernProtocolVersions[0]) or later")
+            )
+        }
+
+        var requests: [String: JSONValue] = [:]
+        for (key, inputRequest) in toolResult.inputRequests {
+            requests[key] = .object([
+                "method": .string(inputRequest.method),
+                "params": inputRequest.params,
+            ])
+        }
+
+        var fields: [String: JSONValue] = ["resultType": .string("input_required")]
+        if !requests.isEmpty {
+            fields["inputRequests"] = .object(requests)
+        }
+        if let state = toolResult.requestState {
+            fields["requestState"] = .string(state)
+        }
+        fields["_meta"] = .object([MetaKey.serverInfo: Self.serverInfo])
+        return JSONRPCResponse(id: request.id, result: .object(fields), error: nil)
+    }
+
+    /// Answers the client supplied when retrying a call that asked for input,
+    /// keyed by the identifiers the previous `inputRequests` used.
+    static func inputResponses(in request: JSONRPCRequest) -> [String: JSONValue] {
+        guard case .object(let responses)? = request.params?.member("inputResponses") else {
+            return [:]
+        }
+        return responses
+    }
+
+    /// The opaque state echoed back on a retry, or nil on a first attempt.
+    static func requestState(in request: JSONRPCRequest) -> String? {
+        request.params?.member("requestState")?.asString()
     }
 
     // MARK: - Server-to-Client Sampling
