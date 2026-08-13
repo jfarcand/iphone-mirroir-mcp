@@ -439,6 +439,36 @@ final class MCPServerRoutingTests: XCTestCase {
         XCTAssertEqual(data["requested"], .string("1900-01-01"))
     }
 
+    /// An `initialize`-era revision named in `_meta` is not a legacy request —
+    /// it asks for stateless negotiation at a revision that has no such concept,
+    /// and must not be answered with a stateless result envelope.
+    func testLegacyVersionInMetaIsRejected() {
+        let server = makeServer()
+        for legacy in MCPServer.legacyProtocolVersions {
+            let response = server.handleRequest(
+                modernRequest(method: "tools/list", version: legacy))
+            guard let response, let error = response.error else {
+                return XCTFail("\(legacy) in _meta must not be served statelessly")
+            }
+            XCTAssertEqual(error.code, -32022, "\(legacy): UnsupportedProtocolVersionError")
+            XCTAssertNil(response.result, "\(legacy): must not return a result envelope")
+        }
+    }
+
+    /// The error names every revision the server serves, so a client can pick a
+    /// stateless one or fall back to the handshake.
+    func testUnsupportedVersionErrorAdvertisesBothEras() {
+        let server = makeServer()
+        guard let response = server.handleRequest(
+                modernRequest(method: "tools/list", version: "1900-01-01")),
+              case .object(let data)? = response.error?.data,
+              case .array(let supported) = data["supported"] else {
+            return XCTFail("Expected data.supported list")
+        }
+        XCTAssertTrue(supported.contains(.string("2026-07-28")), "stateless revision")
+        XCTAssertTrue(supported.contains(.string("2025-11-25")), "fallback revision")
+    }
+
     func testModernMissingRequiredMetaFieldReturnsInvalidParams() {
         let server = makeServer()
         // protocolVersion present but clientCapabilities missing → malformed

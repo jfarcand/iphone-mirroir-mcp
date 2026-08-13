@@ -62,11 +62,19 @@ final class MCPServer: Sendable {
         }
     }
 
-    /// Supported MCP protocol versions, most recent first. `2026-07-28` is the
-    /// modern (stateless, per-request `_meta`) revision; the `2025-*`/`2024-*`
-    /// entries are legacy (`initialize`-handshake) revisions. The server is
-    /// dual-era: it serves both. See `handleRequest`.
-    static let supportedProtocolVersions = ["2026-07-28", "2025-11-25", "2024-11-05"]
+    /// Revisions that negotiate statelessly, carrying the protocol version in
+    /// each request's `_meta`. Only these are meaningful in
+    /// `_meta.io.modelcontextprotocol/protocolVersion`: naming an
+    /// `initialize`-era revision there asks for a negotiation that revision has
+    /// no concept of.
+    static let modernProtocolVersions = ["2026-07-28"]
+
+    /// Every revision this server serves, most recent first. `server/discover`
+    /// advertises the whole list — a client reads the legacy entries to decide
+    /// whether falling back to the `initialize` handshake is available.
+    static var supportedProtocolVersions: [String] {
+        modernProtocolVersions + legacyProtocolVersions
+    }
 
     /// Reserved `_meta` keys of the modern (`2026-07-28`) revision. The first
     /// three ride on every client request; `serverInfo` is the canonical place
@@ -113,7 +121,11 @@ final class MCPServer: Sendable {
             .member("_meta")?.member(MetaKey.protocolVersion)?.asString()
         let isModern = modernVersion != nil
         if let requested = modernVersion {
-            if !Self.supportedProtocolVersions.contains(requested) {
+            // Validated against the stateless revisions alone: a legacy version
+            // here is not a legacy request, it is a request for stateless
+            // negotiation at a revision that cannot do it. The error names the
+            // revisions that can, and the legacy ones it can fall back to.
+            if !Self.modernProtocolVersions.contains(requested) {
                 return unsupportedVersionError(id: request.id, requested: requested)
             }
             if let missing = missingRequiredMetaField(request) {
