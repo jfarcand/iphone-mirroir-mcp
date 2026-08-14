@@ -183,20 +183,30 @@ fi
 echo ""
 echo -e "${BLUE}==== Test: Fail-Closed Default ====${NC}"
 
-DEFAULT_TOOLS=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' \
-    | $BINARY 2>/dev/null | tail -1)
+# Run from a scratch directory holding a config that grants nothing. The policy
+# reads the project-local config ahead of the global one, so this asks the
+# question the test means to ask — "granted nothing, what is exposed?" — on a
+# developer machine whose own `~/.mirroir-mcp/permissions.json` may grant
+# everything, and on CI where no such file exists.
+FAILCLOSED_DIR=$(mktemp -d)
+mkdir -p "$FAILCLOSED_DIR/.mirroir-mcp"
+echo '{}' > "$FAILCLOSED_DIR/.mirroir-mcp/permissions.json"
+
+DEFAULT_TOOLS=$(cd "$FAILCLOSED_DIR" && printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' \
+    | "$BINARY" 2>/dev/null | tail -1)
+rm -rf "$FAILCLOSED_DIR"
 
 if echo "$DEFAULT_TOOLS" | python3 -c "
 import sys, json
 obj = json.loads(sys.stdin.readline())
 tools = [t['name'] for t in obj['result']['tools']]
 expected_readonly = {'screenshot','start_recording','stop_recording','get_orientation','status','check_health','describe_screen','list_skills','get_skill','list_targets','calibrate_component','classify_screen'}
-assert set(tools) == expected_readonly, f'Default should show only readonly tools.\nExpected: {expected_readonly}\nGot: {set(tools)}\nExtra: {set(tools) - expected_readonly}\nMissing: {expected_readonly - set(tools)}'
+assert set(tools) == expected_readonly, f'A config granting nothing must expose only readonly tools.\nExpected: {expected_readonly}\nGot: {set(tools)}\nExtra: {set(tools) - expected_readonly}\nMissing: {expected_readonly - set(tools)}'
 print('OK')
 " 2>&1 | grep -q "OK"; then
-    record_test "Default mode exposes only readonly tools (fail-closed)" true
+    record_test "Granting nothing exposes only readonly tools (fail-closed)" true
 else
-    record_test "Default mode exposes only readonly tools (fail-closed)" false
+    record_test "Granting nothing exposes only readonly tools (fail-closed)" false
 fi
 
 # ============================================================
