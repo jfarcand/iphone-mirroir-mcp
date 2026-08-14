@@ -277,22 +277,54 @@ public struct SamplingResponse: Codable, Sendable {
 
 // MARK: - MCP Tool Definition
 
+/// What a tool learns about its call beyond the arguments — the multi
+/// round-trip exchange, where the client answers a previous `input_required`
+/// result and echoes the state that came with it. Both are empty on a first
+/// attempt.
+public struct MCPToolCallContext: Sendable {
+    /// Client answers keyed by the identifiers the tool's `inputRequests` used.
+    public let inputResponses: [String: JSONValue]
+    /// The opaque state this tool issued alongside those requests.
+    public let requestState: String?
+
+    public init(inputResponses: [String: JSONValue] = [:], requestState: String? = nil) {
+        self.inputResponses = inputResponses
+        self.requestState = requestState
+    }
+}
+
 public struct MCPToolDefinition: Sendable {
     public let name: String
     public let description: String
     public let inputSchema: [String: JSONValue]
-    public let handler: @Sendable ([String: JSONValue]) -> MCPToolResult
+    public let handler: @Sendable ([String: JSONValue], MCPToolCallContext) -> MCPToolResult
 
+    /// A tool that reads the call context — needed only by tools that ask the
+    /// client for input and resume when it answers.
+    public init(
+        name: String,
+        description: String,
+        inputSchema: [String: JSONValue],
+        contextualHandler: @Sendable @escaping (
+            [String: JSONValue], MCPToolCallContext
+        ) -> MCPToolResult
+    ) {
+        self.name = name
+        self.description = description
+        self.inputSchema = inputSchema
+        self.handler = contextualHandler
+    }
+
+    /// A tool that answers from its arguments alone, which is nearly all of them.
     public init(
         name: String,
         description: String,
         inputSchema: [String: JSONValue],
         handler: @Sendable @escaping ([String: JSONValue]) -> MCPToolResult
     ) {
-        self.name = name
-        self.description = description
-        self.inputSchema = inputSchema
-        self.handler = handler
+        self.init(
+            name: name, description: description, inputSchema: inputSchema,
+            contextualHandler: { args, _ in handler(args) })
     }
 }
 

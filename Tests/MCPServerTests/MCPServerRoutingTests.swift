@@ -525,6 +525,28 @@ final class MCPServerRoutingTests: XCTestCase {
 
     // MARK: - Multi round-trip requests (MRTR)
 
+    /// A stateless-revision client never handshakes, so its capabilities are
+    /// read from the `_meta` on each request instead.
+    func testModernRequestCapabilitiesAreRecorded() {
+        let server = makeServer()
+        XCTAssertFalse(server.clientSupportsSampling(), "nothing declared yet")
+
+        var meta: [String: JSONValue] = [
+            "io.modelcontextprotocol/protocolVersion": .string("2026-07-28"),
+            "io.modelcontextprotocol/clientCapabilities": .object(["sampling": .object([:])]),
+        ]
+        _ = server.handleRequest(makeRequest(
+            method: "tools/list", params: .object(["_meta": .object(meta)])))
+        XCTAssertTrue(server.clientSupportsSampling(),
+            "capabilities declared per-request must be honoured")
+
+        // And a later request that declares none takes it away again.
+        meta["io.modelcontextprotocol/clientCapabilities"] = .object([:])
+        _ = server.handleRequest(makeRequest(
+            method: "tools/list", params: .object(["_meta": .object(meta)])))
+        XCTAssertFalse(server.clientSupportsSampling())
+    }
+
     /// A tool that needs client input ends the call with an `input_required`
     /// result carrying the requests and the state to resume from.
     func testToolNeedingInputReturnsInputRequiredResult() {

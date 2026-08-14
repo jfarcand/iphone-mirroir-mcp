@@ -22,7 +22,7 @@ struct PermissionClassificationTests {
     @Test("all tools are classified")
     func allToolsClassified() {
         let total = PermissionPolicy.readonlyTools.count + PermissionPolicy.mutatingTools.count
-        #expect(total == 33, "Expected 33 tools, got \(total)")
+        #expect(total == 34, "Expected 34 tools, got \(total)")
     }
 
     @Test("readonly tools contains expected tools")
@@ -31,7 +31,7 @@ struct PermissionClassificationTests {
             "screenshot", "describe_screen", "start_recording",
             "stop_recording", "get_orientation", "status",
             "check_health", "list_targets", "list_skills",
-            "get_skill", "calibrate_component",
+            "get_skill", "calibrate_component", "classify_screen",
         ]
         #expect(PermissionPolicy.readonlyTools == expected)
     }

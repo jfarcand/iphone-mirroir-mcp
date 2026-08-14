@@ -134,5 +134,98 @@ extension MirroirMCP {
                 )
             }
         ))
+
+        registerClassifyScreen(server: server, registry: registry)
+    }
+
+    /// classify_screen — group the current screen's elements into components
+    /// using a model. Where the model belongs to the MCP client, the call ends
+    /// with an `input_required` result and completes on the client's retry.
+    private static func registerClassifyScreen(
+        server: MCPServer,
+        registry: TargetRegistry
+    ) {
+        /// Ceiling for the classification reply.
+        let maxTokens = 2000
+
+        server.registerTool(MCPToolDefinition(
+            name: "classify_screen",
+            description: """
+                Group the current screen's OCR elements into UI components using an AI model. \
+                Returns each detected component, its definition, and the elements it covers. \
+                Use this to see how a screen decomposes before writing component definitions \
+                or running an exploration.
+                """,
+            inputSchema: [
+                "type": .string("object"),
+                "properties": .object([
+                    "target": .object([
+                        "type": .string("string"),
+                        "description": .string(
+                            "Target name for multi-target setups (optional)"),
+                    ]),
+                ]),
+            ],
+            contextualHandler: { args, context in
+                let definitions = ComponentLoader.loadAll()
+                guard !definitions.isEmpty else {
+                    return .error("No component definitions found to classify against")
+                }
+
+                // A retry: the client answered, and the state names the screen
+                // the question was asked about.
+                if let reply = ScreenClassification.replyText(from: context) {
+                    guard let screen = ScreenClassification.resumeScreen(from: context) else {
+                        return .error(
+                            "The follow-up state was missing, altered, or expired — "
+                            + "call classify_screen again to restart the classification")
+                    }
+                    guard let components = ScreenClassification.components(
+                        fromReply: reply, screen: screen, definitions: definitions
+                    ) else {
+                        return .error("The model's reply could not be read as components")
+                    }
+                    return .text(ScreenClassificationReport.format(
+                        components: components, elementCount: screen.elements.count))
+                }
+
+                // A first attempt: capture the screen, then ask.
+                let (ctx, err) = registry.resolveForTool(args)
+                guard let ctx else { return err! }
+                guard let described = ctx.describer.describe() else {
+                    return .error("Could not read the screen")
+                }
+                guard let windowSize = ctx.bridge.getWindowInfo()?.size else {
+                    return .error("Could not read the window size")
+                }
+                let screen = ScreenClassification.CapturedScreen(
+                    elements: described.elements, screenHeight: windowSize.height)
+                guard !screen.elements.isEmpty else {
+                    return .error("No elements on screen to classify")
+                }
+
+                // The client's own model answers over the round trip; otherwise
+                // the agent configured here answers inline.
+                if server.clientSupportsSampling() {
+                    return ScreenClassification.askClient(
+                        screen, definitions: definitions, maxTokens: maxTokens)
+                }
+                guard let agentConfig = AIAgentRegistry.resolveConfigured() else {
+                    return .error(
+                        "No model available: the client offers no sampling capability and "
+                        + "no AI agent is configured here")
+                }
+                let classified = ElementClassifier.classify(
+                    screen.elements, screenHeight: screen.screenHeight)
+                guard let components = AgentClassifier(agentConfig: agentConfig).classify(
+                    classified: classified, definitions: definitions,
+                    screenHeight: screen.screenHeight
+                ) else {
+                    return .error("The agent did not return a usable classification")
+                }
+                return .text(ScreenClassificationReport.format(
+                    components: components, elementCount: screen.elements.count))
+            }
+        ))
     }
 }
