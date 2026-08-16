@@ -231,8 +231,16 @@ jobs:
 
       - name: Test fail-closed default (readonly only)
         run: |
-          printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' \
-            | .build/release/mirroir-mcp 2>/dev/null \
+          # Run from a scratch directory granting nothing. The policy reads the
+          # project-local config ahead of the global one, so the question stays
+          # "granted nothing, what is exposed?" whether or not the machine
+          # running this has a permissions file of its own.
+          FAILCLOSED=$(mktemp -d)
+          mkdir -p "$FAILCLOSED/.mirroir-mcp"
+          echo '{}' > "$FAILCLOSED/.mirroir-mcp/permissions.json"
+          BIN="$PWD/.build/release/mirroir-mcp"
+          (cd "$FAILCLOSED" && printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' \
+            | "$BIN" 2>/dev/null) \
             | python3 -c "
           import sys, json
           lines = sys.stdin.readlines()
@@ -243,17 +251,22 @@ jobs:
           print(f'Fail-closed default: {len(tools)} readonly tools (OK)')
           "
 
-      - name: Test --yolo alias shows all tools
+      - name: Test --yolo alias matches --dangerously-skip-permissions
         run: |
-          printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' \
-            | .build/release/mirroir-mcp --yolo 2>/dev/null \
-            | python3 -c "
-          import sys, json
-          lines = sys.stdin.readlines()
-          obj = json.loads(lines[1])
-          tools = [t['name'] for t in obj['result']['tools']]
-          assert len(tools) == 33, f'--yolo should show all 33 tools, got {len(tools)}: {tools}'
-          print(f'--yolo alias: {len(tools)} tools (OK)')
+          # The step tests that the two flags are aliases, so it compares them
+          # against each other rather than restating the roster — a count here
+          # would need updating on every tool added, in a file no local check
+          # reads.
+          REQUESTS='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n'
+          printf "$REQUESTS" | .build/release/mirroir-mcp --yolo 2>/dev/null | tail -1 > /tmp/yolo.json
+          printf "$REQUESTS" | .build/release/mirroir-mcp --dangerously-skip-permissions 2>/dev/null | tail -1 > /tmp/skip.json
+          python3 -c "
+          import json
+          yolo = {t['name'] for t in json.load(open('/tmp/yolo.json'))['result']['tools']}
+          skip = {t['name'] for t in json.load(open('/tmp/skip.json'))['result']['tools']}
+          assert yolo, '--yolo exposed no tools'
+          assert yolo == skip, f'--yolo differs from --dangerously-skip-permissions: {yolo ^ skip}'
+          print(f'--yolo alias: {len(yolo)} tools, identical to --dangerously-skip-permissions (OK)')
           "
 
       - name: Test unknown method returns error
