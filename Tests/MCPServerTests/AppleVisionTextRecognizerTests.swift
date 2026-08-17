@@ -75,12 +75,12 @@ struct AppleVisionTextRecognizerTests {
     }
 
     @Test("Empty image returns empty elements")
-    func testEmptyImageReturnsEmptyElements() {
+    func testEmptyImageReturnsEmptyElements() throws {
         let image = makeBlankImage(width: 820, height: 1796)
         let windowSize = CGSize(width: 410, height: 898)
         let contentBounds = CGRect(x: 0, y: 0, width: 820, height: 1796)
 
-        let elements = recognizer.recognizeText(
+        let elements = try recognizer.recognizeText(
             in: image, windowSize: windowSize, contentBounds: contentBounds
         )
 
@@ -88,12 +88,12 @@ struct AppleVisionTextRecognizerTests {
     }
 
     @Test("Recognizes text from rendered image")
-    func testRecognizesTextFromRenderedImage() {
+    func testRecognizesTextFromRenderedImage() throws {
         let image = makeImageWithText("Settings")
         let windowSize = CGSize(width: 410, height: 898)
         let contentBounds = CGRect(x: 0, y: 0, width: 820, height: 1796)
 
-        let elements = recognizer.recognizeText(
+        let elements = try recognizer.recognizeText(
             in: image, windowSize: windowSize, contentBounds: contentBounds
         )
 
@@ -103,12 +103,12 @@ struct AppleVisionTextRecognizerTests {
     }
 
     @Test("Coordinates are in window-point space")
-    func testCoordinatesAreInWindowPointSpace() {
+    func testCoordinatesAreInWindowPointSpace() throws {
         let image = makeImageWithText("Hello")
         let windowSize = CGSize(width: 410, height: 898)
         let contentBounds = CGRect(x: 0, y: 0, width: 820, height: 1796)
 
-        let elements = recognizer.recognizeText(
+        let elements = try recognizer.recognizeText(
             in: image, windowSize: windowSize, contentBounds: contentBounds
         )
 
@@ -127,17 +127,17 @@ struct AppleVisionTextRecognizerTests {
     }
 
     @Test("Accurate is the default recognition level")
-    func testAccurateIsDefault() {
+    func testAccurateIsDefault() throws {
         #expect(TimingConstants.ocrRecognitionLevel == "accurate")
     }
 
     @Test("Language correction is enabled by default")
-    func testLanguageCorrectionIsDefault() {
+    func testLanguageCorrectionIsDefault() throws {
         #expect(TimingConstants.ocrLanguageCorrection == true)
     }
 
     @Test("Fast recognition level returns results")
-    func testFastRecognitionLevelReturnsResults() {
+    func testFastRecognitionLevelReturnsResults() throws {
         // Use Vision's .fast recognition level directly to verify it
         // still detects large text — just possibly with fewer elements.
         let image = makeImageWithText("Settings", fontSize: 96)
@@ -158,7 +158,7 @@ struct AppleVisionTextRecognizerTests {
     }
 
     @Test("Content bounds scaling adjusts coordinates")
-    func testContentBoundsScaling() {
+    func testContentBoundsScaling() throws {
         // Simulate "Larger" display mode: image is 820x1796 pixels but
         // content only occupies the top-left 600x1400 pixels.
         let image = makeImageWithText(
@@ -171,13 +171,13 @@ struct AppleVisionTextRecognizerTests {
 
         // Full-window content bounds (no scaling)
         let fullBounds = CGRect(x: 0, y: 0, width: 820, height: 1796)
-        let fullElements = recognizer.recognizeText(
+        let fullElements = try recognizer.recognizeText(
             in: image, windowSize: windowSize, contentBounds: fullBounds
         )
 
         // Reduced content bounds (simulates Larger display mode border)
         let reducedBounds = CGRect(x: 0, y: 0, width: 600, height: 1400)
-        let scaledElements = recognizer.recognizeText(
+        let scaledElements = try recognizer.recognizeText(
             in: image, windowSize: windowSize, contentBounds: reducedBounds
         )
 
@@ -197,7 +197,7 @@ struct AppleVisionTextRecognizerTests {
     }
 
     @Test("Image taller than window maps Y coordinates through image height")
-    func testImageTallerThanWindow() {
+    func testImageTallerThanWindow() throws {
         // Simulate a screenshot taller than the window — screencapture may
         // include window chrome (rounded corners, home indicator area) beyond
         // the AX-reported window size.
@@ -221,7 +221,7 @@ struct AppleVisionTextRecognizerTests {
         let windowSize = CGSize(width: 410, height: 898)
         let contentBounds = CGRect(x: 0, y: 0, width: 820, height: imageHeight)
 
-        let elements = recognizer.recognizeText(
+        let elements = try recognizer.recognizeText(
             in: image, windowSize: windowSize, contentBounds: contentBounds
         )
 
@@ -245,7 +245,7 @@ struct AppleVisionTextRecognizerTests {
     }
 
     @Test("Content bounds scaling still works for Larger display mode")
-    func testContentBoundsScalingLargerMode() {
+    func testContentBoundsScalingLargerMode() throws {
         // In Larger display mode, content is smaller than the image.
         // ContentBoundsDetector reports borders → scaling maps content to window.
         let image = makeImageWithText(
@@ -258,13 +258,13 @@ struct AppleVisionTextRecognizerTests {
 
         // Full-image content bounds (no borders → no scaling)
         let fullBounds = CGRect(x: 0, y: 0, width: 820, height: 1796)
-        let fullElements = recognizer.recognizeText(
+        let fullElements = try recognizer.recognizeText(
             in: image, windowSize: windowSize, contentBounds: fullBounds
         )
 
         // Reduced content bounds (borders detected → scale to fill window)
         let reducedBounds = CGRect(x: 0, y: 0, width: 600, height: 1400)
-        let scaledElements = recognizer.recognizeText(
+        let scaledElements = try recognizer.recognizeText(
             in: image, windowSize: windowSize, contentBounds: reducedBounds
         )
 
@@ -284,7 +284,7 @@ struct AppleVisionTextRecognizerTests {
     }
 
     @Test("OCR coordinates stay in bounds across macOS zoom modes")
-    func testOCRCoordinatesAcrossZoomModes() {
+    func testOCRCoordinatesAcrossZoomModes() throws {
         // macOS View menu zoom changes window size but backing scale stays ~2.0.
         // Verify OCR coordinates are within window bounds for all 3 modes.
         let zooms: [(imageW: Int, imageH: Int, winW: Double, winH: Double, name: String)] = [
@@ -304,7 +304,7 @@ struct AppleVisionTextRecognizerTests {
             let windowSize = CGSize(width: z.winW, height: z.winH)
             let contentBounds = CGRect(x: 0, y: 0, width: z.imageW, height: z.imageH)
 
-            let elements = recognizer.recognizeText(
+            let elements = try recognizer.recognizeText(
                 in: image, windowSize: windowSize, contentBounds: contentBounds
             )
             for el in elements where el.text == "Test" {

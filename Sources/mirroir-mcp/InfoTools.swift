@@ -111,6 +111,17 @@ extension MirroirMCP {
                     allOk = false
                 }
 
+                // 4. Text recognition, against known text rather than the
+                // screen — a blank screen and a dead engine both read as zero
+                // elements, so only a probe we drew ourselves tells them apart.
+                switch TextRecognitionSelfTest.run(using: MirroirMCP.buildTextRecognizer()) {
+                case .passed(let ms):
+                    checks.append("[ok] Text recognition working (\(ms) ms)")
+                case .failed(let reason):
+                    checks.append("[FAIL] Text recognition failed — \(reason)")
+                    allOk = false
+                }
+
                 let summary = allOk ? "All checks passed" : "Issues detected"
                 let output = "\(summary)\n\n" + checks.joined(separator: "\n")
                 return .text(output)

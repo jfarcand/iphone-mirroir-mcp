@@ -134,7 +134,14 @@ extension MirroirMCP {
                 for el in result.elements.sorted(by: { $0.tapY < $1.tapY }) {
                     lines.append("- \"\(el.text)\" at (\(Int(el.tapX)), \(Int(el.tapY)))")
                 }
-                if result.elements.isEmpty {
+                if let failure = result.ocrFailure {
+                    // Never report a broken engine as a blank screen: the two
+                    // look identical in the element list and only one of them
+                    // means the screen is actually empty.
+                    lines.append("(OCR FAILED — text recognition did not run: \(failure))")
+                    lines.append("Any icons and hints below come from the non-OCR path; "
+                        + "the text layer is missing, not empty.")
+                } else if result.elements.isEmpty {
                     lines.append("(no text detected)")
                 }
                 if !result.icons.isEmpty {
@@ -152,7 +159,8 @@ extension MirroirMCP {
                     }
                 }
                 lines.append("")
-                lines.append("_meta: ocr_time_ms=\(result.ocrTimeMs) recognition_level=\(EnvConfig.ocrRecognitionLevel) element_count=\(result.elements.count)")
+                lines.append("_meta: ocr_time_ms=\(result.ocrTimeMs) recognition_level=\(EnvConfig.ocrRecognitionLevel) element_count=\(result.elements.count)"
+                    + (result.ocrFailure == nil ? "" : " ocr_status=failed"))
                 let description = lines.joined(separator: "\n")
 
                 let content: [MCPContent] = omitScreenshot

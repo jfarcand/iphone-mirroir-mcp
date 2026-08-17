@@ -29,7 +29,7 @@ struct CompositeTextRecognizerTests {
     private let contentBounds = CGRect(x: 0, y: 0, width: 1, height: 1)
 
     @Test("Merges results from multiple backends")
-    func testMergesResults() {
+    func testMergesResults() throws {
         let stub1 = StubTextRecognizer()
         stub1.elements = [
             RawTextElement(text: "Settings", tapX: 100, textTopY: 50,
@@ -47,7 +47,7 @@ struct CompositeTextRecognizerTests {
         let composite = CompositeTextRecognizer(backends: [stub1, stub2])
         let image = makeMinimalImage()
 
-        let results = composite.recognizeText(
+        let results = try composite.recognizeText(
             in: image, windowSize: windowSize, contentBounds: contentBounds
         )
 
@@ -58,7 +58,7 @@ struct CompositeTextRecognizerTests {
     }
 
     @Test("Single backend passes through directly")
-    func testSingleBackendPassesThrough() {
+    func testSingleBackendPassesThrough() throws {
         let stub = StubTextRecognizer()
         stub.elements = [
             RawTextElement(text: "Label", tapX: 50, textTopY: 10,
@@ -68,7 +68,7 @@ struct CompositeTextRecognizerTests {
         let composite = CompositeTextRecognizer(backends: [stub])
         let image = makeMinimalImage()
 
-        let results = composite.recognizeText(
+        let results = try composite.recognizeText(
             in: image, windowSize: windowSize, contentBounds: contentBounds
         )
 
@@ -77,11 +77,11 @@ struct CompositeTextRecognizerTests {
     }
 
     @Test("Empty backends returns empty results")
-    func testEmptyBackendsReturnsEmpty() {
+    func testEmptyBackendsReturnsEmpty() throws {
         let composite = CompositeTextRecognizer(backends: [])
         let image = makeMinimalImage()
 
-        let results = composite.recognizeText(
+        let results = try composite.recognizeText(
             in: image, windowSize: windowSize, contentBounds: contentBounds
         )
 
@@ -89,7 +89,7 @@ struct CompositeTextRecognizerTests {
     }
 
     @Test("Backends returning empty arrays contribute nothing")
-    func testEmptyBackendResultsIgnored() {
+    func testEmptyBackendResultsIgnored() throws {
         let emptyStub = StubTextRecognizer()
         emptyStub.elements = []
 
@@ -102,7 +102,7 @@ struct CompositeTextRecognizerTests {
         let composite = CompositeTextRecognizer(backends: [emptyStub, populatedStub])
         let image = makeMinimalImage()
 
-        let results = composite.recognizeText(
+        let results = try composite.recognizeText(
             in: image, windowSize: windowSize, contentBounds: contentBounds
         )
 

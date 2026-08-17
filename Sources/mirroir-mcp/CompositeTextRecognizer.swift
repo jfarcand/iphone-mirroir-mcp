@@ -17,13 +17,26 @@ struct CompositeTextRecognizer: Sendable {
         self.backends = backends
     }
 
+    /// Run every backend and merge their elements.
+    ///
+    /// A failing backend fails the whole call rather than quietly contributing
+    /// nothing: a half-empty element list is indistinguishable from a screen
+    /// that genuinely holds less text, which is how a broken engine hides.
     func recognizeText(
         in image: CGImage,
         windowSize: CGSize,
         contentBounds: CGRect
-    ) -> [RawTextElement] {
-        backends.flatMap { backend in
-            backend.recognizeText(in: image, windowSize: windowSize, contentBounds: contentBounds)
+    ) throws -> [RawTextElement] {
+        var elements: [RawTextElement] = []
+        for backend in backends {
+            do {
+                elements += try backend.recognizeText(
+                    in: image, windowSize: windowSize, contentBounds: contentBounds)
+            } catch {
+                throw TextRecognitionError.backendFailed(
+                    name: String(describing: type(of: backend)), underlying: error)
+            }
         }
+        return elements
     }
 }

@@ -163,14 +163,19 @@ final class StubRecorder: ScreenRecording, @unchecked Sendable {
 
 /// Stub for TextRecognizing that returns configurable elements without
 /// running real Vision OCR, enabling deterministic unit tests.
+///
+/// Set `failure` to make it behave like an engine that broke rather than a
+/// screen that held no text — the distinction issue #36 turned on.
 final class StubTextRecognizer: TextRecognizing, @unchecked Sendable {
     var elements: [RawTextElement] = []
+    var failure: (any Error)?
 
     func recognizeText(
         in image: CGImage,
         windowSize: CGSize,
         contentBounds: CGRect
-    ) -> [RawTextElement] {
+    ) throws -> [RawTextElement] {
+        if let failure { throw failure }
         return elements
     }
 }

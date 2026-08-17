@@ -137,12 +137,36 @@ protocol TextRecognizing: Sendable {
     ///   - windowSize: Size of the target window in points (for coordinate scaling).
     ///   - contentBounds: Pixel-space rect from `ContentBoundsDetector`
     ///     (caller computes this before invoking).
-    /// - Returns: Text elements with coordinates in window-point space.
+    /// - Returns: Text elements with coordinates in window-point space. An empty
+    ///   array means the image held no text.
+    /// - Throws: `TextRecognitionError` when the engine itself failed, which is
+    ///   a different answer from "no text" and must reach the caller as one.
     func recognizeText(
         in image: CGImage,
         windowSize: CGSize,
         contentBounds: CGRect
-    ) -> [RawTextElement]
+    ) throws -> [RawTextElement]
+}
+
+/// A text recognition engine failed to produce an answer.
+///
+/// Distinct from recognizing nothing: a blank screen legitimately yields zero
+/// elements, while these cases mean the pipeline is broken and the caller is
+/// looking at an absence of information rather than information about absence.
+enum TextRecognitionError: Error, CustomStringConvertible {
+    /// The Vision request failed, including after retry and CPU fallback.
+    case visionRequestFailed(underlying: any Error)
+    /// A backend inside a composite failed; the others may have succeeded.
+    case backendFailed(name: String, underlying: any Error)
+
+    var description: String {
+        switch self {
+        case .visionRequestFailed(let underlying):
+            return "Vision text recognition failed: \(underlying)"
+        case .backendFailed(let name, let underlying):
+            return "\(name) failed: \(underlying)"
+        }
+    }
 }
 
 /// Abstracts OCR-based screen element detection.

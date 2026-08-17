@@ -172,7 +172,7 @@ struct MirroirMCP {
     /// - `"vision"`: Apple Vision OCR only
     /// - `"yolo"`: YOLO CoreML element detection only (falls back to Vision if model unavailable)
     /// - `"both"`: Merge results from both backends
-    private static func buildTextRecognizer() -> any TextRecognizing {
+    static func buildTextRecognizer() -> any TextRecognizing {
         let backend = EnvConfig.ocrBackend
 
         switch backend {

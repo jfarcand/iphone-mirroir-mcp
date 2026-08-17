@@ -18,20 +18,8 @@ struct AppleVisionTextRecognizer: Sendable {
         in image: CGImage,
         windowSize: CGSize,
         contentBounds: CGRect
-    ) -> [RawTextElement] {
-        let request = VNRecognizeTextRequest()
-        request.recognitionLevel = EnvConfig.ocrRecognitionLevel == "fast" ? .fast : .accurate
-        request.usesLanguageCorrection = EnvConfig.ocrLanguageCorrection
-        request.recognitionLanguages = EnvConfig.ocrLanguages
-
-        let handler = VNImageRequestHandler(cgImage: image, options: [:])
-        do {
-            try handler.perform([request])
-        } catch {
-            return []
-        }
-
-        guard let observations = request.results else { return [] }
+    ) throws -> [RawTextElement] {
+        let observations = try perform(on: image)
 
         let windowWidth = Double(windowSize.width)
         let windowHeight = Double(windowSize.height)
@@ -87,6 +75,66 @@ struct AppleVisionTextRecognizer: Sendable {
                 bboxWidth: bbox.width * windowWidth * xScale,
                 confidence: candidate.confidence
             )
+        }
+    }
+
+    /// Run the Vision request, retrying once and then on the CPU before giving up.
+    ///
+    /// The first attempt can fail while the Neural Engine compiles its
+    /// precompiled model — an `e5rtError` from that path takes the whole request
+    /// down even though the same image succeeds moments later. A plain retry
+    /// covers the transient case; pinning the compute device to the CPU covers a
+    /// machine where that path stays broken, at the cost of speed.
+    private func perform(on image: CGImage) throws -> [VNRecognizedTextObservation] {
+        do {
+            return try attempt(on: image, cpuOnly: false)
+        } catch {
+            DebugLog.persist("OCR", "Vision attempt failed (\(error)) — retrying")
+        }
+
+        do {
+            return try attempt(on: image, cpuOnly: false)
+        } catch {
+            DebugLog.persist("OCR", "Vision retry failed (\(error)) — falling back to CPU")
+        }
+
+        do {
+            return try attempt(on: image, cpuOnly: true)
+        } catch {
+            DebugLog.persist("OCR", "Vision CPU fallback failed (\(error))")
+            throw TextRecognitionError.visionRequestFailed(underlying: error)
+        }
+    }
+
+    /// One Vision pass over `image`, optionally forced onto the CPU.
+    private func attempt(on image: CGImage, cpuOnly: Bool) throws -> [VNRecognizedTextObservation] {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = EnvConfig.ocrRecognitionLevel == "fast" ? .fast : .accurate
+        request.usesLanguageCorrection = EnvConfig.ocrLanguageCorrection
+        request.recognitionLanguages = EnvConfig.ocrLanguages
+        if cpuOnly {
+            pinToCPU(request)
+        }
+
+        let handler = VNImageRequestHandler(cgImage: image, options: [:])
+        try handler.perform([request])
+        return request.results ?? []
+    }
+
+    /// Route every stage of `request` to the CPU, where the device offers one.
+    ///
+    /// Best-effort: a stage with no CPU device listed keeps its default, and a
+    /// machine that cannot report its devices at all simply runs unpinned —
+    /// either way the attempt still happens and any failure surfaces normally.
+    private func pinToCPU(_ request: VNRequest) {
+        guard let stages = try? request.supportedComputeStageDevices else { return }
+        for (stage, devices) in stages {
+            for device in devices {
+                if case .cpu = device {
+                    request.setComputeDevice(device, for: stage)
+                    break
+                }
+            }
         }
     }
 }

@@ -38,14 +38,19 @@ final class ScreenDescriber: Sendable {
         let screenshotBase64: String
         /// Time spent in OCR text recognition, in milliseconds.
         let ocrTimeMs: Int
+        /// Why text recognition failed, when it did. Nil means the engine ran:
+        /// an empty `elements` list then genuinely means no text on screen.
+        let ocrFailure: String?
 
         init(elements: [TapPoint], icons: [IconDetector.DetectedIcon] = [],
-             hints: [String] = [], screenshotBase64: String, ocrTimeMs: Int = 0) {
+             hints: [String] = [], screenshotBase64: String, ocrTimeMs: Int = 0,
+             ocrFailure: String? = nil) {
             self.elements = elements
             self.icons = icons
             self.hints = hints
             self.screenshotBase64 = screenshotBase64
             self.ocrTimeMs = ocrTimeMs
+            self.ocrFailure = ocrFailure
         }
     }
 
@@ -77,9 +82,20 @@ final class ScreenDescriber: Sendable {
         // pluggable backend. The recognizer returns elements in window-point space.
         let contentBounds = ContentBoundsDetector.detect(image: ocrImage)
         let ocrStart = CFAbsoluteTimeGetCurrent()
-        let rawElements = textRecognizer.recognizeText(
-            in: ocrImage, windowSize: info.size, contentBounds: contentBounds
-        )
+        // A recognition failure is reported, not folded into an empty result:
+        // the rest of the description (screenshot, icons, hints) is still worth
+        // returning, but the caller has to be told the text layer is missing
+        // rather than empty.
+        var rawElements: [RawTextElement] = []
+        var ocrFailure: String?
+        do {
+            rawElements = try textRecognizer.recognizeText(
+                in: ocrImage, windowSize: info.size, contentBounds: contentBounds
+            )
+        } catch {
+            ocrFailure = String(describing: error)
+            DebugLog.persist("OCR", "text recognition failed: \(ocrFailure ?? "")")
+        }
         let ocrMs = Int((CFAbsoluteTimeGetCurrent() - ocrStart) * 1000)
         DebugLog.log("OCR", "level=\(EnvConfig.ocrRecognitionLevel) elements=\(rawElements.count) time=\(ocrMs)ms")
 
@@ -109,7 +125,8 @@ final class ScreenDescriber: Sendable {
         let base64 = griddedData.base64EncodedString()
 
         return DescribeResult(elements: elements, icons: icons, hints: hints,
-                              screenshotBase64: base64, ocrTimeMs: ocrMs)
+                              screenshotBase64: base64, ocrTimeMs: ocrMs,
+                              ocrFailure: ocrFailure)
     }
 
 }
