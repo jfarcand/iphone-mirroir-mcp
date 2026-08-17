@@ -23,7 +23,7 @@ runs:
         sudo mkdir -p /usr/local/lib
         sudo ln -sf "$(brew --prefix embacle-ffi)/lib/libembacle.a" /usr/local/lib/
 
-    - name: Report the embacle version in use
+    - name: Require the tap's latest embacle
       shell: bash
       run: |
         set -euo pipefail
@@ -33,6 +33,11 @@ runs:
         print(json.load(sys.stdin)['formulae'][0]['versions']['stable'])
         ")
         echo "embacle-ffi installed: $INSTALLED (tap latest: $LATEST)"
+        # A fresh runner that just tapped and installed should always land on
+        # the tap's latest. Anything else means the install silently resolved
+        # to an older build, and every artifact from this run would embed it —
+        # a stale FFI is invisible once linked, so this fails rather than warns.
         if [ "$INSTALLED" != "$LATEST" ]; then
-          echo "::warning::embacle-ffi $INSTALLED is not the tap's latest ($LATEST)"
+          echo "::error::embacle-ffi resolved to $INSTALLED, not the tap's latest ($LATEST)"
+          exit 1
         fi

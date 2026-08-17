@@ -54,6 +54,7 @@ enum DoctorCommand {
         checks.append(checkMirroringConnected())
         checks.append(checkScreenRecording())
         checks.append(checkAccessibility())
+        checks.append(EmbacleVersionCheck.run())
         checks.append(contentsOf: checkConfiguredTargets())
 
         if config.json {
