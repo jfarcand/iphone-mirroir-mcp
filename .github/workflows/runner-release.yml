@@ -47,11 +47,13 @@ jobs:
       - name: Bump version in runner/Cargo.toml
         id: bump
         working-directory: runner
+        env:
+          BUMP: ${{ inputs.bump }}
         run: |
           set -euo pipefail
           CURRENT=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           IFS='.' read -r major minor patch <<< "$CURRENT"
-          case "${{ inputs.bump }}" in
+          case "$BUMP" in
             major) major=$((major + 1)); minor=0; patch=0 ;;
             minor) minor=$((minor + 1)); patch=0 ;;
             patch) patch=$((patch + 1)) ;;
