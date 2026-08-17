@@ -6,7 +6,7 @@
 
 import Foundation
 
-#if canImport(CEmbacle)
+#if EMBACLE
 import CEmbacle
 
 /// Thin Swift wrapper around the embacle C FFI (pure transformation pattern).
@@ -58,7 +58,7 @@ enum EmbacleFFI {
 
 #else
 
-/// Stub when the embacle Rust FFI library is not linked.
+/// Stub used when `libembacle.a` is not installed, selected by the manifest.
 /// All operations return failure so the server falls back gracefully.
 enum EmbacleFFI {
 

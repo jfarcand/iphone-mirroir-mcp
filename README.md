@@ -198,9 +198,13 @@ embacle routes vision requests through already-authenticated CLI tools (GitHub C
 
 ```bash
 brew tap dravr-ai/tap
+brew trust --tap dravr-ai/tap # recent Homebrew refuses to load untrusted taps
 brew install embacle          # CLI tools (embacle-server, embacle-mcp)
 brew install embacle-ffi      # Rust FFI static library (libembacle.a)
 ```
+
+Both are optional. Without `embacle-ffi` the build links against Apple Vision
+and `describe_screen` uses local OCR.
 
 Then rebuild mirroir-mcp from source (or reinstall via Homebrew) so the binary links against `libembacle.a`:
 
@@ -449,7 +453,7 @@ system_prompt: "Diagnose the failed step and reply with JSON."
 [embacle](https://github.com/dravr-ai/dravr-embacle) routes requests through already-authenticated CLI tools (GitHub Copilot, Claude Code, etc.) — no separate API key needed:
 
 ```bash
-brew tap dravr-ai/tap && brew install embacle
+brew tap dravr-ai/tap && brew trust --tap dravr-ai/tap && brew install embacle
 mirroir test --agent embacle my-skill
 ```
 

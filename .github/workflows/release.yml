@@ -28,13 +28,7 @@ jobs:
           token: ${{ secrets.RELEASE_PAT }}
           fetch-depth: 0
 
-      - name: Install embacle FFI
-        run: |
-          brew tap dravr-ai/tap
-          brew trust --tap dravr-ai/tap
-          brew install embacle-ffi
-          sudo mkdir -p /usr/local/lib
-          sudo ln -sf "$(brew --prefix embacle-ffi)/lib/libembacle.a" /usr/local/lib/
+      - uses: ./.github/actions/setup-embacle
 
       - name: Determine current version
         id: current

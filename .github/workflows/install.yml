@@ -18,15 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install embacle FFI
-        run: |
-          brew tap dravr-ai/tap
-          brew trust --tap dravr-ai/tap
-          brew install embacle-ffi
-          sudo mkdir -p /usr/local/lib
-          sudo ln -sf "$(brew --prefix embacle-ffi)/lib/libembacle.a" /usr/local/lib/
-
-      # --- Build ---
+      - uses: ./.github/actions/setup-embacle
 
       - name: Build release binaries
         run: swift build -c release

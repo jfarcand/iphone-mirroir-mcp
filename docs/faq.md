@@ -94,9 +94,14 @@ embacle routes requests through already-authenticated CLI tools (GitHub Copilot,
 Install via:
 ```bash
 brew tap dravr-ai/tap
+brew trust --tap dravr-ai/tap   # recent Homebrew refuses untrusted taps
 brew install embacle-ffi
-swift build -c release  # rebuild to link the FFI
+swift build -c release  # rebuild: the manifest links the FFI once it is installed
 ```
+
+The build detects `libembacle.a` at configure time, so installing it is what
+enables the FFI and removing it returns you to OCR. To build the OCR-only
+variant on a machine that has the library, set `MIRROIR_DISABLE_EMBACLE=1`.
 
 See [AI Vision Mode](../README.md#ai-vision-mode-embacle) for full setup.
 

@@ -1,0 +1,38 @@
+# ABOUTME: Installs the embacle FFI from the dravr-ai tap for jobs that build with it.
+# ABOUTME: One definition for every workflow, so the install cannot drift between them.
+name: Setup embacle FFI
+description: >
+  Install the latest embacle-ffi from dravr-ai/tap and expose libembacle.a where
+  the Package.swift search paths look for it. Reports the installed version so a
+  build always states which FFI it linked.
+
+runs:
+  using: composite
+  steps:
+    - name: Install embacle FFI
+      shell: bash
+      run: |
+        set -euo pipefail
+        brew tap dravr-ai/tap
+        # Recent Homebrew refuses to load a formula from an untrusted tap.
+        brew trust --tap dravr-ai/tap
+        # The tap is freshly cloned per run, but update makes "latest" explicit
+        # rather than a side effect of that.
+        brew update --quiet
+        brew install embacle-ffi
+        sudo mkdir -p /usr/local/lib
+        sudo ln -sf "$(brew --prefix embacle-ffi)/lib/libembacle.a" /usr/local/lib/
+
+    - name: Report the embacle version in use
+      shell: bash
+      run: |
+        set -euo pipefail
+        INSTALLED=$(brew list --versions embacle-ffi | awk '{print $2}')
+        LATEST=$(brew info --json=v2 embacle-ffi | python3 -c "
+        import json, sys
+        print(json.load(sys.stdin)['formulae'][0]['versions']['stable'])
+        ")
+        echo "embacle-ffi installed: $INSTALLED (tap latest: $LATEST)"
+        if [ "$INSTALLED" != "$LATEST" ]; then
+          echo "::warning::embacle-ffi $INSTALLED is not the tap's latest ($LATEST)"
+        fi
