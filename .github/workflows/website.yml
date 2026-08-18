@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: withastro/action@v3
+      - uses: withastro/action@v6
         with:
           path: ./website
           # Astro 6 requires Node >=22.12.0; the action defaults to Node 20.
