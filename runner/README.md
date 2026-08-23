@@ -230,8 +230,9 @@ This workspace enforces a strict Rust posture documented in the parent
 - Every `.rs` file starts with two `// ABOUTME:` header lines. Max 500 lines
   per file.
 
-`scripts/ci/pre-push-validate.sh` and `scripts/ci/architectural-validation.sh`
-enforce these mechanically.
+`scripts/ci/pre-push-validate.sh` enforces these mechanically: fmt, the
+limitation-register gates (`.registre/limitation-gates.sh` at the repo root —
+deferral prose ban, 500-line cap, inline clippy allow-list), clippy, tests.
 
 ## License
 

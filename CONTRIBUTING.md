@@ -244,6 +244,23 @@ Set up the hooks:
 git config core.hooksPath .githooks
 ```
 
+### Limitation Register
+
+Deferral/confession prose ("not yet wired", "is the follow-up", "for now, return")
+is banned in production sources — Swift and Rust alike. The only exemption is a
+`LIMITATION(registre#n):` marker naming the limited item and pointing at an issue
+in the private register configured by `registre.toml`. The gates (the
+[llm-registre](https://github.com/dravr-ai/llm-registre) `.registre` submodule)
+also enforce the 500-line file cap and the inline clippy allow-list, at pre-push
+(Tier 1 of `runner/scripts/ci/pre-push-validate.sh`) and in CI
+(`limitation-register.yml`):
+
+```bash
+git submodule update --init   # once, after clone
+brew install ripgrep          # the gates are ripgrep-based
+./.registre/limitation-gates.sh Sources runner/src npm scripts website/src
+```
+
 ## How to Add a New MCP Tool
 
 Follow these steps to add a new tool. This example adds a hypothetical `pinch_zoom` tool.

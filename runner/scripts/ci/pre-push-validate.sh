@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# ABOUTME: Local pre-push gate for the runner/ Rust workspace — fmt, architectural
-# ABOUTME: validation, clippy (deny warnings), tests; stamps .git/validation-passed on success.
+# ABOUTME: Local pre-push gate for the runner/ Rust workspace — fmt, limitation-register
+# ABOUTME: gates, clippy (deny warnings), tests; stamps .git/validation-passed on success.
 #
 # Tiers, run in order; the first failure aborts:
 #   Tier 0  cargo fmt --all -- --check
-#   Tier 1  architectural-validation.sh (forbidden patterns / file size)
+#   Tier 1  .registre/limitation-gates.sh (deferral prose, markers, ledger,
+#           500-line cap, inline clippy allows — see registre.toml at repo root)
 #   Tier 2  cargo clippy --all-targets --all-features -- -D warnings
 #   Tier 3  cargo test --all-targets
 #
@@ -28,8 +29,18 @@ cd "$RUNNER_DIR"
 echo "==> Tier 0: cargo fmt --all -- --check"
 cargo fmt --all -- --check
 
-echo "==> Tier 1: architectural-validation.sh"
-"$SCRIPT_DIR/architectural-validation.sh"
+echo "==> Tier 1: limitation-register gates (.registre/limitation-gates.sh)"
+REPO_ROOT="$(cd "$RUNNER_DIR/.." && pwd)"
+if [ ! -x "$REPO_ROOT/.registre/limitation-gates.sh" ]; then
+    echo "llm-registre not checked out — run: git submodule update --init"
+    exit 1
+fi
+(cd "$REPO_ROOT" && ./.registre/limitation-gates.sh Sources runner/src npm scripts website/src) || {
+    echo ""
+    echo "Deferral prose must be implemented or registered — see .registre/README.md"
+    echo "and file the gap in jfarcand/mirroir-carnet (tracker in registre.toml)."
+    exit 1
+}
 
 echo "==> Tier 2: cargo clippy --all-targets --all-features -- -D warnings"
 cargo clippy --all-targets --all-features -- -D warnings

@@ -36,9 +36,11 @@ Compiled `.compiled.json` files live alongside their source `.yaml` in the skill
 
 ```bash
 git config core.hooksPath .githooks
+git submodule update --init   # .registre — the limitation-register gates
+brew install ripgrep          # required by .registre/limitation-gates.sh
 ```
 
-This activates the `commit-msg` hook in `.githooks/` which enforces conventional commit format, max 2-line messages, and rejects `Co-Authored-By: Claude` lines.
+This activates the `commit-msg` hook in `.githooks/` which enforces conventional commit format, max 2-line messages, and rejects `Co-Authored-By: Claude` lines. The `.registre` submodule carries the [llm-registre](https://github.com/dravr-ai/llm-registre) gates run at pre-push and in CI; `registre.toml` at the repo root configures them (private tracker, scanned extensions, 500-line cap, inline clippy allow-list).
 
 ## Package Manager: Swift Package Manager
 
@@ -84,16 +86,16 @@ under `runner/` express it mechanically; this section documents the intent.
 
 | File | Purpose |
 |------|---------|
-| `runner/Cargo.toml` `[lints]` table | clippy `all`/`pedantic`/`nursery` at deny + `unwrap_used` / `expect_used` / `panic` / `absolute_paths` / `disallowed_methods` / `str_to_string` / `cognitive_complexity` at deny; explicit allows limited to `cast_*`, `missing_const_for_fn`, `struct_excessive_bools`, `too_many_lines`, `significant_drop_tightening`, `module_name_repetitions` |
+| `runner/Cargo.toml` `[lints]` table | clippy `all`/`pedantic`/`nursery` at deny + `unwrap_used` / `expect_used` / `panic` / `todo` / `unimplemented` / `absolute_paths` / `disallowed_methods` / `str_to_string` / `cognitive_complexity` at deny; explicit allows limited to `cast_*`, `missing_const_for_fn`, `struct_excessive_bools`, `too_many_lines`, `significant_drop_tightening`, `module_name_repetitions` |
 | `runner/clippy.toml` | `disallowed-methods` — `anyhow::Context::context` and `anyhow::Context::with_context` are forbidden in favor of structured `RunnerError` variants |
 | `runner/deny.toml` | cargo-deny: advisories, license allowlist (MIT / Apache-2.0 / ISC / BSD-3-Clause / Unicode-3.0 / etc.), bans (`wildcards = "deny"`), sources (crates.io only) |
-| `runner/scripts/ci/pre-push-validate.sh` | Tier 0 fmt → Tier 1 architectural-validation → Tier 2 clippy → Tier 3 tests; stamps `.git/validation-passed` marker (15-min TTL) |
-| `runner/scripts/ci/architectural-validation.sh` | Greps for forbidden patterns (`anyhow!` macro, placeholders, unauthorized `#[allow(clippy::*)]`); refuses to commit on hit |
+| `runner/scripts/ci/pre-push-validate.sh` | Tier 0 fmt → Tier 1 limitation-register gates → Tier 2 clippy → Tier 3 tests; stamps `.git/validation-passed` marker (15-min TTL) |
+| `.registre/limitation-gates.sh` + `registre.toml` | The [llm-registre](https://github.com/dravr-ai/llm-registre) gates (submodule): deferral/confession prose ban, `LIMITATION(registre#n)` marker format, dark-launch ledger, 500-line file cap, inline clippy allow-list. Also run in CI (`limitation-register.yml`) over Sources, runner/src, npm, scripts, website/src |
 
 ### Forbidden Patterns (CI Enforced)
 
 These are **release-blocking** regardless of context. The clippy lints + the
-architectural-validation script catch each one independently:
+limitation-register gates catch each one independently:
 
 - **`anyhow!()` / `anyhow::anyhow!()` macros** — ABSOLUTELY FORBIDDEN in
   production code (`runner/src/`). Use structured `RunnerError` variants.
@@ -108,22 +110,22 @@ architectural-validation script catch each one independently:
   `Result`; do not silence with `.expect()`.
 - **`panic!()` / `unimplemented!()` / `todo!()`** — Forbidden. Every code path
   reachable from `main()` must return a typed `Result`.
-- **`#[allow(clippy::*)]` outside the approved list** — Only the following
-  clippy lints may be silenced inline: `cast_possible_truncation`,
-  `cast_sign_loss`, `cast_precision_loss`, `cast_possible_wrap`,
-  `missing_const_for_fn`, `struct_excessive_bools`, `too_many_lines`,
-  `significant_drop_tightening`, `module_name_repetitions`, `let_unit_value`,
-  `option_if_let_else`, `bool_to_int_with_if`,
-  `type_complexity`, `too_many_arguments`, `use_self`. Anything else —
-  including `cognitive_complexity`, which is `deny` with no inline exception —
-  means fixing the underlying issue.
+- **`#[allow(clippy::*)]` outside the declared list** — the lints that may be
+  silenced inline are declared ONCE, in `allowed_inline_allows` in
+  `registre.toml` (the limitation-register gate fails anything else, `#[expect]`
+  included). Do not copy the list here or anywhere — read `registre.toml`.
+  `cognitive_complexity` is `deny` with no inline exception; anything outside
+  the declared list means fixing the underlying issue.
 - **`unsafe`** — DENY level. No FFI in mirroir-run; any `unsafe` usage is a
   hard fail with no exemption.
-- **Placeholder / stub / mock language in production code** — phrases like
-  "Implementation would", "Will implement", "TODO: Implementation",
-  "stub implementation", "placeholder", etc. are caught by the architectural
-  validation script. Always implement the real thing; do not leave
-  implementation with "In future versions" or "Fall back".
+- **Deferral / confession prose in production code** — phrases like "not yet
+  wired", "is the follow-up", "for now, return", "in a real implementation"
+  are banned by the limitation-register gates (Swift AND Rust). The ONLY
+  exemption is a `LIMITATION(registre#n):` marker on the same line, naming the
+  limited item and pointing at an issue in the private register
+  (`tracker` in `registre.toml`). Implement the real thing, or register it —
+  never a quiet comment. Run the `register-limitation` skill; it walks the
+  whole procedure.
 
 ### Error Handling
 
@@ -156,7 +158,7 @@ return Err(RunnerError::TargetUnreachable {
 serde_yaml::from_str(&raw)
     .map_err(|source| RunnerError::ScenarioParse { path: path.clone(), source })?;
 
-// FORBIDDEN — CI (clippy + architectural-validation.sh) fails on detection:
+// FORBIDDEN — CI (clippy + the limitation-register gates) fails on detection:
 anyhow!("target {target} unreachable")        // anyhow! macro
 something().context("loading scenario")?       // anyhow::Context
 fallible().unwrap()                            // unwrap in production
@@ -175,9 +177,10 @@ no `panic!()`. Test functions returning Result have worked in Rust since the
 
 - Every `.rs` file starts with a **two-line `// ABOUTME:` header** (same as
   Swift files in `Sources/`).
-- Max **500 lines** per file. Past 400 lines, extract a focused helper module.
+- Max **500 lines** per file (enforced by the limitation-register gates for
+  every scanned language). Past 400 lines, extract a focused helper module.
 - No `#![allow(...)]` at crate root. Allows are inline at the smallest scope
-  that needs them, from the approved list only.
+  that needs them, from the `allowed_inline_allows` list in `registre.toml` only.
 - `use` imports at the top of file (`clippy::absolute_paths = "deny"`).
 - Public APIs documented (`missing_docs = "warn"`).
 
@@ -332,7 +335,7 @@ This project follows established decomposition patterns. When adding new functio
 
 ### File Size Limit
 
-No file should exceed **500 lines**. If a type is growing past this threshold, extract a focused helper type or enum. Reference: `LandmarkPicker` and `ActionStepFormatter` were extracted from `SkillMdGenerator` for this reason.
+No file should exceed **500 lines** (enforced mechanically by the limitation-register gates, pre-push and in CI). If a type is growing past this threshold, extract a focused helper type or enum. Reference: `LandmarkPicker` and `ActionStepFormatter` were extracted from `SkillMdGenerator` for this reason.
 
 ### Pattern Catalog
 
@@ -364,7 +367,7 @@ When creating a new type or file, walk this checklist in order:
 ### Prohibited Structural Choices
 
 - NEVER put business logic directly inside a tool registration handler. The handler parses args and delegates.
-- NEVER define a new protocol outside `Protocols.swift` unless it is internal to a single file.
+- NEVER define a new protocol outside `Protocols.swift` (system boundaries) or `ExplorationProtocols.swift` (exploration domain: strategy, explorer, navigation graph, backtracking, lifecycle, advising) unless it is internal to a single file.
 - NEVER add a new SPM target without discussing with ChefFamille first.
 - NEVER put types used only by `mirroir-mcp` into `HelperLib`. HelperLib is for cross-target shared types only.
 

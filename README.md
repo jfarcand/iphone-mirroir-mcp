@@ -651,6 +651,10 @@ Join the [Discord server](https://discord.gg/jVDBbMjPMf) to ask questions, share
 
 Contributions welcome. By submitting a patch, you agree to the [Contributor License Agreement](CLA.md) — your Git commit metadata serves as your electronic signature.
 
+### Limitation register
+
+This repo enforces its honesty with [llm-registre](https://github.com/dravr-ai/llm-registre): deferral prose in production code ("not yet wired", "is the follow-up", "for now, return") is banned by CI unless the line carries a `LIMITATION(registre#n):` marker naming the limited item and pointing at an issue in the project's private register. The same gates enforce the 500-line file cap and the inline clippy allow-list, at pre-push and in CI. `rg "LIMITATION\(registre#"` is a complete inventory of what the codebase knowingly does not do. After cloning, run `git submodule update --init` and install [ripgrep](https://github.com/BurntSushi/ripgrep); see [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.
+
 ---
 
 > **Why "mirroir"?** — It's the old French spelling of *miroir* (mirror). A nod to the author's roots, not a typo.

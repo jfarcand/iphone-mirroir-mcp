@@ -256,10 +256,13 @@ pub async fn run_scenario_with_context(
                 dispatch_judge(effective).await?;
             }
             SkillStep::CrossSurface(args) => dispatch_cross_surface(args)?,
+            // LIMITATION(registre#1): device-only step kinds (launch, home,
+            // shake, reset_app, set_network, measure, condition) have no
+            // replay dispatch arm and are skipped.
             _ => info!(
                 idx,
                 kind = step_kind(step),
-                "step kind not yet wired; skipping"
+                "no replay dispatch for this step kind; skipping"
             ),
         }
     }

@@ -1,0 +1,24 @@
+# ABOUTME: llm-registre configuration — where this repo's limitation issues are filed
+# ABOUTME: The tracker is PRIVATE because this repo is public (see .registre/README.md)
+
+# jfarcand/mirroir-carnet is the private register for the mirroir product
+# (this repo now, mirroir-skills once it adopts the gates). This repo is
+# PUBLIC: a limitation issue states precisely where a capability or defence
+# is incomplete, so it never goes on this repo's own tracker.
+tracker = "jfarcand/mirroir-carnet"
+
+# Swift MCP server + Rust runner + the npm installer and website glue.
+extensions = "swift,rs,ts,tsx,js,mjs"
+
+# Every dark-launched feature must be ledgered, so an unarmed phase always
+# carries a review date.
+require_ledger = true
+
+# The 500-line cap from AGENTS.md, enforced mechanically for every scanned
+# language. Past 400 lines, extract a focused helper (see the pattern catalog).
+max_file_lines = 500
+
+# The clippy lints that may be silenced inline in runner/src — the single
+# source of truth for the list AGENTS.md documents. Anything else means
+# fixing the underlying issue, not adding an allow.
+allowed_inline_allows = "cast_possible_truncation,cast_sign_loss,cast_precision_loss,cast_possible_wrap,missing_const_for_fn,struct_excessive_bools,too_many_lines,significant_drop_tightening,module_name_repetitions,let_unit_value,option_if_let_else,bool_to_int_with_if,type_complexity,too_many_arguments,use_self"

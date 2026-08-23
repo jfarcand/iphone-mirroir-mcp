@@ -101,6 +101,11 @@ expect_used = "deny"
 # DENY: panic!() in production code (only acceptable in tests).
 panic = "deny"
 
+# DENY: todo!() / unimplemented!() anywhere — every reachable path returns a
+# typed Result.
+todo = "deny"
+unimplemented = "deny"
+
 # ============================================================================
 # Allowed Exceptions (Per AGENTS.md Policy)
 # ============================================================================

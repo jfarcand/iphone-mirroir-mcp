@@ -23,7 +23,10 @@ npm/bin/com.jfarcand.mirroir-helper.plist
 scratch/
 # Claude Code local session + memory data (machine-specific).
 .claude/projects/
-.claude/skills/
+.claude/skills/*
+# The register-limitation skill ships with the repo — it documents the
+# limitation-register procedure every contributor's agent must follow.
+!.claude/skills/register-limitation/
 mirroir-test-results/
 integrations/
 scripts/test-vd*
