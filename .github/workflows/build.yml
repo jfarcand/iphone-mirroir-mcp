@@ -307,6 +307,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The canary APP.md tests read ../mirroir-skills like the primary build
+      # job does — absence of embacle is the test here, not absence of skills.
+      - name: Clone skills repo
+        run: |
+          git clone https://github.com/jfarcand/mirroir-skills.git ../mirroir-skills
+          mkdir -p .mirroir-mcp
+          ln -s "$(cd ../mirroir-skills && pwd)" .mirroir-mcp/skills
+
       - name: Confirm the runner really has no embacle-ffi
         run: |
           set -euo pipefail
