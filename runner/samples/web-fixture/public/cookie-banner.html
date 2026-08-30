@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cookie banner — mirroir web fixture</title>
+<link rel="stylesheet" href="fixture.css">
+</head>
+<body>
+<h1 data-test="page-title">Newsletter</h1>
+
+<p>
+  <button type="button" data-test="subscribe">Subscribe</button>
+</p>
+<p class="result" data-test="subscribe-result">not subscribed</p>
+
+<!-- The obstacle covers the whole viewport, so `subscribe` is unclickable
+     until one of the banner's buttons is tapped. Same declarative shape the
+     iOS simulator uses: id / title / body / buttons / trigger. -->
+<script type="application/json" id="obstacles">
+[
+  {
+    "id": "cookie-consent",
+    "title": "We value your privacy",
+    "body": "We use cookies to measure traffic. Choose how you would like to proceed.",
+    "buttons": ["Accept all", "Reject non-essential"],
+    "trigger": "on_first_load"
+  },
+  {
+    "id": "newsletter-nag",
+    "title": "One more thing",
+    "body": "Get the weekly digest in your inbox.",
+    "buttons": ["No thanks"],
+    "trigger": { "after_clicks": 3 }
+  }
+]
+</script>
+<script src="obstacle.js"></script>
+
+<script>
+document.querySelector('[data-test=subscribe]').addEventListener('click', () => {
+  document.querySelector('[data-test=subscribe-result]').textContent = 'subscribed';
+});
+</script>
+</body>
+</html>

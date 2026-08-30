@@ -3,6 +3,7 @@
 
 use serde::Deserialize;
 
+use crate::oracle::thresholds::DriftThresholds;
 use crate::parser::step::SkillStep;
 
 /// Highest version of the `Scenario` schema this binary understands.
@@ -32,6 +33,11 @@ pub struct Scenario {
     /// Optional tag list used for filtering and reporting.
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Optional `drift:` block — the most specific layer of the drift
+    /// threshold hierarchy, above the sample's `APP.md` `drift_defaults:` and
+    /// the `drift-defaults.yaml` on the search path.
+    #[serde(default)]
+    pub drift: Option<DriftThresholds>,
     /// Ordered list of steps the runner executes.
     #[serde(with = "serde_yaml::with::singleton_map_recursive")]
     pub steps: Vec<SkillStep>,
@@ -43,6 +49,7 @@ mod tests {
     use std::result::Result as StdResult;
 
     use super::*;
+    use crate::oracle::thresholds::DriftMetric;
     use crate::parser::step::SkillStep;
 
     type TestResult = StdResult<(), Box<dyn StdError>>;
@@ -67,6 +74,33 @@ steps:
             return fail("expected Launch as first step".to_owned());
         };
         assert_eq!(app, "App");
+        Ok(())
+    }
+
+    /// The scenario layer of the drift hierarchy parses, and a scenario that
+    /// declares nothing leaves the layer empty rather than inventing values.
+    #[test]
+    fn parses_the_scenario_drift_block() -> TestResult {
+        let yaml = r"
+version: 1
+name: drifty
+drift:
+  fingerprint_similarity: { min: 0.9 }
+  response_levenshtein_pct: { max: 0.1 }
+steps:
+  - report: pass
+";
+        let scenario: Scenario = serde_yaml::from_str(yaml)?;
+        let thresholds = scenario.drift.ok_or("drift block was dropped")?;
+        assert_eq!(
+            thresholds.get(DriftMetric::FingerprintSimilarity),
+            Some(0.9)
+        );
+        assert_eq!(thresholds.get(DriftMetric::JudgeScoreSwing), None);
+
+        let bare: Scenario =
+            serde_yaml::from_str("version: 1\nname: plain\nsteps:\n  - report: pass\n")?;
+        assert!(bare.drift.is_none());
         Ok(())
     }
 

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Order — mirroir web fixture</title>
+<link rel="stylesheet" href="fixture.css">
+</head>
+<body>
+<h1 data-test="page-title">Order</h1>
+
+<!-- renamed.html and renamed-variant.html render identical UI. The primary
+     action's data-test attribute is the only difference: `place-order` here,
+     `submit-order` in the variant. A scenario pinned to one attribute must
+     fail against the other, which is what makes selector self-heal testable. -->
+<p>Widget &times; 1 &mdash; $19.00</p>
+<p>
+  <button type="button" data-test="place-order">Place order</button>
+</p>
+
+<p class="result" data-test="order-result">no order placed</p>
+
+<script>
+document.querySelector('[data-test=place-order]').addEventListener('click', () => {
+  document.querySelector('[data-test=order-result]').textContent = 'order placed';
+});
+</script>
+</body>
+</html>

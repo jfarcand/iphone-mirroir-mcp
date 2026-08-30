@@ -9,7 +9,9 @@ import HelperLib
 
 /// Emits the iOS leg of the shared `.mirroir/apps/<slug>/` contract from a finished
 /// `generate_skill` capture. The web leg (real DOM selectors, runnable) is authored
-/// separately (e.g. by `mirroir-onboard`); this emitter is purely additive — it
+/// separately by the `mirroir-onboard` skill in `.claude/skills/mirroir-onboard/`,
+/// which drives the running web app through chrome-devtools-mcp. This emitter is
+/// purely additive — it
 /// writes the `.ios.yaml` scenario + the cross-surface baseline and upserts a plan
 /// entry, and never overwrites a file the web leg owns.
 enum MirroirAppTreeEmitter {

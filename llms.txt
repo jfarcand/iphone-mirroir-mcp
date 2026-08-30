@@ -149,6 +149,71 @@ mirroir test apps/settings/check-about   # auto-detects .compiled.json
 - `mirroir migrate <file>` — Convert YAML skills to SKILL.md format
 - `mirroir doctor` — Verify setup (accessibility, mirroring, permissions, etc.)
 
+## Web Replay: mirroir-run and the `.mirroir/` dotfile
+
+The iPhone leg above is half the picture. **mirroir-run** (`runner/`, Rust, Apache-2.0) is the cross-platform replayer for the same `SkillStep` YAML grammar. It runs on Linux CI with no macOS dependency, and it is the compiler + orchestrator + oracle of the pair: it compiles a scenario's web steps into a Playwright `.spec.ts` at run time and shells out to `npx playwright test`, while process (`spawn` / `wait_port` / `kill` / `assert_log`), HTTP (`http`), LLM-judge (`judge`), and cross-surface (`cross_surface`) steps execute natively in Rust. Playwright owns the browser — Chromium, Firefox, and WebKit, all three available on Linux. mirroir-run never drives a browser itself. The compiled spec and its config are written to `target/playwright/<sample>/<scenario>/` — the same directory `--emit playwright` writes and a run executes — and the trace, video, and screenshot Playwright records for a failing test stay there afterwards. Every compiled spec also collects uncaught page errors and failed responses, so a page that throws is a failure even when every locator resolved.
+
+The recording half is an agent: `.claude/skills/mirroir-onboard/` drives a running web app through `chrome-devtools-mcp`, reads real selectors out of the live accessibility tree, and emits the scenarios. Playwright is replay-only. On iOS, `generate_skill action=explore` plays the same recorder role.
+
+### The `.mirroir/` dotfile
+
+A consumer repo checks in a `.mirroir/` tree; `mirroir-run` with no arguments walks `cwd ↑` to find it.
+
+```
+<repo>/.mirroir/
+├── mirroir.yaml         # the plan: samples, archetype refs, boot wiring
+├── mirroir.lock         # pinned archetype versions + tree checksums
+├── mirroir.local.yaml   # developer-local overrides (never committed)
+├── apps/<name>/         # local samples: APP.md, SAMPLE.md, scenarios/, baselines/
+└── .build/              # composed, ready-to-replay tree (generated)
+```
+
+`.mirroir/` (a consumer's checked-in plan) is distinct from `.mirroir-mcp/` (the Swift MCP server's home for element patterns and skills).
+
+### Installing mirroir-run
+
+```bash
+# Homebrew (macOS arm64/x86_64, Linux x86_64)
+brew install jfarcand/tap/mirroir-run
+
+# crates.io
+cargo install mirroir-run --locked
+
+# Prebuilt archives, per `runner-v*` release: linux-gnu, linux-musl (static),
+# apple-darwin (x86_64 + aarch64), pc-windows-msvc — each with a .sha256 sidecar
+# https://github.com/jfarcand/mirroir-mcp/releases
+```
+
+Web scenarios additionally need Node 18+ and `@playwright/test`; point `MIRROIR_PLAYWRIGHT_HOME` at the directory holding its `node_modules/`. There is no flag that skips a scenario's web run — a lane that cannot run web steps fails instead of reporting a green run.
+
+### Running it
+
+```bash
+mirroir-run                                  # discover .mirroir/, compose, replay
+mirroir-run --config path/.mirroir/mirroir.yaml
+mirroir-run --sample runner/samples/web-fixture   # one SAMPLE.md directory
+mirroir-run --run-scenario flow.yaml         # one scenario file
+mirroir-run --validate flow.yaml             # parse, version-gate, build the plan
+mirroir-run --emit playwright flow.yaml      # compile to target/playwright/, don't run
+mirroir-run --diff-text baseline.txt current.txt   # drift: Jaccard + Levenshtein
+mirroir-run --locked                         # CI gate: stale lockfile is an error
+mirroir-run --frozen                         # --locked plus no network fetch
+mirroir-run accept                           # re-record every baseline; refuses to run in CI
+```
+
+Three verdicts, three exit codes: **0 = PASS**, **1 = FAIL**, **65 = DRIFT** — every structural assertion held and a drift metric moved past its threshold. A scenario in which the runner evaluated nothing is a failure, not a pass. `--report <PATH>` writes the JSON run summary (schema 2; default `mirroir-run-report.json`).
+
+Drift is measured against `.harness/last-green.json`, what the previous PASS run observed, over four metrics: `fingerprint_similarity`, `judge_score_swing`, `response_levenshtein_pct`, `step_latency_pct_increase`. Thresholds resolve step → scenario `drift:` → `APP.md drift_defaults:` → `drift-defaults.yaml`, and are **fail-closed**: a metric no layer declares stops the run with `unspecified drift threshold for <metric>` rather than defaulting. A drifted run appends a candidate row to `.harness/drift-log.md` and leaves the baseline for a human. `mirroir-run accept` is the answer to that queue: it re-runs the same scenarios with the baselines in write mode, rewriting `.harness/last-green.json`, every `judge.drift_baseline_file`, every `cross_surface.capture.to`, and `.mirroir/mirroir.lock`, then hands the reviewer a `git diff`. It **refuses to run when a CI environment variable is set** — a job that accepts its own drift reports green forever. A `cross_surface:` baseline owned by a surface the runner does not drive (`baselines/<flow>.ios.txt`, written by `generate_skill` on a real iPhone) is named, never overwritten.
+
+`mirroir.lock` is verified, not just diffed: alongside the ref set and each pin's version constraint, every recorded `checksum: sha256:…` is recomputed against the archetype tree on disk, so a locally edited or tampered pack fails `--locked` / `--frozen` under an unchanged pin.
+
+- [Runner README](runner/README.md)
+- [.mirroir/ dotfile format](runner/docs/mirroir-dotfile.md)
+- [SAMPLE.md format](runner/docs/sample-md-format.md)
+- [Drift and accept](runner/docs/drift-and-accept.md)
+- [Playwright setup](runner/docs/playwright-setup.md)
+- [CI integration](runner/docs/ci-integration.md)
+
 ## Security & Permissions
 
 **Fail-closed by default.** Without configuration, only read-only tools are exposed. Mutating tools are hidden entirely from the MCP client.
@@ -286,3 +351,8 @@ Multi-target configuration via `targets.json` for controlling multiple windows s
 - [FAQ](docs/faq.md) — Common questions
 - [Troubleshooting](docs/troubleshooting.md) — Debug mode, common issues
 - [Contributing](CONTRIBUTING.md) — How to add tools, commands, tests
+- [Runner README](runner/README.md) — mirroir-run: web/process/http replay on Linux CI
+- [.mirroir/ Dotfile](runner/docs/mirroir-dotfile.md) — Consumer-repo plan, lockfile, compose
+- [Playwright Setup](runner/docs/playwright-setup.md) — Node install, emitted spec, selector strategy
+- [Drift and accept](runner/docs/drift-and-accept.md) — the DRIFT verdict, the fail-closed threshold hierarchy, and `mirroir-run accept`
+- [CI Integration](runner/docs/ci-integration.md) — Installing mirroir-run in another repo's CI

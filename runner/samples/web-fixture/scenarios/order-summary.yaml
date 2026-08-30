@@ -1,0 +1,33 @@
+version: 1
+name: web-fixture — the order summary keeps its wording
+description: |
+  Place an order and judge the confirmation the page renders. Every structural
+  assertion here holds against `summary-reworded.html` too — that page's button,
+  attributes and state change are identical — so a run against it is the case
+  Playwright's pass/fail/timedOut/skipped cannot express: green assertions,
+  moved semantics. The runner calls that DRIFT and files a candidate row in
+  `.harness/drift-log.md`.
+
+  Process lifecycle is the sample's: `SAMPLE.md` boots the static server once.
+tags: ["web-fixture", "drift", "judge"]
+drift:
+  # Prose confirmations are allowed to vary a little between models and runs;
+  # a rewrite is not. Tighter than the global default on purpose — this
+  # scenario's whole subject is the wording.
+  response_levenshtein_pct: { max: 0.20 }
+steps:
+  - target:
+      kind: web
+      browsers: [chrome]
+      url: "http://127.0.0.1:18902/summary.html"
+  - assert_visible: "page-title"
+  - tap: "place-order"
+  - wait_for: { label: "order-summary", timeout_s: 10 }
+  - assert_visible: "order-summary"
+  - judge:
+      profile: byte-stable
+      user_prompt_template_hash: "sha256:2fd94adeba57835b2267269c672245aeb82c450908f866bd4c887da010602834"
+      response_selector: "[data-test=order-summary]"
+      pass_threshold: 0.6
+      pass_threshold_tolerance: 0.2
+      expected_signal: "confirms the order was placed and names the price"

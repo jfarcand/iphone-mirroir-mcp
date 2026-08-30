@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::error::{Result, RunnerError};
+use crate::mirroir::error::MirroirError;
 use crate::mirroir::resolve_version::resolve_version_from_constraint;
 use crate::parser::archetype::{ArchetypeManifest, parse_archetype_manifest};
 use crate::parser::mirroir::{ArchetypeRef, ArchetypeRefKind};
@@ -50,6 +51,41 @@ pub enum ArchetypeOrigin {
     },
 }
 
+/// The on-disk directory an [`ArchetypeOrigin`] lives in.
+///
+/// Single source of truth for the install layout: the three resolvers below
+/// build their origin first and ask this function where it goes, and the
+/// lockfile's checksum verification asks the same question of a recorded
+/// [`crate::parser::lockfile::ResolvedRecord`]. One layout, one function.
+#[must_use]
+pub fn origin_directory(
+    origin: &ArchetypeOrigin,
+    project_root: &Path,
+    home_root: &Path,
+) -> PathBuf {
+    match origin {
+        ArchetypeOrigin::Pack {
+            pack,
+            name,
+            version,
+        } => home_root
+            .join(".mirroir")
+            .join("skills")
+            .join(pack)
+            .join(version)
+            .join("archetypes")
+            .join(name),
+        ArchetypeOrigin::ProjectLocal { path } => project_root
+            .join(".mirroir")
+            .join(strip_leading_dot_slash(path)),
+        ArchetypeOrigin::UserGlobal { name, version } => home_root
+            .join(".mirroir")
+            .join("archetypes")
+            .join(name)
+            .join(version),
+    }
+}
+
 /// Resolve an [`ArchetypeRef`] to an on-disk archetype.
 ///
 /// * `project_root` — repository root (the directory containing `.mirroir/`).
@@ -60,7 +96,7 @@ pub enum ArchetypeOrigin {
 ///
 /// # Errors
 ///
-/// * [`RunnerError::MirroirArchetypeNotFound`] — no on-disk match.
+/// * [`MirroirError::ArchetypeNotFound`] — no on-disk match.
 /// * Anything [`parse_archetype_manifest`] returns when reading the archetype's
 ///   `archetype.md`.
 pub fn resolve_archetype(
@@ -83,20 +119,21 @@ fn resolve_project_local(
     project_root: &Path,
 ) -> Result<ResolvedArchetype> {
     // ArchetypeRef.name carries the literal `./<path>` for project-local refs.
-    let mirroir_dir = project_root.join(".mirroir");
-    let candidate = mirroir_dir.join(strip_leading_dot_slash(&archetype_ref.name));
+    let origin = ArchetypeOrigin::ProjectLocal {
+        path: archetype_ref.name.clone(),
+    };
+    let candidate = origin_directory(&origin, project_root, Path::new(""));
     let manifest_path = candidate.join(ARCHETYPE_MANIFEST_FILE);
     if !manifest_path.is_file() {
-        return Err(RunnerError::MirroirArchetypeNotFound {
+        return Err(MirroirError::ArchetypeNotFound {
             reference: archetype_ref.name.clone(),
             searched: vec![candidate],
-        });
+        }
+        .into());
     }
     let manifest = load_manifest_from_path(&manifest_path)?;
     Ok(ResolvedArchetype {
-        origin: ArchetypeOrigin::ProjectLocal {
-            path: archetype_ref.name.clone(),
-        },
+        origin,
         manifest,
         directory: candidate,
     })
@@ -107,14 +144,12 @@ fn resolve_pack(
     home_root: &Path,
     locked_version: Option<&str>,
 ) -> Result<ResolvedArchetype> {
-    let pack =
-        archetype_ref
-            .pack
-            .as_deref()
-            .ok_or_else(|| RunnerError::MirroirArchetypeNotFound {
-                reference: archetype_ref.name.clone(),
-                searched: vec![],
-            })?;
+    let pack = archetype_ref.pack.as_deref().ok_or_else(|| {
+        RunnerError::Mirroir(MirroirError::ArchetypeNotFound {
+            reference: archetype_ref.name.clone(),
+            searched: vec![],
+        })
+    })?;
     let pack_root = home_root.join(".mirroir").join("skills").join(pack);
 
     let resolved_version = resolve_version_from_constraint(
@@ -122,29 +157,27 @@ fn resolve_pack(
         archetype_ref.version.as_deref(),
         locked_version,
     )?;
-    let archetype_dir = pack_root
-        .join(&resolved_version)
-        .join("archetypes")
-        .join(&archetype_ref.name);
+    let reference = format!(
+        "{pack}/{name}@{resolved_version}",
+        name = archetype_ref.name
+    );
+    let origin = ArchetypeOrigin::Pack {
+        pack: pack.to_owned(),
+        name: archetype_ref.name.clone(),
+        version: resolved_version,
+    };
+    let archetype_dir = origin_directory(&origin, Path::new(""), home_root);
     let manifest_path = archetype_dir.join(ARCHETYPE_MANIFEST_FILE);
     if !manifest_path.is_file() {
-        return Err(RunnerError::MirroirArchetypeNotFound {
-            reference: format!(
-                "{pack}/{name}@{ver}",
-                pack = pack,
-                name = archetype_ref.name,
-                ver = resolved_version,
-            ),
+        return Err(MirroirError::ArchetypeNotFound {
+            reference,
             searched: vec![archetype_dir],
-        });
+        }
+        .into());
     }
     let manifest = load_manifest_from_path(&manifest_path)?;
     Ok(ResolvedArchetype {
-        origin: ArchetypeOrigin::Pack {
-            pack: pack.to_owned(),
-            name: archetype_ref.name.clone(),
-            version: resolved_version,
-        },
+        origin,
         manifest,
         directory: archetype_dir,
     })
@@ -164,24 +197,23 @@ fn resolve_user_global(
         archetype_ref.version.as_deref(),
         locked_version,
     )?;
-    let archetype_dir = archetype_root.join(&resolved_version);
+    let reference = format!("user/{name}@{resolved_version}", name = archetype_ref.name);
+    let origin = ArchetypeOrigin::UserGlobal {
+        name: archetype_ref.name.clone(),
+        version: resolved_version,
+    };
+    let archetype_dir = origin_directory(&origin, Path::new(""), home_root);
     let manifest_path = archetype_dir.join(ARCHETYPE_MANIFEST_FILE);
     if !manifest_path.is_file() {
-        return Err(RunnerError::MirroirArchetypeNotFound {
-            reference: format!(
-                "user/{name}@{ver}",
-                name = archetype_ref.name,
-                ver = resolved_version
-            ),
+        return Err(MirroirError::ArchetypeNotFound {
+            reference,
             searched: vec![archetype_dir],
-        });
+        }
+        .into());
     }
     let manifest = load_manifest_from_path(&manifest_path)?;
     Ok(ResolvedArchetype {
-        origin: ArchetypeOrigin::UserGlobal {
-            name: archetype_ref.name.clone(),
-            version: resolved_version,
-        },
+        origin,
         manifest,
         directory: archetype_dir,
     })
@@ -353,7 +385,7 @@ mod tests {
         let tmp = tempfile::tempdir()?;
         let r = ArchetypeRef::parse("mirroir-skills/foo/bar@1.0.0")?;
         match resolve_archetype(&r, Path::new("/proj"), tmp.path(), None) {
-            Err(RunnerError::MirroirArchetypeNotFound { .. }) => Ok(()),
+            Err(RunnerError::Mirroir(MirroirError::ArchetypeNotFound { .. })) => Ok(()),
             other => Err(format!("expected MirroirArchetypeNotFound, got {other:?}").into()),
         }
     }

@@ -164,9 +164,12 @@ work without any additional flags.
 
 ## Drift detection alongside `judge:`
 
-When the scenario also sets `response_drift` + `drift_baseline_file`, the
-runner runs drift detection **after** the judge passes — it's a second
-gate on top of LLM scoring. Implementation lives in
+Every judge step feeds the scenario's drift session, so drift detection runs
+**after** the judge passes — a second gate on top of LLM scoring. By default
+the comparison is against `.harness/last-green.json`; `drift_baseline_file`
+names an explicit file to compare against instead, and
+`response_drift.max_levenshtein_pct` overrides the resolved ceiling for that one
+step. Implementation lives in
 `runner/src/oracle/drift.rs` (Jaccard fingerprint + normalized Levenshtein
 distance, pure functions, no I/O).
 

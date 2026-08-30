@@ -4,24 +4,30 @@
 use std::collections::HashMap;
 use std::env;
 use std::fs;
-use std::mem;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::compile::invoke::PlaywrightRunner;
-use crate::compile::playwright::{ResponseCapture, compile_scenario_with_captures};
+use crate::compile::playwright::compile_scenario;
+use crate::compile::playwright_prelude::ScenarioSource;
+use crate::compile::report::PlaywrightCaptures;
+use crate::compile::workspace::{PlaywrightWorkspace, path_stem};
 use crate::error::{Result, RunnerError};
+use crate::oracle::baseline::{BaselineMode, load_baseline, record_baseline};
+use crate::oracle::drift_log::append_findings;
+use crate::oracle::drift_session::DriftSession;
+use crate::oracle::thresholds::{ThresholdSearch, load_policy};
 use crate::parser::env::substitute;
 use crate::parser::sample::{SAMPLE_SCHEMA_VERSION, SampleManifest, extract_yaml_block};
 use crate::parser::scenario::{SCHEMA_VERSION, Scenario};
-use crate::parser::step::{JudgeArgs, SkillStep};
-use crate::replay_dispatch::{
-    cross_surface_capture, dispatch_cross_surface, dispatch_judge, judge_capture_file,
-};
-use crate::replay_sample::resolve_spawn_args;
+use crate::parser::surface::step_kind;
+use crate::replay_dispatch::verify_measures;
+use crate::replay_plan::ScenarioPlan;
+use crate::replay_step::{StepDispatch, StepVerdict, dispatch_step};
 use crate::target::http::HttpClient;
 use crate::target::process::ProcessRegistry;
+use crate::verdict::RunVerdict;
 
 pub use crate::replay_sample::{ScenarioSet, run_sample};
 
@@ -66,7 +72,7 @@ pub fn load_scenario_with_extras(path: &Path, extras: &[(&str, String)]) -> Resu
 }
 
 /// Convenience wrapper for [`load_scenario_with_extras`] with no extras —
-/// used by `--validate` / `--run-scenario` / `--compile-scenario` modes.
+/// used by `--validate` / `--run-scenario` / `--emit` modes.
 ///
 /// # Errors
 ///
@@ -145,49 +151,93 @@ pub struct SampleContext<'a> {
     pub manifest: &'a SampleManifest,
 }
 
-/// Tunables for [`run_scenario_with_context`].
-///
-/// Default behavior: web step batches dispatched through `npx playwright test`.
-/// Set `skip_playwright = true` to log and skip web steps instead (useful in CI
-/// lanes where Playwright isn't installed); process / HTTP / `assert_log` steps
-/// still run. This skips rather than fails — web assertions are not evaluated.
+/// Where a replay looks for the artifacts it is not handed inline — the
+/// `mirroir-skills` checkout named by `--skills` / `MIRROIR_SKILLS`, which
+/// supplies the global `drift-defaults.yaml` layer — and what it does with the
+/// baselines it finds.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct ReplayOptions {
-    /// When true, web steps are logged and skipped instead of dispatched
-    /// through Playwright. Process / HTTP / `assert_log` steps still run.
-    pub skip_playwright: bool,
+pub struct ReplayRoots<'a> {
+    /// The `mirroir-skills` checkout, when the invocation named one. Supplies
+    /// the global `drift-defaults.yaml` layer.
+    pub skills: Option<&'a Path>,
+    /// Compare against the recorded baselines, or re-record them from what
+    /// this run observes. `mirroir-run accept` is the only caller that passes
+    /// [`BaselineMode::Accept`].
+    pub baselines: BaselineMode,
 }
 
 /// Execute one scenario end-to-end.
 ///
-/// Walks the scenario's steps in order, dispatching:
-/// - Process target steps (`spawn`/`kill`/`wait_port`/`assert_log{,_clean}`)
-///   through a per-scenario [`ProcessRegistry`].
-/// - HTTP steps through a per-scenario [`HttpClient`].
-/// - Web steps (`target` + `tap`/`type`/`wait_for`/etc.) buffered into
-///   contiguous batches; on the next non-web step (or end of scenario) the
-///   buffer is compiled to a Playwright spec and run via `npx playwright test`.
-/// - Judge / report / iOS / measure / condition steps logged and skipped
-///   until their targets land.
+/// A scenario compiles to exactly one `npx playwright test` invocation:
+/// - runner-side steps before the scenario's web block run as **pre-hooks**
+///   (`spawn:`, `wait_port:`, …);
+/// - every web step compiles into one spec and runs in that single invocation,
+///   which attaches the values only the live page has (`measure:` latencies,
+///   `judge:` response text, `cross_surface:` captures);
+/// - runner-side steps after the block run as **post-hooks**, reading those
+///   attached values (`judge:`, `http:`, `kill:`, `assert_log_clean:`, …).
+///
+/// A scenario in which no step ever reports [`StepVerdict::Evaluated`]
+/// checked nothing about the system under test and fails with
+/// [`RunnerError::ScenarioNothingEvaluated`] — a run that evaluated nothing is
+/// not a pass, whatever the individual steps logged.
+///
+/// Every judge score, judged response, and `measure:` latency the run observes
+/// is compared against `.harness/last-green.json`. A run whose assertions all
+/// held but whose observations moved past their resolved thresholds returns
+/// [`RunVerdict::Drift`], appends its candidates to `.harness/drift-log.md`,
+/// and leaves the baseline untouched for a human to review. A clean run
+/// records what it saw as the next baseline.
 ///
 /// # Errors
 ///
-/// Any error returned by the dispatched step variants propagates verbatim.
+/// Any error returned by the dispatched step variants propagates verbatim,
+/// plus [`RunnerError::WebBlockNotContiguous`] for a scenario whose web steps
+/// are split, [`RunnerError::ScenarioNothingEvaluated`] for a scenario that
+/// evaluated nothing, and
+/// [`crate::oracle::error::OracleError::ThresholdUnspecified`] when a drift
+/// comparison is due and no layer declares that metric's threshold.
 pub async fn run_scenario_with_context(
     path: &Path,
     context: Option<SampleContext<'_>>,
-    options: ReplayOptions,
     shared_processes: Option<&mut ProcessRegistry>,
-) -> Result<()> {
+    roots: ReplayRoots<'_>,
+) -> Result<RunVerdict> {
     let extras: Vec<(&str, String)> = context.map_or_else(Vec::new, |ctx| {
         vec![("MIRROIR_SAMPLE_DIR", ctx.sample_dir.display().to_string())]
     });
     let scenario = load_scenario_with_extras(path, &extras)?;
+    let plan = ScenarioPlan::build(&scenario.steps)?;
+    let review_root = review_root()?;
+    let policy = load_policy(
+        scenario.drift,
+        &ThresholdSearch {
+            sample_dir: context.map(|ctx| ctx.sample_dir),
+            skills_root: roots.skills,
+            cwd: Some(&review_root),
+            home: env::var_os("HOME").map(PathBuf::from).as_deref(),
+        },
+    )?;
+    // In accept mode nothing is loaded to compare against: the run's own
+    // observations become the baseline, so there is no comparison to make and
+    // no threshold to resolve.
+    let previous = match roots.baselines {
+        BaselineMode::Compare => load_baseline(&review_root, &scenario.name)?,
+        BaselineMode::Accept => None,
+    };
+    let mut drift = DriftSession::new(policy, previous);
+
     let mut local_processes = ProcessRegistry::default();
     let http = HttpClient::new()?;
-    let mut web_buffer: Vec<SkillStep> = Vec::new();
     let session_shared = shared_processes.is_some();
     let processes: &mut ProcessRegistry = shared_processes.unwrap_or(&mut local_processes);
+    let dispatch = StepDispatch {
+        scenario_name: &scenario.name,
+        context,
+        session_shared,
+        baselines: roots.baselines,
+    };
+    let mut counters = Counters::default();
 
     info!(
         file = %path.display(),
@@ -195,82 +245,91 @@ pub async fn run_scenario_with_context(
         steps = scenario.steps.len(),
         with_sample = context.is_some(),
         session_shared,
-        skip_playwright = options.skip_playwright,
         "scenario run starting"
     );
 
-    for (idx, step) in scenario.steps.iter().enumerate() {
-        if is_web_step(step) {
-            web_buffer.push(step.clone());
-            continue;
+    let empty = PlaywrightCaptures::default();
+    run_hooks(
+        plan.pre(),
+        &scenario,
+        &dispatch,
+        processes,
+        &http,
+        &empty,
+        &mut counters,
+        &mut drift,
+    )
+    .await?;
+
+    let captures = match plan.web() {
+        Some(block) => {
+            let workspace = PlaywrightWorkspace::for_scenario(
+                &review_root,
+                context.map(|ctx| path_stem(ctx.sample_dir)).as_deref(),
+                &path_stem(path),
+            );
+            let source = ScenarioSource::read(path)?;
+            let captures = run_web_block(&scenario, &source, block.len(), &workspace).await?;
+            counters.evaluated += block.len();
+            verify_measures(&scenario.steps[block], &captures, &mut drift)?;
+            captures
         }
-        // Non-web step: flush any pending web batch before dispatching. When a
-        // judge: step needs its response scraped from the live DOM, capture the
-        // selector's text during this final flush and read it back below.
-        let judge_capture = judge_capture_file(step, &web_buffer, options)?;
-        let mut capture_specs: Vec<ResponseCapture> = judge_capture
-            .as_ref()
-            .map(|(_, cap)| vec![cap.clone()])
-            .unwrap_or_default();
-        // A cross_surface: step with a `capture` scrapes its web baseline during
-        // this same flush, then reads it back when the step dispatches below.
-        if let Some(cap) = cross_surface_capture(step, &web_buffer, options) {
-            capture_specs.push(cap);
+        None => PlaywrightCaptures::default(),
+    };
+
+    run_hooks(
+        plan.post(),
+        &scenario,
+        &dispatch,
+        processes,
+        &http,
+        &captures,
+        &mut counters,
+        &mut drift,
+    )
+    .await?;
+
+    if counters.evaluated == 0 {
+        return Err(RunnerError::ScenarioNothingEvaluated {
+            scenario: scenario.name.clone(),
+            steps: scenario.steps.len(),
+            skipped: counters.skipped,
+        });
+    }
+
+    let verdict = drift.verdict();
+    match (verdict, roots.baselines) {
+        // A drifted run leaves the baseline alone: moving it is a human's call,
+        // and `mirroir-run accept` is where that call is made.
+        (RunVerdict::Drift, BaselineMode::Compare) => {
+            append_findings(&review_root, &scenario.name, drift.findings())?;
+            for finding in drift.findings() {
+                warn!(scenario = %scenario.name, drift = %finding.summary(), "drift candidate");
+            }
         }
-        flush_web_buffer(&mut web_buffer, &scenario.name, options, &capture_specs).await?;
-        info!(idx, kind = step_kind(step), "dispatching step");
-        match step {
-            SkillStep::Spawn(args) => {
-                let resolved = resolve_spawn_args(args, context.as_ref())?;
-                if session_shared {
-                    processes.ensure_spawned(&resolved)?;
-                } else {
-                    processes.spawn(&resolved)?;
-                }
-            }
-            SkillStep::Kill(args) => {
-                if session_shared {
-                    // In session-scoped mode the shared boot stays alive
-                    // across scenarios; scenario-level kill: of the boot id
-                    // is a no-op so individual scenarios stay portable.
-                    info!(id = %args.id, "kill: skipped (session-shared subprocess)");
-                } else {
-                    processes.kill_process(args).await?;
-                }
-            }
-            SkillStep::WaitPort(args) => processes.wait_port(args).await?,
-            SkillStep::AssertLog(args) => processes.assert_log(args).await?,
-            SkillStep::AssertLogClean(args) => processes.assert_log_clean(args).await?,
-            SkillStep::Http(args) => http.dispatch(args).await?,
-            SkillStep::Judge(args) => {
-                let captured;
-                let effective = if let Some((tmp, _)) = &judge_capture {
-                    captured = JudgeArgs {
-                        response_file: Some(tmp.path().display().to_string()),
-                        ..args.clone()
-                    };
-                    &captured
-                } else {
-                    args
-                };
-                dispatch_judge(effective).await?;
-            }
-            SkillStep::CrossSurface(args) => dispatch_cross_surface(args)?,
-            // LIMITATION(registre#1): device-only step kinds (launch, home,
-            // shake, reset_app, set_network, measure, condition) have no
-            // replay dispatch arm and are skipped.
-            _ => info!(
-                idx,
-                kind = step_kind(step),
-                "no replay dispatch for this step kind; skipping"
-            ),
+        (RunVerdict::Pass | RunVerdict::Drift, BaselineMode::Accept)
+        | (RunVerdict::Pass, BaselineMode::Compare) => {
+            record_baseline(&review_root, &scenario.name, drift.into_observed())?;
         }
     }
-    // End-of-scenario: flush any trailing web batch (no judge capture follows).
-    flush_web_buffer(&mut web_buffer, &scenario.name, options, &[]).await?;
 
-    info!(file = %path.display(), name = %scenario.name, "scenario run completed");
-    Ok(())
+    info!(
+        file = %path.display(),
+        name = %scenario.name,
+        evaluated = counters.evaluated,
+        skipped = counters.skipped,
+        verdict = %verdict,
+        "scenario run completed"
+    );
+    Ok(verdict)
+}
+
+/// The directory the runner keeps `.harness/` under: where it was invoked from.
+fn review_root() -> Result<PathBuf> {
+    env::current_dir().map_err(|source| RunnerError::Io {
+        context: "resolve the current directory for the .harness review artifacts".to_owned(),
+        source,
+    })
 }
 
 /// Convenience: run a single scenario with no sample context. Used by
@@ -279,99 +338,89 @@ pub async fn run_scenario_with_context(
 /// # Errors
 ///
 /// Same as [`run_scenario_with_context`].
-pub async fn run_scenario(path: &Path, options: ReplayOptions) -> Result<()> {
-    run_scenario_with_context(path, None, options, None).await
+pub async fn run_scenario(path: &Path, roots: ReplayRoots<'_>) -> Result<RunVerdict> {
+    run_scenario_with_context(path, None, None, roots).await
 }
 
-async fn flush_web_buffer(
-    buffer: &mut Vec<SkillStep>,
-    scenario_name: &str,
-    options: ReplayOptions,
-    captures: &[ResponseCapture],
+/// What the scenario's steps contributed to its verdict.
+#[derive(Debug, Default, Clone, Copy)]
+struct Counters {
+    evaluated: usize,
+    skipped: usize,
+}
+
+/// Dispatch the runner-side steps at `indices`, in order, accumulating what
+/// each contributed to the scenario verdict.
+#[allow(clippy::too_many_arguments)]
+async fn run_hooks(
+    indices: &[usize],
+    scenario: &Scenario,
+    dispatch: &StepDispatch<'_>,
+    processes: &mut ProcessRegistry,
+    http: &HttpClient,
+    captures: &PlaywrightCaptures,
+    counters: &mut Counters,
+    drift: &mut DriftSession,
 ) -> Result<()> {
-    if buffer.is_empty() {
-        return Ok(());
+    for &index in indices {
+        let Some(step) = scenario.steps.get(index) else {
+            continue;
+        };
+        info!(index, kind = step_kind(step), "dispatching step");
+        match dispatch_step(index, step, dispatch, processes, http, captures, drift).await? {
+            StepVerdict::Evaluated => counters.evaluated += 1,
+            StepVerdict::NoVerdict => {}
+            StepVerdict::Skipped => {
+                counters.skipped += 1;
+                info!(
+                    index,
+                    kind = step_kind(step),
+                    "no replay dispatch for this step kind; skipping"
+                );
+            }
+        }
     }
-    let count = buffer.len();
-    if options.skip_playwright {
-        info!(count, "web step batch skipped (--no-playwright)");
-        buffer.clear();
-        return Ok(());
-    }
-    let batch_scenario = Scenario {
-        version: SCHEMA_VERSION,
-        name: scenario_name.to_owned(),
-        app: None,
-        description: None,
-        tags: Vec::new(),
-        steps: mem::take(buffer),
-    };
-    let spec = compile_scenario_with_captures(&batch_scenario, captures)?;
-    let runner = PlaywrightRunner::from_env()?;
-    info!(count, browsers = ?spec.browsers, "dispatching web batch to Playwright");
-    let verdict = runner.run(&spec).await?;
-    info!(
-        passed = verdict.passed,
-        failed = verdict.failed,
-        skipped = verdict.skipped,
-        flaky = verdict.flaky,
-        "playwright batch completed"
-    );
     Ok(())
 }
 
-fn is_web_step(step: &SkillStep) -> bool {
-    matches!(
-        step,
-        SkillStep::Target(_)
-            | SkillStep::Tap(_)
-            | SkillStep::Type(_)
-            | SkillStep::PressKey(_)
-            | SkillStep::Swipe(_)
-            | SkillStep::WaitFor(_)
-            | SkillStep::AssertVisible(_)
-            | SkillStep::AssertNotVisible(_)
-            | SkillStep::Screenshot(_)
-            | SkillStep::OpenUrl(_)
-            | SkillStep::ScrollTo(_)
-            | SkillStep::LongPress(_)
-            | SkillStep::Drag(_)
-            | SkillStep::Remember(_)
-    )
-}
-
-/// Short label for a [`SkillStep`] suitable for `tracing` fields.
-fn step_kind(step: &SkillStep) -> &'static str {
-    match step {
-        SkillStep::Launch(_) => "launch",
-        SkillStep::Tap(_) => "tap",
-        SkillStep::Type(_) => "type",
-        SkillStep::PressKey(_) => "press_key",
-        SkillStep::Swipe(_) => "swipe",
-        SkillStep::WaitFor(_) => "wait_for",
-        SkillStep::AssertVisible(_) => "assert_visible",
-        SkillStep::AssertNotVisible(_) => "assert_not_visible",
-        SkillStep::Screenshot(_) => "screenshot",
-        SkillStep::Home(_) => "home",
-        SkillStep::OpenUrl(_) => "open_url",
-        SkillStep::Shake(_) => "shake",
-        SkillStep::ScrollTo(_) => "scroll_to",
-        SkillStep::ResetApp(_) => "reset_app",
-        SkillStep::SetNetwork(_) => "set_network",
-        SkillStep::Measure(_) => "measure",
-        SkillStep::LongPress(_) => "long_press",
-        SkillStep::Drag(_) => "drag",
-        SkillStep::Target(_) => "target",
-        SkillStep::Remember(_) => "remember",
-        SkillStep::Condition(_) => "condition",
-        SkillStep::Spawn(_) => "spawn",
-        SkillStep::WaitPort(_) => "wait_port",
-        SkillStep::Kill(_) => "kill",
-        SkillStep::AssertLog(_) => "assert_log",
-        SkillStep::AssertLogClean(_) => "assert_log_clean",
-        SkillStep::Judge(_) => "judge",
-        SkillStep::Http(_) => "http",
-        SkillStep::Report(_) => "report",
-        SkillStep::CrossSurface(_) => "cross_surface",
+/// Compile the scenario to a single Playwright spec, invoke it once in
+/// `workspace`, and return what the run attached for the post-hooks.
+///
+/// The workspace survives the call: the trace, video, screenshot, and HTML
+/// report a failing test leaves behind are the artifacts the debugging loop
+/// opens, and the path is logged so a reader can find them.
+async fn run_web_block(
+    scenario: &Scenario,
+    source: &ScenarioSource,
+    web_steps: usize,
+    workspace: &PlaywrightWorkspace,
+) -> Result<PlaywrightCaptures> {
+    let spec = compile_scenario(scenario, source)?;
+    let runner = PlaywrightRunner::from_env()?;
+    info!(
+        web_steps,
+        browsers = ?spec.browsers,
+        workspace = %workspace.dir.display(),
+        "dispatching the scenario's web block to Playwright"
+    );
+    let outcome = runner.run(&spec, workspace).await?;
+    if !outcome.captures.page_errors.is_empty() || !outcome.captures.failed_requests.is_empty() {
+        warn!(
+            page_errors = ?outcome.captures.page_errors,
+            failed_requests = ?outcome.captures.failed_requests,
+            "the page reported errors during the run"
+        );
     }
+    info!(
+        passed = outcome.verdict.passed,
+        failed = outcome.verdict.failed,
+        skipped = outcome.verdict.skipped,
+        flaky = outcome.verdict.flaky,
+        metrics = outcome.captures.metrics.len(),
+        judge_captures = outcome.captures.judge.len(),
+        cross_surface_captures = outcome.captures.cross_surface.len(),
+        workspace = %workspace.dir.display(),
+        "playwright invocation completed"
+    );
+    Ok(outcome.captures)
 }

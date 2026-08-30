@@ -6,29 +6,29 @@ use std::path::{Path, PathBuf};
 
 use tracing::{info, warn};
 
-use crate::error::{Result, RunnerError};
+use crate::error::Result;
 use crate::mirroir::compose::{ComposedSample, build_dir_for, compose_needed, compose_sample};
 use crate::mirroir::discover::discover_mirroir_config;
+use crate::mirroir::error::MirroirError;
 use crate::mirroir::lock::{
     FreshnessVerdict, LockfileMode, check_lockfile_fresh, enforce_freshness, read_lockfile,
     regenerate_lockfile, write_lockfile,
 };
 use crate::mirroir::resolve::{ResolvedArchetype, resolve_archetype};
 use crate::mirroir::run_io::{
-    SampleVerdict, load_and_apply_local_overrides, load_config, project_root_for_config,
-    resolve_home_root, write_summary, write_summary_full,
+    RunTotals, SampleStatus, SampleVerdict, load_and_apply_local_overrides, load_config,
+    project_root_for_config, resolve_home_root, write_summary_full,
 };
 use crate::parser::lockfile::Lockfile;
 use crate::parser::mirroir::{
     ArchetypeRef, ArchetypeRefKind, DefaultScenarioSet, MirroirConfig, PlanEntry, PlanEntrySource,
 };
-use crate::replay::{ReplayOptions, ScenarioSet, run_sample};
+use crate::replay::{ReplayRoots, ScenarioSet, run_sample};
+use crate::verdict::RunVerdict;
 
 /// Knobs passed from the CLI into [`run_mirroir`].
 #[derive(Debug, Clone, Copy)]
 pub struct MirroirRunOptions {
-    /// Replay options (forwarded to `run_sample`).
-    pub replay: ReplayOptions,
     /// Lockfile freshness mode.
     pub lockfile_mode: LockfileMode,
     /// When true, compose into `.build/` and exit without replaying.
@@ -44,7 +44,6 @@ pub struct MirroirRunOptions {
 impl Default for MirroirRunOptions {
     fn default() -> Self {
         Self {
-            replay: ReplayOptions::default(),
             lockfile_mode: LockfileMode::Default,
             compose_only: false,
             recompose: false,
@@ -68,8 +67,9 @@ impl Default for MirroirRunOptions {
 /// 6. For each composed sample (unless `--compose-only`): invoke
 ///    [`run_sample`] using the existing `ScenarioSet::MustPass` (or as
 ///    selected) machinery.
-/// 7. Emit the summary JSON to `summary_path` and return `MirroirPlanFailures`
-///    when any sample failed.
+/// 7. Emit the summary JSON to `summary_path` and return
+///    [`MirroirError::PlanFailures`] when any sample failed, or
+///    [`RunVerdict::Drift`] when none failed and at least one drifted.
 ///
 /// # Errors
 ///
@@ -80,7 +80,8 @@ pub async fn run_mirroir(
     set: Option<ScenarioSet>,
     options: MirroirRunOptions,
     summary_path: &Path,
-) -> Result<()> {
+    roots: ReplayRoots<'_>,
+) -> Result<RunVerdict> {
     info!(config = %config_path.display(), "loading mirroir config");
     let mut config = load_config(config_path)?;
     let project_root = project_root_for_config(config_path)?;
@@ -119,55 +120,70 @@ pub async fn run_mirroir(
     if options.compose_only {
         info!(
             samples = composed.len(),
-            "compose-only mode; skipping replay"
+            "compose-only mode; nothing replayed, so nothing passed"
         );
-        write_summary(
+        // Every sample is `composed`, and the pass / fail / skip counts are all
+        // zero: --compose-only builds the tree and stops, so no scenario has a
+        // verdict yet. Counting the composed samples as passed would report a
+        // green run for work that never executed.
+        write_summary_full(
             summary_path,
             config_path,
             composed
                 .iter()
                 .map(|(entry, _)| SampleVerdict {
                     name: entry.name.clone(),
-                    verdict: "composed".to_owned(),
+                    verdict: SampleStatus::Composed,
                     error: None,
                 })
                 .collect(),
+            RunTotals::default(),
         )?;
-        return Ok(());
+        return Ok(RunVerdict::Pass);
     }
 
     let mut verdicts: Vec<SampleVerdict> = Vec::with_capacity(composed.len());
-    let mut failed = 0usize;
-    let mut passed = 0usize;
-    let mut skipped = 0usize;
+    let mut totals = RunTotals::default();
 
     for (entry, sample) in composed {
         if entry.skip {
-            skipped += 1;
+            totals.skipped += 1;
             verdicts.push(SampleVerdict {
                 name: entry.name.clone(),
-                verdict: "skipped".to_owned(),
+                verdict: SampleStatus::Skipped,
                 error: None,
             });
             continue;
         }
         info!(sample = %entry.name, dir = %sample.directory.display(), set = ?selected_set, "running sample");
-        match run_sample(&sample.directory, selected_set, options.replay).await {
-            Ok(()) => {
-                passed += 1;
+        match run_sample(&sample.directory, selected_set, roots).await {
+            Ok(RunVerdict::Pass) => {
+                totals.passed += 1;
                 verdicts.push(SampleVerdict {
                     name: entry.name.clone(),
-                    verdict: "pass".to_owned(),
+                    verdict: SampleStatus::Pass,
                     error: None,
                 });
             }
+            Ok(RunVerdict::Drift) => {
+                totals.drifted += 1;
+                warn!(sample = %entry.name, "sample drifted; see .harness/drift-log.md");
+                verdicts.push(SampleVerdict {
+                    name: entry.name.clone(),
+                    verdict: SampleStatus::Drift,
+                    error: Some(
+                        "structurally green; at least one drift metric moved past its threshold — see .harness/drift-log.md"
+                            .to_owned(),
+                    ),
+                });
+            }
             Err(err) => {
-                failed += 1;
+                totals.failed += 1;
                 let msg = err.to_string();
                 tracing::error!(sample = %entry.name, error = %msg, "sample failed");
                 verdicts.push(SampleVerdict {
                     name: entry.name.clone(),
-                    verdict: "fail".to_owned(),
+                    verdict: SampleStatus::Fail,
                     error: Some(msg),
                 });
             }
@@ -175,13 +191,17 @@ pub async fn run_mirroir(
     }
 
     let total = verdicts.len();
-    write_summary_full(summary_path, config_path, verdicts, passed, failed, skipped)?;
+    let failed = totals.failed;
+    let drifted = totals.drifted;
+    write_summary_full(summary_path, config_path, verdicts, totals)?;
 
     if failed > 0 {
-        Err(RunnerError::MirroirPlanFailures { failed, total })
-    } else {
-        Ok(())
+        return Err(MirroirError::PlanFailures { failed, total }.into());
     }
+    if drifted > 0 {
+        return Ok(RunVerdict::Drift);
+    }
+    Ok(RunVerdict::Pass)
 }
 
 /// Resolve the effective scenario set. An explicit CLI `--scenarios` choice
@@ -211,17 +231,18 @@ fn ensure_lockfile(
             // requires a committed lockfile — surface that distinctly from the
             // plain locked-but-missing case.
             LockfileMode::Frozen => {
-                return Err(RunnerError::MirroirFrozenViolation {
+                return Err(MirroirError::FrozenViolation {
                     reason: format!(
                         "lockfile {} is absent; --frozen requires a committed mirroir.lock (no regeneration, no network fetch)",
                         lockfile_path.display()
                     ),
-                });
+                }.into());
             }
             LockfileMode::Locked => {
-                return Err(RunnerError::MirroirLockfileMissing {
+                return Err(MirroirError::LockfileMissing {
                     path: lockfile_path.to_path_buf(),
-                });
+                }
+                .into());
             }
             LockfileMode::Default => {
                 let regenerated = regenerate_lockfile(config, project_root, home_root)?;
@@ -246,7 +267,7 @@ fn ensure_lockfile(
         warn!(reasons = %reasons, "regenerated stale lockfile");
         return Ok(Some(regenerated));
     }
-    enforce_freshness(&verdict, mode)?;
+    enforce_freshness(&verdict, mode, &lockfile, project_root, home_root)?;
     Ok(Some(lockfile))
 }
 
@@ -343,16 +364,17 @@ fn build_composed_samples<'a>(
 ///
 /// # Errors
 ///
-/// Propagates [`RunnerError::MirroirConfigNotFound`] when discovery fails,
+/// Propagates [`MirroirError::ConfigNotFound`] when discovery fails,
 /// plus anything [`run_mirroir`] returns.
 pub async fn run_mirroir_autodiscover(
     cwd: &Path,
     set: Option<ScenarioSet>,
     options: MirroirRunOptions,
     summary_path: &Path,
-) -> Result<()> {
+    roots: ReplayRoots<'_>,
+) -> Result<RunVerdict> {
     let config_path = discover_mirroir_config(cwd)?;
-    run_mirroir(&config_path, set, options, summary_path).await
+    run_mirroir(&config_path, set, options, summary_path, roots).await
 }
 
 #[cfg(test)]
@@ -363,6 +385,7 @@ mod tests {
 
     use super::{DefaultScenarioSet, ScenarioSet, ensure_lockfile, select_set};
     use crate::error::RunnerError;
+    use crate::mirroir::error::MirroirError;
     use crate::mirroir::lock::LockfileMode;
     use crate::parser::mirroir::parse_mirroir_config;
 
@@ -400,7 +423,10 @@ mod tests {
             LockfileMode::Frozen,
         );
         assert!(
-            matches!(res, Err(RunnerError::MirroirFrozenViolation { .. })),
+            matches!(
+                res,
+                Err(RunnerError::Mirroir(MirroirError::FrozenViolation { .. }))
+            ),
             "frozen + missing lockfile must be a frozen violation, got {res:?}"
         );
         Ok(())
@@ -417,7 +443,10 @@ mod tests {
             LockfileMode::Locked,
         );
         assert!(
-            matches!(res, Err(RunnerError::MirroirLockfileMissing { .. })),
+            matches!(
+                res,
+                Err(RunnerError::Mirroir(MirroirError::LockfileMissing { .. }))
+            ),
             "locked + missing lockfile must be MirroirLockfileMissing, got {res:?}"
         );
         Ok(())

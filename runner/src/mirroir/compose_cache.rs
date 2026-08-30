@@ -1,6 +1,8 @@
 // ABOUTME: Compose cache freshness — manifest structs, sha256 hashing, and the compose_needed check.
 // ABOUTME: Decides whether a cached `.build/<sample>/` tree is stale vs. its archetype + plan inputs.
 
+use std::collections::{BTreeMap, HashMap};
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -111,14 +113,89 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 /// Deterministic hash of the plan-entry fields that affect the composed output.
+///
+/// The entry carries two `HashMap`s — `vars` and `boot.env` — and every
+/// `HashMap` a process builds gets its own random hash keys, so two maps with
+/// identical contents iterate in different orders. Hashing their `Debug`
+/// rendering would therefore produce a different digest on every run and the
+/// compose cache would never hit. The fields are folded into a
+/// [`BTreeMap`]-ordered, length-prefixed encoding instead: sorted by key, and
+/// self-delimiting so no value's bytes can imitate a field separator.
 #[must_use]
 pub fn hash_plan_entry(entry: &PlanEntry) -> String {
-    // Deterministic JSON-ish representation of the fields that matter for the cache.
-    let canonical = format!(
-        "name={}|flows={:?}|vars={:?}|boot={:?}",
-        entry.name, entry.flows, entry.vars, entry.boot
+    let mut canonical = String::new();
+    push_field(&mut canonical, "name", &entry.name);
+    push_field(&mut canonical, "flows.len", &entry.flows.len().to_string());
+    for (position, flow) in entry.flows.iter().enumerate() {
+        push_field(&mut canonical, &format!("flows[{position}]"), flow);
+    }
+    push_map(&mut canonical, "vars", &entry.vars);
+    push_field(&mut canonical, "boot.command", &entry.boot.command);
+    push_field(
+        &mut canonical,
+        "boot.cwd",
+        &optional(entry.boot.cwd.as_deref()),
+    );
+    push_map(&mut canonical, "boot.env", &entry.boot.env);
+    push_field(
+        &mut canonical,
+        "boot.timeout_s",
+        &optional_number(entry.boot.timeout_s),
+    );
+    push_field(
+        &mut canonical,
+        "boot.boot_once",
+        if entry.boot.boot_once {
+            "true"
+        } else {
+            "false"
+        },
+    );
+    push_field(
+        &mut canonical,
+        "boot.boot_ready_port",
+        &optional_number(entry.boot.boot_ready_port),
+    );
+    push_field(
+        &mut canonical,
+        "boot.boot_ready_timeout_s",
+        &optional_number(entry.boot.boot_ready_timeout_s),
     );
     sha256_hex(canonical.as_bytes())
+}
+
+/// Append one `<key>=<len>:<value>;` field. The length prefix makes the
+/// encoding self-delimiting: a value containing `=`, `;`, or a whole encoded
+/// field cannot be read as anything but that value.
+fn push_field(out: &mut String, key: &str, value: &str) {
+    out.push_str(key);
+    out.push('=');
+    out.push_str(&value.len().to_string());
+    out.push(':');
+    out.push_str(value);
+    out.push(';');
+}
+
+/// Append every entry of `map` under `prefix`, ordered by key.
+fn push_map(out: &mut String, prefix: &str, map: &HashMap<String, String>) {
+    let ordered: BTreeMap<&str, &str> = map
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect();
+    push_field(out, &format!("{prefix}.len"), &ordered.len().to_string());
+    for (key, value) in ordered {
+        push_field(out, &format!("{prefix}[{key}]"), value);
+    }
+}
+
+/// Encode an optional string so `None` and `Some("")` stay distinguishable.
+fn optional(value: Option<&str>) -> String {
+    value.map_or_else(|| "none".to_owned(), |inner| format!("some:{inner}"))
+}
+
+/// Encode an optional number the same way [`optional`] encodes a string.
+fn optional_number<T: fmt::Display>(value: Option<T>) -> String {
+    value.map_or_else(|| "none".to_owned(), |inner| format!("some:{inner}"))
 }
 
 /// Provenance manifest emitted under `.build/<sample>/.compose-manifest.json`.
@@ -165,7 +242,7 @@ pub struct SourceFileRecord {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::BTreeSet;
     use std::error::Error as StdError;
     use std::io;
     use std::result::Result as StdResult;
@@ -217,8 +294,14 @@ mod tests {
             name: "test/sample".to_owned(),
             version: Some("1.0.0".to_owned()),
         };
+        // Two vars and two boot env entries on purpose: one key per map cannot
+        // expose an iteration-order-dependent hash.
         let mut vars = HashMap::new();
         vars.insert("PORT".to_owned(), port.to_owned());
+        vars.insert("MESSAGE".to_owned(), "hello".to_owned());
+        let mut env = HashMap::new();
+        env.insert("ALPHA".to_owned(), "1".to_owned());
+        env.insert("BETA".to_owned(), "2".to_owned());
         PlanEntry {
             name: name.to_owned(),
             source: PlanEntrySource::Archetypes {
@@ -229,7 +312,7 @@ mod tests {
             boot: PlanEntryBoot {
                 command: "echo hi".to_owned(),
                 cwd: Some("${CWD_FALLBACK:-/tmp}".to_owned()),
-                env: HashMap::new(),
+                env,
                 timeout_s: None,
                 boot_once: true,
                 boot_ready_port: Some(port.parse::<u16>().unwrap_or(8080)),
@@ -288,6 +371,82 @@ mod tests {
 
         let entry_v2 = fixture_entry("sample-e", "2222"); // different PORT
         assert!(compose_needed(&entry_v2, &resolved, &project)?);
+        Ok(())
+    }
+
+    /// Rust seeds every `HashMap` with its own random keys, so two maps built
+    /// from the same pairs iterate in different orders. A hash that folded in
+    /// their `Debug` rendering changed on every construction, which meant every
+    /// compose run missed the cache and `rm -rf`-ed the composed tree — taking
+    /// any baseline written under `${MIRROIR_SAMPLE_DIR}` with it.
+    #[test]
+    fn the_plan_entry_hash_is_stable_across_freshly_built_maps() {
+        let mut digests = BTreeSet::new();
+        for _ in 0..5 {
+            digests.insert(hash_plan_entry(&fixture_entry("sample-hash", "8080")));
+        }
+        assert_eq!(
+            digests.len(),
+            1,
+            "five identical entries hashed to {} distinct digests: {digests:?}",
+            digests.len()
+        );
+    }
+
+    /// The encoding stays sensitive to what it encodes: a changed var value, a
+    /// changed boot env value, and a var/env key swap each move the digest.
+    #[test]
+    fn the_plan_entry_hash_still_separates_different_entries() {
+        let base = fixture_entry("sample-hash", "8080");
+        let other_port = fixture_entry("sample-hash", "9090");
+        assert_ne!(hash_plan_entry(&base), hash_plan_entry(&other_port));
+
+        let mut renamed_var = fixture_entry("sample-hash", "8080");
+        renamed_var.vars.remove("MESSAGE");
+        renamed_var
+            .vars
+            .insert("GREETING".to_owned(), "hello".to_owned());
+        assert_ne!(hash_plan_entry(&base), hash_plan_entry(&renamed_var));
+
+        let mut other_env = fixture_entry("sample-hash", "8080");
+        other_env.boot.env.insert("BETA".to_owned(), "3".to_owned());
+        assert_ne!(hash_plan_entry(&base), hash_plan_entry(&other_env));
+
+        let mut no_cwd = fixture_entry("sample-hash", "8080");
+        no_cwd.boot.cwd = None;
+        let mut empty_cwd = fixture_entry("sample-hash", "8080");
+        empty_cwd.boot.cwd = Some(String::new());
+        assert_ne!(
+            hash_plan_entry(&no_cwd),
+            hash_plan_entry(&empty_cwd),
+            "an absent cwd must not hash like an empty one"
+        );
+    }
+
+    /// The exit criterion, end to end: compose once, then five consecutive
+    /// checks against freshly built entries all report the cache is valid.
+    #[test]
+    fn five_consecutive_checks_all_hit_the_cache() -> TestResult {
+        let tmp = tempfile::tempdir()?;
+        let project = tmp.path().join("proj");
+        fs::create_dir_all(&project)?;
+        let archetype_dir = tmp.path().join("arch");
+        write_archetype_tree(&archetype_dir)?;
+        let resolved = fixture_resolved(&archetype_dir)?;
+        let _ = compose_sample(
+            &fixture_entry("sample-cache", "6060"),
+            &HashMap::new(),
+            Some(&resolved),
+            &project,
+        )?;
+
+        for attempt in 1..=5 {
+            let entry = fixture_entry("sample-cache", "6060");
+            assert!(
+                !compose_needed(&entry, &resolved, &project)?,
+                "check {attempt} of 5 missed the cache"
+            );
+        }
         Ok(())
     }
 }

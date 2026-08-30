@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tracing::{debug, info};
 
-use crate::error::{Result, RunnerError};
+use crate::error::Result;
+use crate::oracle::error::OracleError;
 use crate::parser::step::JudgeArgs;
 
 // The profile registry lives in its own module; re-export so existing callers
@@ -31,10 +32,10 @@ pub struct JudgeOutcome {
 ///
 /// # Errors
 ///
-/// * [`RunnerError::JudgeUnknownProfile`] when `args.profile` isn't registered.
-/// * [`RunnerError::JudgeMissingApiKey`] when the profile needs an env key.
-/// * [`RunnerError::JudgeTransport`] on HTTP transport failure.
-/// * [`RunnerError::JudgeDecode`] when the model's reply can't be parsed as a score.
+/// * [`OracleError::UnknownProfile`] when `args.profile` isn't registered.
+/// * [`OracleError::MissingApiKey`] when the profile needs an env key.
+/// * [`OracleError::Transport`] on HTTP transport failure.
+/// * [`OracleError::Decode`] when the model's reply can't be parsed as a score.
 pub async fn run_judge(
     registry: &JudgeRegistry,
     args: &JudgeArgs,
@@ -56,7 +57,7 @@ pub async fn run_judge(
         .timeout(Duration::from_secs(u64::from(profile.timeout_s)))
         .user_agent(format!("mirroir-run/{}", env!("CARGO_PKG_VERSION")))
         .build()
-        .map_err(|source| RunnerError::JudgeTransport {
+        .map_err(|source| OracleError::Transport {
             url: profile.base_url.clone(),
             source,
         })?;
@@ -75,22 +76,22 @@ pub async fn run_judge(
     let response = request
         .send()
         .await
-        .map_err(|source| RunnerError::JudgeTransport {
+        .map_err(|source| OracleError::Transport {
             url: profile.base_url.clone(),
             source,
         })?;
-    let body: ChatResponse =
-        response
-            .json()
-            .await
-            .map_err(|source| RunnerError::JudgeTransport {
-                url: profile.base_url.clone(),
-                source,
-            })?;
+    let body: ChatResponse = response
+        .json()
+        .await
+        .map_err(|source| OracleError::Transport {
+            url: profile.base_url.clone(),
+            source,
+        })?;
     let Some(choice) = body.choices.into_iter().next() else {
-        return Err(RunnerError::JudgeDecode {
+        return Err(OracleError::Decode {
             reason: "no choices in response".to_owned(),
-        });
+        }
+        .into());
     };
     let raw = choice.message.content;
     let score = parse_score(&raw)?;
@@ -102,7 +103,7 @@ pub async fn run_judge(
 ///
 /// # Errors
 ///
-/// [`RunnerError::JudgeBelowThreshold`] when `score < threshold - tolerance`.
+/// [`OracleError::BelowThreshold`] when `score < threshold - tolerance`.
 pub fn enforce_threshold(
     profile_name: &str,
     args: &JudgeArgs,
@@ -111,11 +112,12 @@ pub fn enforce_threshold(
     let tolerance = args.pass_threshold_tolerance.unwrap_or(0.0);
     let effective = args.pass_threshold - tolerance;
     if outcome.score < effective {
-        return Err(RunnerError::JudgeBelowThreshold {
+        return Err(OracleError::BelowThreshold {
             profile: profile_name.to_owned(),
             score: outcome.score,
             threshold: effective,
-        });
+        }
+        .into());
     }
     Ok(())
 }
@@ -126,10 +128,11 @@ fn api_key_for(profile: &JudgeProfile) -> Result<Option<String>> {
     };
     match env::var(env_name) {
         Ok(value) if !value.is_empty() => Ok(Some(value)),
-        _ => Err(RunnerError::JudgeMissingApiKey {
+        _ => Err(OracleError::MissingApiKey {
             profile: profile.name.clone(),
             env_var: env_name.to_owned(),
-        }),
+        }
+        .into()),
     }
 }
 
@@ -158,7 +161,7 @@ pub fn user_prompt_template_hash() -> String {
 ///
 /// # Errors
 ///
-/// [`RunnerError::JudgeTemplateMismatch`] when the declared hash differs from
+/// [`OracleError::TemplateMismatch`] when the declared hash differs from
 /// the hash of [`USER_PROMPT_TEMPLATE`] — the oracle prompt changed and the
 /// scenario must be re-pinned to keep its score calibration meaningful.
 fn verify_template_hash(declared: &str) -> Result<()> {
@@ -166,10 +169,11 @@ fn verify_template_hash(declared: &str) -> Result<()> {
     if declared == expected {
         Ok(())
     } else {
-        Err(RunnerError::JudgeTemplateMismatch {
+        Err(OracleError::TemplateMismatch {
             expected,
             declared: declared.to_owned(),
-        })
+        }
+        .into())
     }
 }
 
@@ -187,7 +191,7 @@ fn build_prompt(args: &JudgeArgs, response: &str) -> String {
 ///
 /// Tolerates surrounding whitespace, a trailing period, or a leading
 /// "Score:" prefix. Anything that doesn't parse as a finite `[0,1]` float
-/// returns [`RunnerError::JudgeDecode`].
+/// returns [`OracleError::Decode`].
 fn parse_score(raw: &str) -> Result<f64> {
     let cleaned = raw
         .trim()
@@ -196,13 +200,14 @@ fn parse_score(raw: &str) -> Result<f64> {
         .trim()
         .trim_end_matches('.')
         .trim();
-    let value: f64 = cleaned.parse().map_err(|_| RunnerError::JudgeDecode {
+    let value: f64 = cleaned.parse().map_err(|_| OracleError::Decode {
         reason: format!("could not parse `{cleaned}` as f64"),
     })?;
     if !value.is_finite() || !(0.0..=1.0).contains(&value) {
-        return Err(RunnerError::JudgeDecode {
+        return Err(OracleError::Decode {
             reason: format!("score {value} out of [0,1] range"),
-        });
+        }
+        .into());
     }
     Ok(value)
 }
@@ -247,6 +252,7 @@ mod tests {
     use tokio::task::JoinHandle;
 
     use super::*;
+    use crate::error::RunnerError;
 
     type TestResult = StdResult<(), Box<dyn StdError>>;
 
@@ -338,8 +344,8 @@ mod tests {
             Box::leak(format!("http://127.0.0.1:{port}/v1/chat/completions").into_boxed_str());
         let registry = JudgeRegistry::from_profiles(vec![stub_profile("stub", base_url)]);
         let res = run_judge(&registry, &judge_args("stub"), "x").await;
-        if !matches!(res, Err(RunnerError::JudgeDecode { .. })) {
-            return Err(format!("expected JudgeDecode, got {res:?}").into());
+        if !matches!(res, Err(RunnerError::Oracle(OracleError::Decode { .. }))) {
+            return Err(format!("expected a decode error, got {res:?}").into());
         }
         server.await?;
         Ok(())
@@ -349,8 +355,11 @@ mod tests {
     async fn run_judge_unknown_profile() -> TestResult {
         let registry = JudgeRegistry::default();
         let res = run_judge(&registry, &judge_args("does-not-exist"), "x").await;
-        if !matches!(res, Err(RunnerError::JudgeUnknownProfile { .. })) {
-            return Err(format!("expected JudgeUnknownProfile, got {res:?}").into());
+        if !matches!(
+            res,
+            Err(RunnerError::Oracle(OracleError::UnknownProfile { .. }))
+        ) {
+            return Err(format!("expected an unknown-profile error, got {res:?}").into());
         }
         Ok(())
     }
@@ -382,11 +391,11 @@ mod tests {
             raw: "0.5".to_owned(),
         };
         let res = enforce_threshold("stub", &args, &outcome);
-        let Err(RunnerError::JudgeBelowThreshold {
+        let Err(RunnerError::Oracle(OracleError::BelowThreshold {
             score, threshold, ..
-        }) = res
+        })) = res
         else {
-            return Err(format!("expected JudgeBelowThreshold, got {res:?}").into());
+            return Err(format!("expected a below-threshold error, got {res:?}").into());
         };
         if (score - 0.5).abs() > 1e-9 || (threshold - 0.85).abs() > 1e-9 {
             return Err(format!("wrong values: score={score} threshold={threshold}").into());
@@ -397,8 +406,8 @@ mod tests {
     #[test]
     fn parse_score_rejects_out_of_range() -> TestResult {
         let res = parse_score("1.5");
-        if !matches!(res, Err(RunnerError::JudgeDecode { .. })) {
-            return Err(format!("expected JudgeDecode, got {res:?}").into());
+        if !matches!(res, Err(RunnerError::Oracle(OracleError::Decode { .. }))) {
+            return Err(format!("expected a decode error, got {res:?}").into());
         }
         Ok(())
     }
@@ -409,8 +418,11 @@ mod tests {
         let mut args = judge_args("fast-ci");
         args.user_prompt_template_hash = "sha256:stale-pinned-value".to_owned();
         let res = run_judge(&registry, &args, "x").await;
-        if !matches!(res, Err(RunnerError::JudgeTemplateMismatch { .. })) {
-            return Err(format!("expected JudgeTemplateMismatch, got {res:?}").into());
+        if !matches!(
+            res,
+            Err(RunnerError::Oracle(OracleError::TemplateMismatch { .. }))
+        ) {
+            return Err(format!("expected a template-mismatch error, got {res:?}").into());
         }
         Ok(())
     }

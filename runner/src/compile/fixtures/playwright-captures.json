@@ -1,0 +1,32 @@
+{
+  "config": { "version": "1.56.0" },
+  "suites": [
+    {
+      "title": "scenario.spec.ts",
+      "specs": [
+        {
+          "title": "captures round-trip",
+          "tests": [
+            {
+              "projectName": "chromium",
+              "results": [
+                {
+                  "status": "passed",
+                  "errors": [],
+                  "attachments": [
+                    {
+                      "name": "mirroir-captures",
+                      "contentType": "application/json",
+                      "body": "eyJtZXRyaWNzIjp7ImZpcnN0X3Rva2VuX2xhdGVuY3kiOjEyMzQuNX0sImp1ZGdlIjp7IjYiOiJUaGUgcmVwbHkgbWVudGlvbnMgV2ViU29ja2V0IGFuZCBTU0UuIn0sImNyb3NzX3N1cmZhY2UiOnsiMiI6InRoZSBzaGFyZWQgYW5zd2VyIHRleHQifX0="
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "suites": []
+    }
+  ]
+}

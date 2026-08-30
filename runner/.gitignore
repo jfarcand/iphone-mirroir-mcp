@@ -1,2 +1,9 @@
 /target/
 *.compiled.json.tmp
+# Review artifacts a run writes under the invocation directory: the last-green
+# baseline drift is measured against, and the candidate rows a human reviews.
+# Ignored here because the only runs invoked from runner/ are the fixture and
+# mega-sample suites, whose baselines are scratch. A consumer repo that wants
+# cross-run drift detection commits its own .harness/ — see
+# docs/drift-and-accept.md.
+/.harness/

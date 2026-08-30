@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Counter — mirroir web fixture</title>
+<link rel="stylesheet" href="fixture.css">
+</head>
+<body>
+<h1 data-test="page-title">Counter</h1>
+
+<p>Count: <span data-test="count">0</span></p>
+<p>
+  <button type="button" data-test="increment">Increment</button>
+  <button type="button" data-test="decrement">Decrement</button>
+  <button type="button" data-test="reset">Reset</button>
+</p>
+<p class="result" data-test="history">history: 0</p>
+
+<script>
+// A visible state delta the drift/oracle work can measure: the count itself
+// plus an append-only history line whose text grows with every action.
+const count = document.querySelector('[data-test=count]');
+const history = document.querySelector('[data-test=history]');
+const steps = [0];
+
+const apply = (delta) => {
+  const next = delta === null ? 0 : Number(count.textContent) + delta;
+  count.textContent = String(next);
+  steps.push(next);
+  history.textContent = `history: ${steps.join(', ')}`;
+};
+
+document.querySelector('[data-test=increment]').addEventListener('click', () => apply(1));
+document.querySelector('[data-test=decrement]').addEventListener('click', () => apply(-1));
+document.querySelector('[data-test=reset]').addEventListener('click', () => apply(null));
+</script>
+</body>
+</html>

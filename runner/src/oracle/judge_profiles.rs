@@ -9,6 +9,7 @@ use serde::Deserialize;
 use tracing::warn;
 
 use crate::error::{Result, RunnerError};
+use crate::oracle::error::OracleError;
 
 /// Profile registry entry — declares how to reach one LLM provider and which
 /// model to use for judging. Owned fields so profiles can be loaded at runtime
@@ -133,7 +134,7 @@ impl JudgeRegistry {
     ///
     /// # Errors
     ///
-    /// [`RunnerError::JudgeProfilesParse`] when a file exists but can't be read
+    /// [`OracleError::ProfilesParse`] when a file exists but can't be read
     /// or parsed as a `profiles:` list.
     pub fn load(home_root: Option<&Path>, project_root: &Path) -> Result<Self> {
         let mut registry = Self::default();
@@ -164,7 +165,7 @@ impl JudgeRegistry {
     ///
     /// # Errors
     ///
-    /// Propagates [`RunnerError::JudgeProfilesParse`] from [`Self::load`], or
+    /// Propagates [`OracleError::ProfilesParse`] from [`Self::load`], or
     /// [`RunnerError::Io`] when the current directory can't be read.
     pub fn load_from_cwd() -> Result<Self> {
         let cwd = env::current_dir().map_err(|source| RunnerError::Io {
@@ -176,12 +177,12 @@ impl JudgeRegistry {
     }
 
     fn overlay_from_file(&mut self, path: &Path, trust: Trust) -> Result<()> {
-        let raw = fs::read_to_string(path).map_err(|source| RunnerError::JudgeProfilesParse {
+        let raw = fs::read_to_string(path).map_err(|source| OracleError::ProfilesParse {
             path: path.to_path_buf(),
             reason: source.to_string(),
         })?;
         let parsed: ProfilesFile =
-            serde_yaml::from_str(&raw).map_err(|source| RunnerError::JudgeProfilesParse {
+            serde_yaml::from_str(&raw).map_err(|source| OracleError::ProfilesParse {
                 path: path.to_path_buf(),
                 reason: source.to_string(),
             })?;
@@ -242,13 +243,16 @@ impl JudgeRegistry {
     ///
     /// # Errors
     ///
-    /// [`RunnerError::JudgeUnknownProfile`] when the name isn't in the registry.
+    /// [`OracleError::UnknownProfile`] when the name isn't in the registry.
     pub fn resolve(&self, name: &str) -> Result<&JudgeProfile> {
         self.profiles
             .iter()
             .find(|p| p.name == name)
-            .ok_or_else(|| RunnerError::JudgeUnknownProfile {
-                profile: name.to_owned(),
+            .ok_or_else(|| {
+                OracleError::UnknownProfile {
+                    profile: name.to_owned(),
+                }
+                .into()
             })
     }
 }

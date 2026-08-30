@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Order summary — mirroir web fixture</title>
+<link rel="stylesheet" href="fixture.css">
+</head>
+<body>
+<h1 data-test="page-title">Order summary</h1>
+
+<!-- summary.html and summary-reworded.html behave identically: the same
+     button, the same data-test attributes, the same state change. Only the
+     prose of the confirmation differs. That pair is what makes the DRIFT
+     verdict testable — a run against the variant keeps every assertion green
+     and moves the semantics. -->
+<p>Widget &times; 1 &mdash; $19.00</p>
+<p>
+  <button type="button" data-test="place-order">Place order</button>
+</p>
+
+<p class="result" data-test="order-summary">Nothing ordered yet.</p>
+
+<script>
+document.querySelector('[data-test=place-order]').addEventListener('click', () => {
+  document.querySelector('[data-test=order-summary]').textContent =
+    'Your order has been placed. One widget ships tomorrow and costs nineteen dollars.';
+});
+</script>
+</body>
+</html>

@@ -139,26 +139,55 @@ archetypes:
     checksum: sha256:c3bac34c7bb4...
 ```
 
+### What is verified
+
+Two questions, both asked on every run:
+
+1. **Does the lockfile still describe `mirroir.yaml`?** The locked ref set must
+   match the plan's, and each recorded `resolved.version` must still satisfy its
+   ref's `@<version>` constraint.
+2. **Does each locked tree still hash to its recorded `checksum:`?** The
+   archetype directory is walked and re-hashed, and the result compared to what
+   the lockfile recorded.
+
+The second question is the one a ref-set diff cannot answer. A locally edited
+archetype, a pack rewritten in place under the same tag, a tampered install —
+the ref string and the version pin are all untouched, and only the checksum
+moves:
+
+```
+lockfile is stale relative to mirroir.yaml: ref `./archetypes/checkout` is
+locked at checksum sha256:4a1f… but /repo/.mirroir/archetypes/checkout now
+hashes to sha256:9c02…
+```
+
 ### Modes
 
-| Mode | When | Behavior on stale lockfile |
+| Mode | When | Behavior on a stale or drifted lockfile |
 |------|------|----------------------------|
-| Default | `mirroir-run` (no `--locked` / `--frozen`) | Auto-regenerate + log warning |
+| Default | `mirroir-run` (no `--locked` / `--frozen`) | Regenerate a stale lockfile; warn on a checksum that moved, naming `mirroir-run accept` |
 | `--locked` | CI | Exit non-zero with `MirroirLockfileStale` |
 | `--frozen` | Hermetic offline CI | As `--locked` plus forbid network fetch |
 
-### Migration from a stale lockfile
+### Re-recording the lockfile
+
+`mirroir-run accept` re-resolves every archetype the plan references and
+rewrites `mirroir.lock` with the versions and tree checksums on disk right now.
+That is how a deliberate edit inside a project-local archetype gets signed off
+for `--locked` and `--frozen`:
 
 ```bash
-# Default mode auto-fixes:
-mirroir-run                       # regenerates if stale, warns once, runs
-
-# Explicit:
-mirroir-run --compose-only        # composes everything (which regenerates lockfile in default mode)
-git diff .mirroir/mirroir.lock    # inspect the changes
+# …edit .mirroir/archetypes/<name>/…
+mirroir-run --frozen              # refuses: the tree no longer hashes to the lock
+mirroir-run accept                # re-records the lockfile (and every baseline)
+git diff .mirroir/mirroir.lock    # inspect the change
 git add .mirroir/mirroir.lock
 git commit -m "chore(mirroir): bump archetype lockfile"
+mirroir-run --frozen              # green again
 ```
+
+Default mode also regenerates a lockfile that is stale by ref set, so a plain
+`mirroir-run` after adding an archetype reference fixes it and warns once.
 
 ## Local overrides (`mirroir.local.yaml`)
 
@@ -218,13 +247,29 @@ mirroir-run --no-compose                 # use existing .build/, no recompose
 mirroir-run --locked                     # CI gate: stale lockfile is an error
 mirroir-run --frozen                     # --locked + no network fetch
 mirroir-run --report <PATH>              # JSON summary path (default mirroir-run-report.json)
-mirroir-run --no-playwright              # skip web steps in scenarios
 mirroir-run --skills <PATH>              # mirroir-skills checkout (env MIRROIR_SKILLS)
 mirroir-run --levenshtein-threshold <FLOAT>  # drift threshold for --diff-text (default 0.2)
 ```
 
+Baseline re-recording:
+
+```
+mirroir-run accept                       # auto-discovered plan; re-record every baseline
+mirroir-run accept --config <PATH>       # explicit mirroir.yaml
+mirroir-run accept --sample <DIR>        # one sample's scenario set
+mirroir-run accept --run-scenario <FILE> # one scenario
+```
+
+`accept` also takes `--scenarios`, `--skills`, `--report`, and `--no-local`. It
+writes `.harness/last-green.json`, every `judge.drift_baseline_file`, every
+`cross_surface.capture.to`, and `.mirroir/mirroir.lock`, deletes
+`.harness/drift-log.md`, and **refuses to run when a CI environment variable is
+set** — accepting a baseline is a human review, and a job that accepts its own
+drift reports green forever. See
+[drift-and-accept.md](drift-and-accept.md) for the whole loop.
+
 The pre-`.mirroir/` modes still work (`--sample`, `--validate`,
-`--run-scenario`, `--compile-scenario`, `--diff-text`).
+`--run-scenario`, `--emit playwright`, `--diff-text`).
 
 ## Summary JSON
 
@@ -314,8 +359,8 @@ A `.mirroir/apps/<name>/` sample can hold **two legs of the same flow** and
 assert they stay equivalent:
 
 - **Web leg** — the runnable scenario (`scenarios/<flow>.yaml`) with real DOM
-  selectors, authored against the running web app (e.g. via the `mirroir-onboard`
-  flow). `mirroir-run` replays it on Linux CI.
+  selectors, authored against the running web app by the `mirroir-onboard` skill
+  (`.claude/skills/mirroir-onboard/`, the agent + `chrome-devtools-mcp` recorder). `mirroir-run` replays it on Linux CI.
 - **iOS leg** — emitted by `mirroir-mcp`'s `generate_skill … emit=true` from an
   iPhone Mirroring capture: a `--validate`-only `scenarios/<flow>.ios.yaml`
   (a faithful linear walk; the runner has no iOS executor, so it is never
@@ -336,9 +381,10 @@ steps:
 ```
 
 The runner can **produce** the web baseline itself: give `cross_surface` a
-`capture: { selector, to }` and it scrapes that selector's `textContent()` into
-`to` during the preceding web batch (the same Playwright mechanism `judge:`
-uses) — no hand-authored Playwright spec needed:
+`capture: { selector, to }` and the compiled spec scrapes that selector's text
+into the `mirroir-captures` attachment (the same Playwright mechanism `judge:`
+uses), which the post-hook writes to `to` — no hand-authored Playwright spec
+needed:
 
 ```yaml
   - target: { kind: web, url: "http://localhost:3000/" }
@@ -360,6 +406,16 @@ never a silent pass.
 high-entropy screens, and treat low-vocabulary screens (e.g. a bare login form)
 with care — a generic token set can clear a low threshold by coincidence.
 
+`mirroir-run accept` re-records the **web** side of a parity gate: the
+`capture.to` file is rewritten from the live page. It never writes
+`baselines/<flow>.ios.txt` — that file comes from `generate_skill` against a
+connected iPhone, and overwriting it with the web capture would leave the gate
+comparing a file against itself. Accept names every such file it left alone,
+with whether the file is present, and reports a pair still below
+`min_similarity` instead of failing on it; re-capture that surface on the
+device, and the next ordinary run holds you to it. The full loop is in
+[drift-and-accept.md](drift-and-accept.md).
+
 > Two surfaces, one grammar. The iOS and web legs are written in the same
 > `SkillStep` language and tied by `cross_surface`, rather than maintained as two
 > bespoke suites. The runner gains no iOS executor (it stays Linux-CI-friendly);
@@ -372,9 +428,12 @@ with care — a generic token set can clear a low threshold by coincidence.
 - **`MirroirArchetypeNotFound`** — pack not installed at the required
   version. `git clone --branch <tag>` the pack into
   `~/.mirroir/skills/<pack>/<version>/`.
-- **`MirroirLockfileStale`** — `mirroir.yaml` and `mirroir.lock`
-  disagree under `--locked`. In dev: `mirroir-run` (regenerates +
-  warns). In CI: regenerate locally, commit the lockfile.
+- **`MirroirLockfileStale`** — `mirroir.yaml` and `mirroir.lock` disagree
+  under `--locked` / `--frozen`, either on the ref set / version pins or on a
+  recorded `checksum:` the archetype tree no longer hashes to. A message
+  naming `now hashes to` means the tree's contents moved under an unchanged
+  pin. In dev: `mirroir-run accept` (re-records + warns what changed). In CI:
+  re-record locally, review `git diff .mirroir/mirroir.lock`, commit it.
 - **`MirroirCompositionUnsupported`** — plan entry has `archetypes:`
   with more than one element. v1 supports exactly one ref; cross-archetype
   composition is on the roadmap.

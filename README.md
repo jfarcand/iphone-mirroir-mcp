@@ -512,12 +512,12 @@ Each plan entry either points at a `local:` sample tree or extends a shared **ar
 
 **Where the iOS leg comes from.** `generate_skill … emit=true` (on `finish` or `explore`) writes the captured flow into `.mirroir/apps/<app>/` as a `--validate`-able iOS scenario plus a cross-surface oracle (`baselines/<flow>.ios.txt`) and a `cross_surface` parity gate — additive to the web leg's runnable scenarios. Run the MCP from your consumer repo (or pass `output_dir`) so the tree lands in the right `.mirroir/`; emitting into `~/.mirroir` (the runner's pack home) is refused. Pair it with a web capture and `mirroir-run` asserts the two surfaces stay equivalent. See [`runner/docs/mirroir-dotfile.md`](runner/docs/mirroir-dotfile.md) for the pairing convention.
 
-Web steps compile to a Playwright `.spec.ts` and run across chromium, firefox, and webkit. Selectors resolve three ways: raw CSS, Playwright engine prefixes (`role=button[name="Save"]`, `text=Welcome`, `xpath=…`), or `data-test` + visible text. Process and HTTP steps dispatch natively; an LLM judge step scores agent responses against expected signals, and drift detection catches output divergence vs. a baseline.
+Web steps compile to a Playwright `.spec.ts` and run across chromium, firefox, and webkit. Selectors resolve three ways: raw CSS, Playwright engine prefixes (`role=button[name="Save"]`, `text=Welcome`, `xpath=…`), or a bare label resolved in Playwright's own priority — role, label, placeholder, `data-test`, visible text. Every compiled spec also collects uncaught page errors and failed responses, so a page that throws is a failure even when every locator resolved. The spec, its config, and the trace / video / screenshot of a failure persist under `target/playwright/<sample>/<scenario>/`. Process and HTTP steps dispatch natively; an LLM judge step scores agent responses against expected signals, and drift detection catches output divergence vs. a baseline.
 
 | Mode | Command |
 |---|---|
 | Validate a scenario against the grammar | `mirroir-run --validate scenario.yaml` |
-| Preview the emitted Playwright spec | `mirroir-run --compile-scenario scenario.yaml` |
+| Compile the Playwright spec to disk | `mirroir-run --emit playwright scenario.yaml` |
 | Run one scenario end-to-end | `mirroir-run --run-scenario scenario.yaml` |
 | Boot a sample dir, run its scenarios | `mirroir-run --sample .mirroir/apps/foo` |
 | Standalone text drift check | `mirroir-run --diff-text a.txt b.txt` |

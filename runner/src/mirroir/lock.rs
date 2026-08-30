@@ -4,11 +4,14 @@
 use std::fs;
 use std::path::Path;
 
-use crate::error::{Result, RunnerError};
-use crate::mirroir::resolve_version::version_satisfies_constraint;
-use crate::parser::lockfile::{Lockfile, parse_lockfile, serialize_lockfile};
-use crate::parser::mirroir::{ArchetypeRef, ArchetypeRefKind, MirroirConfig, PlanEntrySource};
+use tracing::warn;
 
+use crate::error::{Result, RunnerError};
+use crate::mirroir::error::MirroirError;
+use crate::mirroir::lock_checksum::checksum_drift_reasons;
+use crate::parser::lockfile::{Lockfile, parse_lockfile, serialize_lockfile};
+
+pub use crate::mirroir::lock_freshness::{FreshnessVerdict, check_lockfile_fresh, format_ref};
 pub use crate::mirroir::lock_generate::regenerate_lockfile;
 
 /// How strict to be when the lockfile is stale relative to `mirroir.yaml`.
@@ -22,142 +25,53 @@ pub enum LockfileMode {
     Frozen,
 }
 
-/// Outcome of [`check_lockfile_fresh`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FreshnessVerdict {
-    /// Lockfile matches the config exactly.
-    Fresh,
-    /// Lockfile drifted from the config. `reasons` lists the specific drifts.
-    Stale {
-        /// Human-readable list of drift reasons (e.g., "ref X added", "version mismatch on Y").
-        reasons: Vec<String>,
-    },
-}
-
-/// Compare every archetype reference in `config` against `lockfile`.
-///
-/// Drifts that produce `Stale`:
-/// - A ref appears in config but not in lockfile.
-/// - A ref appears in lockfile but not in config (unused entry).
-/// - A ref appears in both but the recorded `resolved.version` no longer matches the constraint in config.
-///
-/// Project-local refs are checksum-only (no version comparison) — the freshness
-/// check trusts the directory content at compose time.
-#[must_use]
-pub fn check_lockfile_fresh(config: &MirroirConfig, lockfile: &Lockfile) -> FreshnessVerdict {
-    let mut reasons = Vec::new();
-
-    let config_refs: Vec<String> = collect_plan_refs(config);
-    let locked_refs: Vec<&str> = lockfile
-        .archetypes
-        .iter()
-        .map(|a| a.reference.as_str())
-        .collect();
-
-    for cref in &config_refs {
-        if !locked_refs.contains(&cref.as_str()) {
-            reasons.push(format!("ref `{cref}` is in mirroir.yaml but not locked"));
-        }
-    }
-    for lref in &locked_refs {
-        if !config_refs.iter().any(|c| c == lref) {
-            reasons.push(format!("ref `{lref}` is locked but not in mirroir.yaml"));
-        }
-    }
-
-    // Version-constraint drift: for refs present in both, the recorded
-    // `resolved.version` must still satisfy the constraint declared in config.
-    // Catches a hand-edited or partially-updated lockfile whose pin no longer
-    // matches its own ref's `@<version>` constraint. Project-local refs carry
-    // no resolved version (checksum-only) and are skipped.
-    for r in collect_plan_archetype_refs(config) {
-        let ref_str = format_ref(r);
-        let Some(locked) = lockfile.archetypes.iter().find(|a| a.reference == ref_str) else {
-            continue;
-        };
-        let Some(resolved_version) = locked.resolved.version.as_deref() else {
-            continue;
-        };
-        let constraint = r.version.as_deref().unwrap_or("");
-        // `None` = unparseable resolved version (non-semver pin); leave to checksum.
-        if version_satisfies_constraint(resolved_version, constraint) == Some(false) {
-            reasons.push(format!(
-                "ref `{ref_str}` is locked at {resolved_version}, which no longer satisfies its config constraint"
-            ));
-        }
-    }
-
-    if reasons.is_empty() {
-        FreshnessVerdict::Fresh
-    } else {
-        FreshnessVerdict::Stale { reasons }
-    }
-}
-
-/// Collect the structured archetype refs referenced by the plan (both sets).
-fn collect_plan_archetype_refs(config: &MirroirConfig) -> Vec<&ArchetypeRef> {
-    let mut refs = Vec::new();
-    for entry in config
-        .plan
-        .must_pass
-        .iter()
-        .chain(config.plan.nice_to_pass.iter())
-    {
-        if let PlanEntrySource::Archetypes { references } = &entry.source {
-            refs.extend(references.iter());
-        }
-    }
-    refs
-}
-
-fn collect_plan_refs(config: &MirroirConfig) -> Vec<String> {
-    let mut refs = Vec::new();
-    for entry in config
-        .plan
-        .must_pass
-        .iter()
-        .chain(config.plan.nice_to_pass.iter())
-    {
-        if let PlanEntrySource::Archetypes { references } = &entry.source {
-            for r in references {
-                refs.push(format_ref(r));
-            }
-        }
-    }
-    refs
-}
-
-/// Render an [`ArchetypeRef`] back to its canonical `<pack>/<name>[@<version>]`
-/// (or `user/<name>` / project-local path) string form.
-#[must_use]
-pub fn format_ref(r: &ArchetypeRef) -> String {
-    let base = match (&r.pack, r.kind) {
-        (Some(p), _) => format!("{p}/{}", r.name),
-        (None, ArchetypeRefKind::UserGlobal) => format!("user/{}", r.name),
-        (None, ArchetypeRefKind::Pack | ArchetypeRefKind::ProjectLocal) => r.name.clone(),
-    };
-    match &r.version {
-        Some(v) => format!("{base}@{v}"),
-        None => base,
-    }
-}
-
 /// Enforce the freshness verdict according to the chosen mode.
+///
+/// Two questions are asked, and both feed the same verdict: does the lockfile
+/// still describe the same ref set and version pins as `mirroir.yaml`
+/// (`verdict`, from [`check_lockfile_fresh`]), and does each locked
+/// archetype's tree still hash to the `checksum:` the lockfile recorded
+/// ([`checksum_drift_reasons`])? A pin that did not move over content that did
+/// is exactly what a lockfile exists to catch, so the checksum is recomputed
+/// here rather than trusted.
+///
+/// `Default` is local-dev mode: both kinds of drift are a warning naming
+/// `mirroir-run accept`, which re-records the lockfile along with every other
+/// baseline. `Locked` and `Frozen` are the CI gates and refuse.
 ///
 /// # Errors
 ///
-/// * [`RunnerError::MirroirLockfileStale`] when the verdict is `Stale` AND
-///   mode is `Locked` or `Frozen`.
-pub fn enforce_freshness(verdict: &FreshnessVerdict, mode: LockfileMode) -> Result<()> {
-    match (verdict, mode) {
-        (FreshnessVerdict::Fresh, _) | (FreshnessVerdict::Stale { .. }, LockfileMode::Default) => {
+/// * [`MirroirError::LockfileStale`] when anything drifted AND mode is
+///   `Locked` or `Frozen`.
+/// * [`RunnerError::Io`] when a locked archetype's tree cannot be re-hashed.
+pub fn enforce_freshness(
+    verdict: &FreshnessVerdict,
+    mode: LockfileMode,
+    lockfile: &Lockfile,
+    project_root: &Path,
+    home_root: &Path,
+) -> Result<()> {
+    let mut reasons = match verdict {
+        FreshnessVerdict::Fresh => Vec::new(),
+        FreshnessVerdict::Stale { reasons } => reasons.clone(),
+    };
+    reasons.extend(checksum_drift_reasons(lockfile, project_root, home_root)?);
+
+    if reasons.is_empty() {
+        return Ok(());
+    }
+    match mode {
+        LockfileMode::Default => {
+            warn!(
+                reasons = %reasons.join("; "),
+                "the lockfile disagrees with the archetype trees on disk; `mirroir-run accept` re-records it"
+            );
             Ok(())
         }
-        (FreshnessVerdict::Stale { reasons }, LockfileMode::Locked | LockfileMode::Frozen) => {
-            Err(RunnerError::MirroirLockfileStale {
-                reason: reasons.join("; "),
-            })
+        LockfileMode::Locked | LockfileMode::Frozen => Err(MirroirError::LockfileStale {
+            reason: reasons.join("; "),
         }
+        .into()),
     }
 }
 
@@ -197,24 +111,10 @@ mod tests {
     use chrono::Utc;
 
     use super::*;
+    use crate::mirroir::lock_generate::checksum_directory;
     use crate::parser::lockfile::{LockedArchetype, LockedOrigin, ResolvedRecord};
-    use crate::parser::mirroir::parse_mirroir_config;
 
     type TestResult = StdResult<(), Box<dyn StdError>>;
-
-    fn config_with_one_archetype() -> StdResult<MirroirConfig, Box<dyn StdError>> {
-        let yaml = r#"
-version: 1
-plan:
-  must_pass:
-    - name: alpha
-      archetypes: [mirroir-skills/foo/bar@v1]
-      flows: [smoke]
-      boot:
-        command: "echo"
-"#;
-        Ok(parse_mirroir_config("test", yaml)?)
-    }
 
     fn empty_lockfile() -> Lockfile {
         Lockfile {
@@ -225,108 +125,16 @@ plan:
         }
     }
 
-    #[test]
-    fn fresh_when_lockfile_has_all_refs() -> TestResult {
-        let config = config_with_one_archetype()?;
-        let mut lock = empty_lockfile();
-        lock.archetypes.push(LockedArchetype {
-            reference: "mirroir-skills/foo/bar@v1".to_owned(),
-            resolved: ResolvedRecord {
-                kind: LockedOrigin::Pack,
-                pack: Some("mirroir-skills".to_owned()),
-                name: "foo/bar".to_owned(),
-                version: Some("1.0.0".to_owned()),
-                source: None,
-                checksum: "sha256:xx".to_owned(),
-            },
-        });
-        assert_eq!(
-            check_lockfile_fresh(&config, &lock),
-            FreshnessVerdict::Fresh
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn stale_when_lockfile_missing_ref() -> TestResult {
-        let config = config_with_one_archetype()?;
-        let lock = empty_lockfile();
-        match check_lockfile_fresh(&config, &lock) {
-            FreshnessVerdict::Stale { reasons } => {
-                assert!(
-                    reasons
-                        .iter()
-                        .any(|r| r.contains("mirror") || r.contains("foo/bar"))
-                );
-                Ok(())
-            }
-            FreshnessVerdict::Fresh => Err("expected Stale, got Fresh".into()),
-        }
-    }
-
-    #[test]
-    fn stale_when_lockfile_has_extra_ref() -> TestResult {
-        let config = config_with_one_archetype()?;
-        let mut lock = empty_lockfile();
-        lock.archetypes.push(LockedArchetype {
-            reference: "mirroir-skills/foo/bar@v1".to_owned(),
-            resolved: ResolvedRecord {
-                kind: LockedOrigin::Pack,
-                pack: Some("mirroir-skills".to_owned()),
-                name: "foo/bar".to_owned(),
-                version: Some("1.0.0".to_owned()),
-                source: None,
-                checksum: "sha256:xx".to_owned(),
-            },
-        });
-        lock.archetypes.push(LockedArchetype {
-            reference: "mirroir-skills/extra/one@v1".to_owned(),
-            resolved: ResolvedRecord {
-                kind: LockedOrigin::Pack,
-                pack: Some("mirroir-skills".to_owned()),
-                name: "extra/one".to_owned(),
-                version: Some("1.0.0".to_owned()),
-                source: None,
-                checksum: "sha256:yy".to_owned(),
-            },
-        });
-        match check_lockfile_fresh(&config, &lock) {
-            FreshnessVerdict::Stale { reasons } => {
-                assert!(reasons.iter().any(|r| r.contains("extra/one")));
-                Ok(())
-            }
-            FreshnessVerdict::Fresh => Err("expected Stale, got Fresh".into()),
-        }
-    }
-
-    #[test]
-    fn stale_when_locked_version_violates_constraint() -> TestResult {
-        // Config ref pins `@v1` (major 1); the lockfile records a resolved
-        // version of 2.0.0 — the ref string matches but the pin no longer
-        // satisfies the constraint, which the set-diff alone would miss.
-        let config = config_with_one_archetype()?;
-        let mut lock = empty_lockfile();
-        lock.archetypes.push(LockedArchetype {
-            reference: "mirroir-skills/foo/bar@v1".to_owned(),
-            resolved: ResolvedRecord {
-                kind: LockedOrigin::Pack,
-                pack: Some("mirroir-skills".to_owned()),
-                name: "foo/bar".to_owned(),
-                version: Some("2.0.0".to_owned()),
-                source: None,
-                checksum: "sha256:xx".to_owned(),
-            },
-        });
-        match check_lockfile_fresh(&config, &lock) {
-            FreshnessVerdict::Stale { reasons } => {
-                assert!(
-                    reasons.iter().any(|r| r.contains("no longer satisfies")),
-                    "expected constraint-drift reason, got {reasons:?}"
-                );
-                Ok(())
-            }
-            FreshnessVerdict::Fresh => Err("expected Stale on version drift, got Fresh".into()),
-        }
+    /// Enforcement against a lockfile with no entries: only the verdict is in
+    /// play, since there is no recorded tree to re-hash.
+    fn enforce(verdict: &FreshnessVerdict, mode: LockfileMode) -> Result<()> {
+        enforce_freshness(
+            verdict,
+            mode,
+            &empty_lockfile(),
+            Path::new("/nonexistent"),
+            Path::new("/nonexistent"),
+        )
     }
 
     #[test]
@@ -334,7 +142,7 @@ plan:
         let v = FreshnessVerdict::Stale {
             reasons: vec!["drift".to_owned()],
         };
-        enforce_freshness(&v, LockfileMode::Default)?;
+        enforce(&v, LockfileMode::Default)?;
         Ok(())
     }
 
@@ -344,8 +152,8 @@ plan:
             reasons: vec!["drift".to_owned()],
         };
         assert!(matches!(
-            enforce_freshness(&v, LockfileMode::Locked),
-            Err(RunnerError::MirroirLockfileStale { .. })
+            enforce(&v, LockfileMode::Locked),
+            Err(RunnerError::Mirroir(MirroirError::LockfileStale { .. }))
         ));
     }
 
@@ -355,9 +163,76 @@ plan:
             reasons: vec!["drift".to_owned()],
         };
         assert!(matches!(
-            enforce_freshness(&v, LockfileMode::Frozen),
-            Err(RunnerError::MirroirLockfileStale { .. })
+            enforce(&v, LockfileMode::Frozen),
+            Err(RunnerError::Mirroir(MirroirError::LockfileStale { .. }))
         ));
+    }
+
+    /// The hole this closes: the ref set matches, the version pin matches, the
+    /// freshness verdict is `Fresh` — and one byte inside the locked tree
+    /// changed. `--frozen` used to exit 0 on that.
+    #[test]
+    fn a_fresh_verdict_still_fails_frozen_when_the_locked_tree_moved() -> TestResult {
+        let tmp = tempfile::tempdir()?;
+        let dir = tmp.path().join(".mirroir").join("archetypes/custom");
+        fs::create_dir_all(&dir)?;
+        fs::write(dir.join("archetype.md"), "original\n")?;
+
+        let mut lock = empty_lockfile();
+        lock.archetypes.push(LockedArchetype {
+            reference: "./archetypes/custom".to_owned(),
+            resolved: ResolvedRecord {
+                kind: LockedOrigin::ProjectLocal,
+                pack: None,
+                name: "./archetypes/custom".to_owned(),
+                version: None,
+                source: None,
+                checksum: checksum_directory(&dir)?,
+            },
+        });
+
+        // Truthful lockfile: every mode is satisfied.
+        for mode in [
+            LockfileMode::Default,
+            LockfileMode::Locked,
+            LockfileMode::Frozen,
+        ] {
+            enforce_freshness(
+                &FreshnessVerdict::Fresh,
+                mode,
+                &lock,
+                tmp.path(),
+                Path::new("/nonexistent"),
+            )?;
+        }
+
+        fs::write(dir.join("archetype.md"), "originaL\n")?;
+        for mode in [LockfileMode::Locked, LockfileMode::Frozen] {
+            match enforce_freshness(
+                &FreshnessVerdict::Fresh,
+                mode,
+                &lock,
+                tmp.path(),
+                Path::new("/nonexistent"),
+            ) {
+                Err(RunnerError::Mirroir(MirroirError::LockfileStale { reason })) => {
+                    assert!(
+                        reason.contains("now hashes to"),
+                        "the refusal does not name the checksum drift: {reason}"
+                    );
+                }
+                other => return Err(format!("{mode:?} accepted an edited tree: {other:?}").into()),
+            }
+        }
+        // Local dev warns and carries on rather than blocking iteration.
+        enforce_freshness(
+            &FreshnessVerdict::Fresh,
+            LockfileMode::Default,
+            &lock,
+            tmp.path(),
+            Path::new("/nonexistent"),
+        )?;
+        Ok(())
     }
 
     #[test]

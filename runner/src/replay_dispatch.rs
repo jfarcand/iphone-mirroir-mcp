@@ -1,163 +1,49 @@
-// ABOUTME: Judge / drift / cross_surface step dispatch helpers for scenario replay.
-// ABOUTME: Resolves response sources, runs the judge registry, and enforces drift / similarity verdicts.
+// ABOUTME: `judge:` and `measure:` post-hook dispatch — resolve the response, score it, feed the drift session.
+// ABOUTME: Enforces absolute measure budgets as FAIL and relative growth as DRIFT; they are separate questions.
 
 use std::fs;
+use std::path::Path;
 
-use tempfile::{Builder, NamedTempFile};
 use tracing::info;
 
-use crate::compile::playwright::ResponseCapture;
+use crate::compile::report::PlaywrightCaptures;
 use crate::error::{Result, RunnerError};
-use crate::oracle::drift::{DriftVerdict, Fingerprint, detect_drift, jaccard_similarity};
+use crate::oracle::baseline::BaselineMode;
+use crate::oracle::drift_session::DriftSession;
+use crate::oracle::error::OracleError;
 use crate::oracle::judge::{JudgeRegistry, enforce_threshold, run_judge};
-use crate::parser::step::{CrossSurfaceArgs, JudgeArgs, SkillStep};
-use crate::replay::ReplayOptions;
+use crate::parser::step::{JudgeArgs, SkillStep};
 
-/// Dispatch a `cross_surface:` step: read every response file and fail on the
-/// first pair whose Jaccard similarity falls below the configured threshold.
+/// Dispatch a `judge:` step: resolve the response, run the judge registry,
+/// enforce the pass threshold, then hand the score and the response to the
+/// scenario's drift session for comparison against the last green run.
+///
+/// The response comes from `response_text`, then `response_file`, then the
+/// `mirroir-captures` attachment the scenario's Playwright invocation filed
+/// under this step's `index` — the channel that carries `response_selector`
+/// text out of the live page.
+///
+/// A judge score under its threshold is a FAIL and returns here. A score that
+/// held while the wording moved is DRIFT: the session records the finding and
+/// the step still reports [`crate::replay_step::StepVerdict::Evaluated`], so
+/// the scenario's remaining post-hooks — `kill:`, `assert_log_clean:` — still
+/// run.
 ///
 /// # Errors
 ///
-/// * [`RunnerError::CrossSurfaceTooFewFiles`] when fewer than two files are listed.
-/// * [`RunnerError::CrossSurfaceCaptureTargetNotListed`] when a `capture.to` is
-///   not one of the compared files.
-/// * [`RunnerError::Io`] when a response file can't be read.
-/// * [`RunnerError::CrossSurfaceMismatch`] when a pair falls below threshold.
-pub fn dispatch_cross_surface(args: &CrossSurfaceArgs) -> Result<()> {
-    if args.response_files.len() < 2 {
-        return Err(RunnerError::CrossSurfaceTooFewFiles {
-            count: args.response_files.len(),
-        });
-    }
-    // Checked before any file is read: a capture aimed outside the compared set
-    // leaves its text unread, and the comparison silently falls back to whatever
-    // sits at the listed path — a stale baseline from an earlier run passes.
-    if let Some(capture) = args.capture.as_ref()
-        && !args.response_files.contains(&capture.to)
-    {
-        return Err(RunnerError::CrossSurfaceCaptureTargetNotListed {
-            to: capture.to.clone(),
-            response_files: args.response_files.clone(),
-        });
-    }
-    let threshold = args.min_similarity.unwrap_or(0.7);
-    let mut bodies: Vec<(String, String)> = Vec::with_capacity(args.response_files.len());
-    for path in &args.response_files {
-        let body = fs::read_to_string(path).map_err(|source| RunnerError::Io {
-            context: format!("read cross_surface.response_files entry `{path}`"),
-            source,
-        })?;
-        bodies.push((path.clone(), body));
-    }
-
-    // Compute pairwise Jaccard similarity. Fail on the first pair below threshold.
-    for i in 0..bodies.len() {
-        for j in (i + 1)..bodies.len() {
-            let fp_a = Fingerprint::of(&bodies[i].1);
-            let fp_b = Fingerprint::of(&bodies[j].1);
-            let sim = jaccard_similarity(&fp_a, &fp_b);
-            info!(
-                a = %bodies[i].0,
-                b = %bodies[j].0,
-                similarity = sim,
-                threshold,
-                "cross_surface pairwise check"
-            );
-            if sim < threshold {
-                return Err(RunnerError::CrossSurfaceMismatch {
-                    a: bodies[i].0.clone(),
-                    b: bodies[j].0.clone(),
-                    observed: sim,
-                    threshold,
-                });
-            }
-        }
-    }
-    info!(
-        files = args.response_files.len(),
-        threshold, "cross_surface: all pairs above threshold"
-    );
-    Ok(())
-}
-
-/// If `step` is a `judge:` whose response must be scraped from the DOM (it has
-/// a `response_selector` but no inline `response_text`/`response_file`) and a
-/// web batch is pending to scrape from, create a temp file and a matching
-/// [`ResponseCapture`]. Returns `None` (no capture) under `--no-playwright` or
-/// when there is nothing to scrape. The returned [`NamedTempFile`] must outlive
-/// the judge dispatch so the scraped file isn't deleted before it is read.
-///
-/// # Errors
-///
-/// * [`RunnerError::Io`] when the temp capture file can't be created.
-pub fn judge_capture_file(
-    step: &SkillStep,
-    web_buffer: &[SkillStep],
-    options: ReplayOptions,
-) -> Result<Option<(NamedTempFile, ResponseCapture)>> {
-    let SkillStep::Judge(args) = step else {
-        return Ok(None);
-    };
-    if options.skip_playwright
-        || web_buffer.is_empty()
-        || args.response_text.is_some()
-        || args.response_file.is_some()
-        || args.response_selector.trim().is_empty()
-    {
-        return Ok(None);
-    }
-    let tmp = Builder::new()
-        .prefix("mirroir-judge-response-")
-        .suffix(".txt")
-        .tempfile()
-        .map_err(|source| RunnerError::Io {
-            context: "create temp file for judge response capture".to_owned(),
-            source,
-        })?;
-    let capture = ResponseCapture {
-        selector: args.response_selector.clone(),
-        out_path: tmp.path().display().to_string(),
-    };
-    Ok(Some((tmp, capture)))
-}
-
-/// If `step` is a `cross_surface:` with a `capture` and a web batch is pending,
-/// build a [`ResponseCapture`] that scrapes the capture selector's text into the
-/// capture's `to` path — the persistent web baseline the equivalence check then
-/// reads. Returns `None` under `--no-playwright`, with no pending web batch, or
-/// when the step has no `capture`. Unlike the judge capture this targets a real
-/// file (not a temp), so no handle needs to outlive the call.
-#[must_use]
-pub fn cross_surface_capture(
-    step: &SkillStep,
-    web_buffer: &[SkillStep],
-    options: ReplayOptions,
-) -> Option<ResponseCapture> {
-    let SkillStep::CrossSurface(args) = step else {
-        return None;
-    };
-    let capture = args.capture.as_ref()?;
-    if options.skip_playwright || web_buffer.is_empty() || capture.selector.trim().is_empty() {
-        return None;
-    }
-    Some(ResponseCapture {
-        selector: capture.selector.clone(),
-        out_path: capture.to.clone(),
-    })
-}
-
-/// Dispatch a `judge:` step: load the response, run the judge registry,
-/// enforce the pass threshold, and optionally run drift detection against a
-/// baseline file.
-///
-/// # Errors
-///
-/// * [`RunnerError::JudgeDecode`] when no response source is set.
+/// * [`OracleError::Decode`] when no response source resolved.
 /// * [`RunnerError::Io`] when a response or baseline file can't be read.
 /// * Any error from judge registry loading, judging, threshold enforcement.
-/// * [`RunnerError::DriftDetected`] when drift is observed against the baseline.
-pub async fn dispatch_judge(args: &JudgeArgs) -> Result<()> {
-    let response = load_response_text(args)?;
+/// * [`OracleError::ThresholdUnspecified`] when a drift comparison is due and
+///   no layer of the hierarchy declares that metric's threshold.
+pub async fn dispatch_judge(
+    index: usize,
+    args: &JudgeArgs,
+    captures: &PlaywrightCaptures,
+    drift: &mut DriftSession,
+    baselines: BaselineMode,
+) -> Result<()> {
+    let response = load_response_text(index, args, captures)?;
     let registry = JudgeRegistry::load_from_cwd()?;
     let outcome = run_judge(&registry, args, &response).await?;
     enforce_threshold(&args.profile, args, &outcome)?;
@@ -168,31 +54,56 @@ pub async fn dispatch_judge(args: &JudgeArgs) -> Result<()> {
         "judge passed"
     );
 
-    // Optional drift detection if a baseline file is provided.
-    if let Some(drift_config) = &args.response_drift
-        && let Some(baseline_path) = args.drift_baseline_file.as_deref()
-    {
-        let baseline = fs::read_to_string(baseline_path).map_err(|source| RunnerError::Io {
-            context: format!("read drift baseline {baseline_path}"),
-            source,
-        })?;
-        match detect_drift(&baseline, &response, drift_config) {
-            DriftVerdict::Match {
-                fingerprint_similarity,
-                levenshtein_pct,
-            } => info!(
-                fingerprint_similarity,
-                levenshtein_pct, "drift check: MATCH"
-            ),
-            DriftVerdict::Drift { reason, .. } => {
-                return Err(RunnerError::DriftDetected { reason });
-            }
+    // A `drift_baseline_file:` names the text this step drifts from; without
+    // one the session compares against `.harness/last-green.json`. Accept turns
+    // the read into a write: the file becomes what this run judged, and the
+    // diff is the human's to review.
+    let explicit_baseline = match (baselines, args.drift_baseline_file.as_deref()) {
+        (BaselineMode::Compare, Some(path)) => {
+            Some(fs::read_to_string(path).map_err(|source| RunnerError::Io {
+                context: format!("read drift baseline {path}"),
+                source,
+            })?)
         }
-    }
-    Ok(())
+        (BaselineMode::Accept, Some(path)) => {
+            write_judge_baseline(path, &response)?;
+            info!(index, file = %path, bytes = response.len(), "re-recorded the judge drift baseline");
+            None
+        }
+        (_, None) => None,
+    };
+    drift.observe_judge(
+        index,
+        outcome.score,
+        &response,
+        args.response_drift.as_ref().map(|c| c.max_levenshtein_pct),
+        explicit_baseline.as_deref(),
+    )
 }
 
-fn load_response_text(args: &JudgeArgs) -> Result<String> {
+/// Write `response` to the step's `drift_baseline_file`, creating the parent
+/// directory when the scenario names one that does not exist yet.
+fn write_judge_baseline(path: &str, response: &str) -> Result<()> {
+    let target = Path::new(path);
+    if let Some(parent) = target.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent).map_err(|source| RunnerError::Io {
+            context: format!("create the drift baseline directory {}", parent.display()),
+            source,
+        })?;
+    }
+    fs::write(target, response).map_err(|source| RunnerError::Io {
+        context: format!("re-record the drift baseline {path}"),
+        source,
+    })
+}
+
+fn load_response_text(
+    index: usize,
+    args: &JudgeArgs,
+    captures: &PlaywrightCaptures,
+) -> Result<String> {
     if let Some(text) = &args.response_text {
         return Ok(text.clone());
     }
@@ -202,9 +113,61 @@ fn load_response_text(args: &JudgeArgs) -> Result<String> {
             source,
         });
     }
-    Err(RunnerError::JudgeDecode {
-        reason: "no response source: set response_text or response_file".to_owned(),
-    })
+    if let Some(text) = captures.judge.get(&index.to_string()) {
+        return Ok(text.clone());
+    }
+    Err(OracleError::Decode {
+        reason: format!(
+            "no response source for judge step {index}: set response_text or response_file, or place the step after a web block so `{}` is captured",
+            args.response_selector
+        ),
+    }
+    .into())
+}
+
+/// Enforce every `measure:` budget in the scenario's web block against the
+/// latencies the invocation attached, and feed each timing to the drift
+/// session so a latency that crept up against the last green run is reported.
+///
+/// The absolute budget is a FAIL; the relative increase over the baseline is a
+/// DRIFT. They are separate questions and the runner asks both.
+///
+/// # Errors
+///
+/// * [`RunnerError::MeasureNotCaptured`] when a `measure:` step recorded no
+///   timing — the invocation ran but its metric never reached the attachment.
+/// * [`RunnerError::MeasureBudgetExceeded`] when an observed latency is over
+///   the step's declared `max_seconds`.
+/// * [`OracleError::ThresholdUnspecified`] when a baseline latency exists and
+///   no layer declares `step_latency_pct_increase`.
+pub fn verify_measures(
+    steps: &[SkillStep],
+    captures: &PlaywrightCaptures,
+    drift: &mut DriftSession,
+) -> Result<()> {
+    for step in steps {
+        let SkillStep::Measure(args) = step else {
+            continue;
+        };
+        let Some(&elapsed_ms) = captures.metrics.get(&args.name) else {
+            return Err(RunnerError::MeasureNotCaptured {
+                name: args.name.clone(),
+            });
+        };
+        let observed_s = elapsed_ms / 1000.0;
+        info!(measure = %args.name, observed_s, "measure recorded");
+        if let Some(max_seconds) = args.max_seconds
+            && observed_s > max_seconds
+        {
+            return Err(RunnerError::MeasureBudgetExceeded {
+                name: args.name.clone(),
+                observed_s,
+                max_seconds,
+            });
+        }
+        drift.observe_measure(&args.name, elapsed_ms)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -212,117 +175,102 @@ mod tests {
     use std::result::Result as StdResult;
 
     use serde_yaml::from_str;
-    use tempfile::tempdir;
 
     use super::*;
-    use crate::parser::step_args::{CrossSurfaceArgs, CrossSurfaceCapture};
+    use crate::oracle::thresholds::DriftPolicy;
+    use crate::parser::step::MeasureArgs;
 
     type TestResult = StdResult<(), String>;
 
-    fn cross_surface(capture: Option<CrossSurfaceCapture>) -> SkillStep {
-        SkillStep::CrossSurface(CrossSurfaceArgs {
-            response_files: vec!["a.txt".to_owned(), "b.txt".to_owned()],
-            min_similarity: Some(0.5),
-            capture,
+    /// A session with no baseline: measure budgets are checked, and no drift
+    /// comparison is due.
+    fn first_run() -> DriftSession {
+        DriftSession::new(DriftPolicy::default(), None)
+    }
+
+    fn measure(name: &str, max_seconds: Option<f64>) -> SkillStep {
+        SkillStep::Measure(MeasureArgs {
+            name: name.to_owned(),
+            action: "tap:send".to_owned(),
+            until: Some("caret".to_owned()),
+            max_seconds,
         })
     }
 
     #[test]
-    fn capture_emitted_with_pending_web_batch() -> TestResult {
-        let step = cross_surface(Some(CrossSurfaceCapture {
-            selector: "main".to_owned(),
-            to: "/tmp/b.web.txt".to_owned(),
-        }));
-        let web_buffer = vec![SkillStep::Tap("Go".to_owned())];
-        let Some(cap) = cross_surface_capture(&step, &web_buffer, ReplayOptions::default()) else {
-            return Err("expected a capture".to_owned());
-        };
-        if cap.selector != "main" || cap.out_path != "/tmp/b.web.txt" {
-            return Err(format!("wrong capture: {cap:?}"));
-        }
-        Ok(())
+    fn measure_within_budget_passes() -> TestResult {
+        let mut captures = PlaywrightCaptures::default();
+        captures.metrics.insert("first_token".to_owned(), 900.0);
+        verify_measures(
+            &[measure("first_token", Some(5.0))],
+            &captures,
+            &mut first_run(),
+        )
+        .map_err(|e| format!("in-budget measure rejected: {e}"))
     }
 
     #[test]
-    fn no_capture_when_empty_batch_missing_field_or_skip_playwright() {
-        let with_cap = cross_surface(Some(CrossSurfaceCapture {
-            selector: "main".to_owned(),
-            to: "b.txt".to_owned(),
-        }));
-        let buffer = vec![SkillStep::Tap("Go".to_owned())];
-        // Empty web batch → nothing to scrape.
-        assert!(cross_surface_capture(&with_cap, &[], ReplayOptions::default()).is_none());
-        // No capture field → no capture.
-        assert!(
-            cross_surface_capture(&cross_surface(None), &buffer, ReplayOptions::default())
-                .is_none()
-        );
-        // --no-playwright disables the scrape.
-        let skip = ReplayOptions {
-            skip_playwright: true,
-        };
-        assert!(cross_surface_capture(&with_cap, &buffer, skip).is_none());
-    }
-
-    #[test]
-    fn capture_target_outside_response_files_is_rejected() -> TestResult {
-        // Typo: the capture writes `b.web.txt`, the step compares `b.txt`. The
-        // scraped text would go unread and `b.txt` — stale or missing — would be
-        // compared in its place.
-        let SkillStep::CrossSurface(args) = cross_surface(Some(CrossSurfaceCapture {
-            selector: "main".to_owned(),
-            to: "b.web.txt".to_owned(),
-        })) else {
-            return Err("expected a cross_surface step".to_owned());
-        };
-        match dispatch_cross_surface(&args) {
-            Err(RunnerError::CrossSurfaceCaptureTargetNotListed { to, response_files }) => {
-                if to != "b.web.txt" || !response_files.contains(&"b.txt".to_owned()) {
-                    return Err(format!("wrong error payload: {to} / {response_files:?}"));
+    fn measure_over_budget_fails_with_both_numbers() -> TestResult {
+        let mut captures = PlaywrightCaptures::default();
+        captures.metrics.insert("first_token".to_owned(), 7500.0);
+        match verify_measures(
+            &[measure("first_token", Some(5.0))],
+            &captures,
+            &mut first_run(),
+        ) {
+            Err(RunnerError::MeasureBudgetExceeded {
+                name,
+                observed_s,
+                max_seconds,
+            }) => {
+                if name != "first_token"
+                    || (observed_s - 7.5).abs() > f64::EPSILON
+                    || (max_seconds - 5.0).abs() > f64::EPSILON
+                {
+                    return Err(format!("wrong payload: {name} {observed_s} {max_seconds}"));
                 }
                 Ok(())
             }
-            other => Err(format!("expected capture-target error, got {other:?}")),
+            other => Err(format!("expected MeasureBudgetExceeded, got {other:?}")),
         }
     }
 
     #[test]
-    fn capture_target_listed_in_response_files_is_accepted() -> TestResult {
-        // The valid form must still reach the comparison: identical bodies pass.
-        let dir = tempdir().map_err(|e| e.to_string())?;
-        let a = dir.path().join("a.txt");
-        let b = dir.path().join("b.txt");
-        for path in [&a, &b] {
-            fs::write(path, "same body text").map_err(|e| e.to_string())?;
+    fn measure_with_no_recorded_timing_fails() -> TestResult {
+        match verify_measures(
+            &[measure("first_token", None)],
+            &PlaywrightCaptures::default(),
+            &mut first_run(),
+        ) {
+            Err(RunnerError::MeasureNotCaptured { name }) if name == "first_token" => Ok(()),
+            other => Err(format!("expected MeasureNotCaptured, got {other:?}")),
         }
-        let b_path = b.display().to_string();
-        let args = CrossSurfaceArgs {
-            response_files: vec![a.display().to_string(), b_path.clone()],
-            min_similarity: Some(0.5),
-            capture: Some(CrossSurfaceCapture {
-                selector: "main".to_owned(),
-                to: b_path,
-            }),
-        };
-        dispatch_cross_surface(&args).map_err(|e| format!("valid capture rejected: {e}"))
     }
 
     #[test]
-    fn capture_field_parses_and_is_optional() -> TestResult {
-        let with: CrossSurfaceArgs = from_str(
-            "response_files: [a.txt, b.txt]\nmin_similarity: 0.5\ncapture:\n  selector: main\n  to: b.txt\n",
+    fn judge_response_comes_from_the_attachment_when_no_file_is_set() -> TestResult {
+        let args: JudgeArgs = from_str(
+            "profile: fast-ci\nuser_prompt_template_hash: \"sha256:abc\"\nresponse_selector: \"[data-test=reply]\"\npass_threshold: 0.9\n",
         )
         .map_err(|e| e.to_string())?;
-        match with.capture {
-            Some(c) if c.selector == "main" && c.to == "b.txt" => {}
-            other => return Err(format!("capture not parsed: {other:?}")),
+        let mut captures = PlaywrightCaptures::default();
+        captures
+            .judge
+            .insert("6".to_owned(), "the attached reply".to_owned());
+        let text = load_response_text(6, &args, &captures).map_err(|e| e.to_string())?;
+        if text != "the attached reply" {
+            return Err(format!("wrong response text: {text}"));
         }
-        // Backward compatible: scenarios without capture still parse.
-        let without: CrossSurfaceArgs =
-            from_str("response_files: [a.txt, b.txt]\n").map_err(|e| e.to_string())?;
-        if without.capture.is_some() {
-            return Err("capture should default to None".to_owned());
+        // A judge step with no capture and no file names the selector it wanted.
+        match load_response_text(6, &args, &PlaywrightCaptures::default()) {
+            Err(RunnerError::Oracle(OracleError::Decode { reason }))
+                if reason.contains("[data-test=reply]") =>
+            {
+                Ok(())
+            }
+            other => Err(format!(
+                "expected a decode error naming the selector, got {other:?}"
+            )),
         }
-        Ok(())
     }
 }

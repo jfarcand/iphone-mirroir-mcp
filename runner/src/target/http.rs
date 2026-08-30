@@ -132,6 +132,7 @@ mod tests {
     use tokio::task::JoinHandle;
 
     use super::*;
+    use crate::target::dark_port::dark_port;
 
     type TestResult = StdResult<(), Box<dyn StdError>>;
 
@@ -249,10 +250,12 @@ mod tests {
     #[tokio::test]
     async fn unreachable_host_returns_http_request_error() -> TestResult {
         let client = HttpClient::new()?;
-        // 127.0.0.1:1 is unlikely to have a listener; reqwest will get
-        // connection refused.
+        // The OS picks this port and it is released before the request, so
+        // reqwest gets connection refused. A fixed port would instead assert
+        // against whatever that machine happens to have bound there.
+        let port = dark_port().await?;
         let res = client
-            .dispatch(&args(HttpMethod::Get, "http://127.0.0.1:1/".to_owned()))
+            .dispatch(&args(HttpMethod::Get, format!("http://127.0.0.1:{port}/")))
             .await;
         if !matches!(res, Err(RunnerError::HttpRequest { .. })) {
             return Err(format!("expected HttpRequest error, got {res:?}").into());

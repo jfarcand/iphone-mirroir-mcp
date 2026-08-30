@@ -49,32 +49,34 @@ the user has installed it globally — most setups should set
 
 ## CI setup
 
-The `runner-e2e` lane in `.github/workflows/runner.yml` follows the same
-steps:
+Every lane that drives a browser — `runner-smoke`, `runner-full-loop`,
+`runner-e2e`, `runner-e2e-allbrowsers` — provisions Playwright through one
+composite action, `.github/actions/setup-playwright`, so the provisioning
+cannot drift between them. The calling job supplies
+`MIRROIR_PLAYWRIGHT_HOME`; the action installs Node, restores the browser
+cache, and runs `npm install @playwright/test` + `npx playwright install`
+into it.
 
 ```yaml
 env:
   MIRROIR_PLAYWRIGHT_HOME: /tmp/mirroir-pw
 
-- name: Cache Playwright browsers
-  uses: actions/cache@v4
-  with:
-    path: |
-      ~/.cache/ms-playwright           # Linux
-      ~/Library/Caches/ms-playwright   # macOS
-    key: playwright-${{ runner.os }}-chromium-v1
+- name: Setup Playwright + chromium
+  uses: ./.github/actions/setup-playwright
 
-- name: Install Playwright + chromium
-  run: |
-    mkdir -p "$MIRROIR_PLAYWRIGHT_HOME"
-    cd "$MIRROIR_PLAYWRIGHT_HOME"
-    npm init -y > /dev/null
-    npm install --no-save --silent @playwright/test
-    npx playwright install chromium
+# …or, for the all-browsers lane:
+- name: Setup Playwright + all browsers
+  uses: ./.github/actions/setup-playwright
+  with:
+    browsers: chromium firefox webkit
+    cache-key: allbrowsers-v1
+    with-deps: 'true'          # Linux-only; firefox/webkit need the OS libs
 ```
 
 The Playwright browsers cache is keyed by OS — `actions/cache@v4` keys are
-global, so a Linux entry would otherwise collide with the macOS entry.
+global, so a Linux entry would otherwise collide with the macOS entry — and by
+`cache-key`, so the chromium-only lanes and the all-browsers lane keep separate
+entries.
 
 ## What the runner emits
 
@@ -107,58 +109,99 @@ export default defineConfig({
 // scenario.spec.ts
 import { test, expect } from '@playwright/test';
 // Helper: pass through raw CSS and Playwright locator-engine strings
-// (role=, text=, xpath=, css=, id=, data-testid=); otherwise prefer the
-// data-test attribute selector and fall back to visible text.
+// (role=, text=, xpath=, css=, id=, data-testid=); otherwise resolve a
+// bare label in Playwright's own locator priority — role, then label,
+// then placeholder, then the data-test attribute, then visible text.
 const _by = (page, label) => {
   if (/^[\[#.:>*]/.test(label)) return page.locator(label);
   if (/^(role|text|xpath|css|id|data-testid)=/.test(label)) return page.locator(label);
-  return page
-    .locator(`[data-test="${label}"]`)
+  return page.getByRole('button', { name: label, exact: true })
+    .or(page.getByRole('link', { name: label, exact: true }))
+    .or(page.getByLabel(label, { exact: true }))
+    .or(page.getByPlaceholder(label, { exact: true }))
+    .or(page.locator(`[data-test="${label}"]`))
     .or(page.getByText(label, { exact: true }));
 };
 
 test("smoke", async ({ page }) => {
+  const _captures = { metrics: {}, judge: {}, cross_surface: {}, page_errors: [], failed_requests: [] };
+  _watch(page, _captures);
   await page.goto("http://localhost:8081/");
   await _by(page, "Connected").waitFor({ state: 'visible', timeout: 30000 });
-  await _by(page, "Send").click();
-  await expect(_by(page, "delivered")).toBeVisible();
+  await _by(page, "Send").click({ timeout: 30000 });
+  await expect(_by(page, "delivered")).toBeVisible({ timeout: 30000 });
+  await test.info().attach('mirroir-captures', { body: JSON.stringify(_captures), contentType: 'application/json' });
+  expect(_captures.page_errors, 'uncaught page errors').toEqual([]);
+  expect(_captures.failed_requests, 'failed requests').toEqual([]);
 });
 ```
 
-You can preview the emitted TS for any scenario via:
+`_watch` is the browser-side half of `assert_log_clean`: every compiled spec
+collects uncaught exceptions (`pageerror`) and failed responses for the
+resource types a page depends on (`document`, `script`, `stylesheet`, `fetch`,
+`xhr`), and asserts both are empty. A page that throws is a failure even when
+every locator resolved.
+
+You can compile any scenario to disk without running it:
 
 ```bash
-mirroir-run --compile-scenario path/to/scenario.yaml
+mirroir-run --emit playwright path/to/scenario.yaml
+mirroir-run --emit playwright samples/web-fixture --scenarios all
 ```
+
+Both write `target/playwright/<sample>/<scenario>/` — the `.spec.ts`, the
+`playwright.config.ts`, and (after a run) `playwright-report.json`,
+`report-html/`, and `test-results/<test>/trace.zip` + `video.webm` +
+`test-failed-1.png`. A run writes the same directory, so the spec a reviewer
+reads is the spec Playwright executes.
 
 ## Reporter ingest
 
-`mirroir-run` reads `playwright-report.json` after invocation and aggregates:
+`mirroir-run` reads `playwright-report.json` after the invocation and returns
+both an aggregate verdict and the values the spec attached:
 
 ```rust
-pub struct PlaywrightVerdict {
-    pub passed: usize,
-    pub failed: usize,
-    pub skipped: usize,
-    pub flaky: usize,
+pub struct PlaywrightOutcome {
+    pub verdict: PlaywrightVerdict,     // passed / failed / skipped / flaky
+    pub captures: PlaywrightCaptures,   // metrics / judge / cross_surface
 }
 ```
 
-A non-zero `failed` count maps to `RunnerError::PlaywrightTestFailures`.
-The runner exits the scenario with that error; in `--sample` mode the
-overall verdict is aggregated as `SampleScenarioFailures`.
+A non-zero `failed` count maps to `PlaywrightError::TestFailures`, which
+carries each failing test's title and the reporter's own error message — the
+strict-mode locator text, the timeout, the assertion diff — so `samples[].error`
+in the run summary names what failed instead of counting it. In `--sample` mode
+the overall verdict aggregates as `SampleScenarioFailures`, whose `first_error`
+carries that message forward.
 
-## Skipping Playwright
+## The captures attachment
 
-For lanes that don't have Playwright installed (e.g., the `runner-smoke`
-CI lane), pass `--no-playwright`:
+Every compiled spec closes with:
 
-```bash
-mirroir-run --run-scenario foo.yaml --no-playwright
+```typescript
+await test.info().attach('mirroir-captures', {
+  body: JSON.stringify(_captures), contentType: 'application/json',
+});
 ```
 
-Web batches log `web step batch skipped (--no-playwright)` and the runner
-continues with process / http / oracle steps.
+`_captures` holds `metrics` (a `measure:` step's elapsed milliseconds, keyed by
+its name) and `judge` / `cross_surface` (text scraped from the live page, keyed
+by the scenario step index that asked for it). The JSON reporter base64-encodes
+attachment bodies; the runner decodes them and hands the values to the
+post-hooks. This is the only channel between the page and Rust — no scraped
+value is written to a side-channel file.
+
+## There is no way to skip the web run
+
+A scenario's web steps are its assertions. A lane that cannot run them has not
+tested anything, so the runner has no flag that skips the invocation and calls
+the rest a pass: with `npx` off `PATH` it fails with
+`PlaywrightError::NotInstalled` and the scenario exits non-zero.
+
+Install Node and Playwright in every lane that replays web scenarios — see
+`runner-smoke` and `runner-e2e` in `.github/workflows/runner.yml` for the
+install + cache pattern. A scenario with no web steps at all (process / HTTP /
+judge / cross-surface only) needs neither.
 
 ## Selector strategy
 
@@ -169,11 +212,11 @@ label by trying, in order:
    CSS-selector character (`[`, `#`, `.`, `:`, `>`, `*`).
 2. Playwright locator-engine pass-through when the label is prefixed with an
    engine (`role=`, `text=`, `xpath=`, `css=`, `id=`, `data-testid=`).
-3. `[data-test="<label>"]` attribute selector.
-4. `page.getByText(<label>, { exact: true })` — visible text exact match.
+3. A bare label resolves through Playwright's own locator priority, as one
+   `.or()` union: `getByRole('button')` → `getByRole('link')` → `getByLabel`
+   → `getByPlaceholder` → `[data-test="<label>"]` → `getByText(exact)`.
 
 Raw CSS and the `role=` / `text=` (and other engine-prefixed) forms therefore
 already work — pass them as the label directly. Authors who want a different
-strategy can override the spec emission via `--compile-scenario` and hand-edit.
-A declarative `selector_strategy: data-test|text|aria|css` config option is the
-only piece not yet present.
+strategy write the engine-prefixed form, or compile with
+`mirroir-run --emit playwright` and read the resulting `.spec.ts`.

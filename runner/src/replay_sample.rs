@@ -10,10 +10,9 @@ use tracing::{error, info};
 use crate::error::{Result, RunnerError};
 use crate::parser::sample::SampleManifest;
 use crate::parser::step::{KillArgs, PortState, SpawnArgs, WaitPortArgs};
-use crate::replay::{
-    ReplayOptions, SampleContext, load_sample_manifest, run_scenario_with_context,
-};
+use crate::replay::{ReplayRoots, SampleContext, load_sample_manifest, run_scenario_with_context};
 use crate::target::process::ProcessRegistry;
+use crate::verdict::RunVerdict;
 
 /// Which set of scenarios from a `SAMPLE.md` session block to drive.
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -31,13 +30,19 @@ pub enum ScenarioSet {
 /// Loads `<dir>/SAMPLE.md`, picks the scenario list for `set`, and drives
 /// each scenario through [`run_scenario_with_context`] with manifest context
 /// active. Aggregates verdicts; returns [`RunnerError::SampleScenarioFailures`]
-/// when at least one scenario reported FAIL.
+/// when at least one scenario reported FAIL, and [`RunVerdict::Drift`] when
+/// none failed and at least one drifted — a sample that drifted is not a
+/// failure, and it is not a clean pass either.
 ///
 /// # Errors
 ///
 /// * Anything [`load_sample_manifest`] returns.
 /// * [`RunnerError::SampleScenarioFailures`] when one or more scenarios failed.
-pub async fn run_sample(sample_dir: &Path, set: ScenarioSet, options: ReplayOptions) -> Result<()> {
+pub async fn run_sample(
+    sample_dir: &Path,
+    set: ScenarioSet,
+    roots: ReplayRoots<'_>,
+) -> Result<RunVerdict> {
     let sample_md_path = sample_dir.join("SAMPLE.md");
     let manifest = load_sample_manifest(&sample_md_path)?;
     info!(
@@ -62,16 +67,27 @@ pub async fn run_sample(sample_dir: &Path, set: ScenarioSet, options: ReplayOpti
     };
 
     let mut failed = 0usize;
+    let mut verdict = RunVerdict::Pass;
+    let mut first_error: Option<String> = None;
     let total = selected.len();
     for scenario_rel in selected {
         let resolved = sample_dir.join(&scenario_rel);
         info!(scenario = %scenario_rel.display(), "running scenario");
         let outcome =
-            run_scenario_with_context(&resolved, Some(context), options, session.as_mut()).await;
+            run_scenario_with_context(&resolved, Some(context), session.as_mut(), roots).await;
         match outcome {
-            Ok(()) => info!(scenario = %scenario_rel.display(), "scenario passed"),
+            Ok(scenario_verdict) => {
+                verdict = verdict.merge(scenario_verdict);
+                info!(
+                    scenario = %scenario_rel.display(),
+                    verdict = %scenario_verdict,
+                    "scenario completed"
+                );
+            }
             Err(err) => {
+                let message = format!("{}: {err}", scenario_rel.display());
                 error!(scenario = %scenario_rel.display(), error = %err, "scenario failed");
+                first_error.get_or_insert(message);
                 failed += 1;
             }
         }
@@ -90,10 +106,14 @@ pub async fn run_sample(sample_dir: &Path, set: ScenarioSet, options: ReplayOpti
     }
 
     if failed == 0 {
-        info!(dir = %sample_dir.display(), total, "sample run completed");
-        Ok(())
+        info!(dir = %sample_dir.display(), total, verdict = %verdict, "sample run completed");
+        Ok(verdict)
     } else {
-        Err(RunnerError::SampleScenarioFailures { failed, total })
+        Err(RunnerError::SampleScenarioFailures {
+            failed,
+            total,
+            first_error: first_error.unwrap_or_else(|| "no failure detail recorded".to_owned()),
+        })
     }
 }
 
@@ -145,7 +165,9 @@ async fn boot_session(sample_dir: &Path, manifest: &SampleManifest) -> Result<Pr
 }
 
 /// Build the ordered list of scenario paths the user asked for.
-fn select_scenarios(manifest: &SampleManifest, set: ScenarioSet) -> Vec<PathBuf> {
+/// The scenario list `set` names in `manifest`, in declaration order.
+#[must_use]
+pub fn select_scenarios(manifest: &SampleManifest, set: ScenarioSet) -> Vec<PathBuf> {
     match set {
         ScenarioSet::MustPass => manifest.session.scenarios.must_pass.clone(),
         ScenarioSet::NiceToPass => manifest.session.scenarios.nice_to_pass.clone(),

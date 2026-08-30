@@ -5,6 +5,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::error::{Result, RunnerError};
+use crate::mirroir::error::MirroirError;
 
 /// Resolve a concrete version (directory name) for a pack/user-global archetype.
 ///
@@ -14,7 +15,7 @@ use crate::error::{Result, RunnerError};
 ///
 /// # Errors
 ///
-/// [`RunnerError::MirroirArchetypeNotFound`] when `root` is unreadable or no
+/// [`MirroirError::ArchetypeNotFound`] when `root` is unreadable or no
 /// installed version satisfies the constraint.
 pub fn resolve_version_from_constraint(
     root: &Path,
@@ -42,16 +43,16 @@ pub fn resolve_version_from_constraint(
         })
         .collect();
     matches.sort_by_key(|(v, _)| *v);
-    let best = matches
-        .pop()
-        .ok_or_else(|| RunnerError::MirroirArchetypeNotFound {
+    let best = matches.pop().ok_or_else(|| {
+        RunnerError::Mirroir(MirroirError::ArchetypeNotFound {
             reference: format!(
                 "no installed version matching `{}` at {}",
                 ref_constraint.unwrap_or("<any>"),
                 root.display(),
             ),
             searched: vec![root.to_path_buf()],
-        })?;
+        })
+    })?;
     Ok(best.1)
 }
 
@@ -60,10 +61,11 @@ type InstalledVersion = ((u32, u32, u32), String);
 
 fn read_installed_versions(root: &Path) -> Result<Vec<InstalledVersion>> {
     let Ok(entries) = fs::read_dir(root) else {
-        return Err(RunnerError::MirroirArchetypeNotFound {
+        return Err(MirroirError::ArchetypeNotFound {
             reference: format!("pack/archetype root `{}` does not exist", root.display()),
             searched: vec![root.to_path_buf()],
-        });
+        }
+        .into());
     };
     let mut versions = Vec::new();
     for entry in entries.flatten() {

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Duplicate labels — mirroir web fixture</title>
+<link rel="stylesheet" href="fixture.css">
+</head>
+<body>
+<h1 data-test="page-title">Invoices</h1>
+
+<!-- Three rows, one visible label. `getByText('Open')` resolves to three
+     elements and Playwright's strict mode fails: the selector must be
+     disambiguated by data-test, by row scope, or by nth(). -->
+<ul>
+  <li>INV-001 <button type="button" data-test="open-inv-001">Open</button></li>
+  <li>INV-002 <button type="button" data-test="open-inv-002">Open</button></li>
+  <li>INV-003 <button type="button" data-test="open-inv-003">Open</button></li>
+</ul>
+
+<p class="result" data-test="opened">opened: none</p>
+
+<script>
+for (const button of document.querySelectorAll('button')) {
+  button.addEventListener('click', () => {
+    const id = button.getAttribute('data-test').replace('open-', '').toUpperCase();
+    document.querySelector('[data-test=opened]').textContent = `opened: ${id}`;
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+# ABOUTME: Provisions Node, the ms-playwright browser cache, and @playwright/test under $MIRROIR_PLAYWRIGHT_HOME.
+# ABOUTME: One definition for every lane that drives a browser, so the provisioning cannot drift between them.
+name: Setup Playwright
+description: >
+  Install Node, restore the ms-playwright browser cache, and install
+  @playwright/test plus the requested browsers into $MIRROIR_PLAYWRIGHT_HOME —
+  the directory mirroir-run symlinks node_modules/ from into every compiled
+  Playwright workspace. The calling job must set MIRROIR_PLAYWRIGHT_HOME.
+
+inputs:
+  browsers:
+    description: Space-separated Playwright browsers to install.
+    required: false
+    default: chromium
+  cache-key:
+    description: >
+      Suffix of the browser cache key. Bump it to force a re-pull when the
+      Playwright major version or a browser channel changes.
+    required: false
+    default: chromium-v1
+  with-deps:
+    description: >
+      Also install the OS libraries the browsers link against. Linux-only:
+      firefox and webkit need libwoff2 / libgstreamer / libenchant there, while
+      macOS uses system frameworks and chromium needs neither.
+    required: false
+    default: 'false'
+  node-version:
+    description: Node major to install.
+    required: false
+    default: '20'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node (for npx playwright)
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Cache Playwright browsers
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/ms-playwright
+          ~/Library/Caches/ms-playwright
+        key: playwright-${{ runner.os }}-${{ inputs.cache-key }}
+
+    - name: Install Playwright + ${{ inputs.browsers }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -z "${MIRROIR_PLAYWRIGHT_HOME:-}" ]; then
+          echo "::error::MIRROIR_PLAYWRIGHT_HOME is unset; the calling job must set it"
+          exit 1
+        fi
+        mkdir -p "$MIRROIR_PLAYWRIGHT_HOME"
+        cd "$MIRROIR_PLAYWRIGHT_HOME"
+        npm init -y > /dev/null
+        npm install --no-save --silent @playwright/test
+        # `playwright install` honors the cached browsers dir; it skips the
+        # download when the binary digest already matches.
+        if [ "${{ inputs.with-deps }}" = "true" ] && [ "$RUNNER_OS" = "Linux" ]; then
+          npx playwright install --with-deps ${{ inputs.browsers }}
+        else
+          npx playwright install ${{ inputs.browsers }}
+        fi

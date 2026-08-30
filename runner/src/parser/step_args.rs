@@ -30,12 +30,15 @@ pub struct JudgeArgs {
     /// `judge:` step (e.g. via an `http:` probe or an explicit capture step).
     #[serde(default)]
     pub response_text: Option<String>,
-    /// Path to a file containing the response text. Useful when the response
-    /// was captured by the Playwright batch and written out via JS.
+    /// Path to a file containing the response text. Useful when a preceding
+    /// step wrote the text to disk — a `cross_surface:` capture's `to`, or a
+    /// producer outside this run. Text the page itself produced arrives on the
+    /// `mirroir-captures` attachment instead and needs no file.
     #[serde(default)]
     pub response_file: Option<String>,
-    /// Path to a baseline file to compare against for drift detection.
-    /// Only consulted when `response_drift` is also set.
+    /// Path to the text this step drifts from, in place of the
+    /// `.harness/last-green.json` entry. Read on an ordinary run; rewritten
+    /// with what the run judged under `mirroir-run accept`.
     #[serde(default)]
     pub drift_baseline_file: Option<String>,
 }
@@ -117,7 +120,7 @@ pub struct CrossSurfaceArgs {
     #[serde(default)]
     pub min_similarity: Option<f64>,
     /// Optional runner-driven web capture: scrape `selector`'s text into `to`
-    /// during the preceding web batch (the same Playwright mechanism `judge:`
+    /// during the preceding web block (the same Playwright mechanism `judge:`
     /// uses), producing one of the `response_files` baselines instead of
     /// requiring a hand-authored Playwright spec.
     #[serde(default)]

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sign in — mirroir web fixture</title>
+<link rel="stylesheet" href="fixture.css">
+</head>
+<body>
+<h1 data-test="page-title">Sign in</h1>
+
+<form data-test="login-form" autocomplete="off">
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" data-test="email" required>
+
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" data-test="password" required>
+
+  <p>
+    <button type="submit" data-test="sign-in">Sign in</button>
+  </p>
+</form>
+
+<p class="result" data-test="login-result" hidden></p>
+
+<script>
+// The only credentials the fixture accepts. Anything else renders the error
+// branch, so a scenario can assert both outcomes without a backend.
+const VALID = { email: 'ada@example.com', password: 'correct-horse' };
+
+document.querySelector('[data-test=login-form]').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const email = document.querySelector('[data-test=email]').value;
+  const password = document.querySelector('[data-test=password]').value;
+  const result = document.querySelector('[data-test=login-result]');
+  const ok = email === VALID.email && password === VALID.password;
+  result.textContent = ok ? `Welcome, ${email}` : 'Invalid email or password';
+  result.setAttribute('data-test', ok ? 'welcome' : 'login-error');
+  result.hidden = false;
+});
+</script>
+</body>
+</html>

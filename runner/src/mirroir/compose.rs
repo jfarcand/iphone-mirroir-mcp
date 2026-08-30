@@ -17,6 +17,7 @@ use crate::mirroir::compose_synth::{
     build_substitution_env, substitute_markdown_with_yaml, substitute_yaml_text,
     synthesize_sample_md,
 };
+use crate::mirroir::error::MirroirError;
 use crate::mirroir::resolve::ResolvedArchetype;
 use crate::parser::archetype::ArchetypeRequiredEnv;
 use crate::parser::mirroir::{PlanEntry, PlanEntrySource};
@@ -62,8 +63,8 @@ pub struct ComposedSample {
 /// # Errors
 ///
 /// * [`RunnerError::Io`] for any read/write/mkdir failure.
-/// * [`RunnerError::MirroirSampleMissing`] when a Local entry's path doesn't exist.
-/// * [`RunnerError::MirroirComposeFailed`] for malformed archetype-side files.
+/// * [`MirroirError::SampleMissing`] when a Local entry's path doesn't exist.
+/// * [`MirroirError::ComposeFailed`] for malformed archetype-side files.
 pub fn compose_sample(
     entry: &PlanEntry,
     suite_env: &HashMap<String, String>,
@@ -74,10 +75,11 @@ pub fn compose_sample(
         PlanEntrySource::Local { path } => {
             let abs = project_root.join(".mirroir").join(path);
             if !abs.is_dir() {
-                return Err(RunnerError::MirroirSampleMissing {
+                return Err(MirroirError::SampleMissing {
                     sample: entry.name.clone(),
                     expected_path: abs,
-                });
+                }
+                .into());
             }
             Ok(ComposedSample {
                 directory: abs,
@@ -85,10 +87,12 @@ pub fn compose_sample(
             })
         }
         PlanEntrySource::Archetypes { .. } => {
-            let resolved = resolved.ok_or_else(|| RunnerError::MirroirComposeFailed {
-                sample: entry.name.clone(),
-                context: "archetype entry composed without a resolved archetype".to_owned(),
-                source: io::Error::other("missing resolved archetype"),
+            let resolved = resolved.ok_or_else(|| {
+                RunnerError::Mirroir(MirroirError::ComposeFailed {
+                    sample: entry.name.clone(),
+                    context: "archetype entry composed without a resolved archetype".to_owned(),
+                    source: io::Error::other("missing resolved archetype"),
+                })
             })?;
             compose_archetype_entry(entry, suite_env, resolved, project_root)
         }
@@ -167,7 +171,7 @@ fn compose_archetype_entry(
             .join("scenarios")
             .join(format!("{flow}.yaml"));
         if !src.is_file() {
-            return Err(RunnerError::MirroirComposeFailed {
+            return Err(MirroirError::ComposeFailed {
                 sample: entry.name.clone(),
                 context: format!(
                     "flow `{flow}` is not provided by archetype `{}` (file {} missing)",
@@ -175,7 +179,8 @@ fn compose_archetype_entry(
                     src.display(),
                 ),
                 source: io::Error::other("flow scenario file not found"),
-            });
+            }
+            .into());
         }
         let bytes = fs::read(&src).map_err(|source| RunnerError::Io {
             context: format!("read flow scenario {}", src.display()),

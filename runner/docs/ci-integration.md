@@ -7,21 +7,21 @@ this repository.
 
 ## Job shape
 
-`runner.yml` defines six jobs. Four are test lanes; two are guard jobs
+`runner.yml` defines seven jobs. Five are test lanes; two are guard jobs
 (`runner-deny` runs `cargo deny check`, `publish-rehearsal` runs
 `cargo publish --dry-run --locked`).
 
 ```
-push / PR                               nightly Sun 03:00 UTC + manual
-   │                                              │
-   ▼                                              ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌──────────────────────┐
-│ runner-fast │ │runner-smoke │ │  runner-e2e │ │ runner-e2e-allbrowsers│
-│  ~3 min     │→│  ~30 s      │→│  ~5 min     │ │  ~12 min              │
-│  fmt clippy │ │ process http│ │ Playwright  │ │ chrome+firefox+webkit │
-│  test diff  │ │ cross_surf  │ │  + Ollama   │ │  + Ollama             │
-└─────────────┘ └─────────────┘ └─────────────┘ └──────────────────────┘
-   linux + macos    linux + macos    linux + macos    linux + macos
+push / PR                                                nightly Sun 03:00 UTC + manual
+   │                                                                 │
+   ▼                                                                 ▼
+┌─────────────┐ ┌─────────────┐ ┌──────────────────┐ ┌─────────────┐ ┌──────────────────────┐
+│ runner-fast │ │runner-smoke │ │ runner-full-loop │ │  runner-e2e │ │ runner-e2e-allbrowsers│
+│  ~3 min     │→│  ~30 s      │→│  ~2 min          │→│  ~5 min     │ │  ~12 min              │
+│  fmt clippy │ │ process http│ │ the 13 phases    │ │ Playwright  │ │ chrome+firefox+webkit │
+│  test diff  │ │ cross_surf  │ │ boot→…→lockfile  │ │  + Ollama   │ │  + Ollama             │
+└─────────────┘ └─────────────┘ └──────────────────┘ └─────────────┘ └──────────────────────┘
+   linux+macos     linux+macos       linux+macos        linux+macos       linux + macos
 
 ┌─────────────┐ ┌──────────────────────┐
 │ runner-deny │ │  publish-rehearsal   │
@@ -30,6 +30,15 @@ push / PR                               nightly Sun 03:00 UTC + manual
 └─────────────┘ └──────────────────────┘
      linux              linux
 ```
+
+`runner-full-loop` and `runner-smoke` both branch off `runner-fast`;
+`runner-full-loop` runs `runner/tests/e2e_full_loop.rs`, the acceptance test
+that drives the whole loop against a real chromium in one run — boot, one
+Playwright invocation, the capture channel, the judge, the runner-side hooks,
+PASS, an idempotent rerun, DRIFT, `accept`, green again, a real break, the
+artifacts it leaves, and the lockfile gate. The suite reports `NOT RUN` and
+stays green on a host that provisioned no browser, so the lane also greps its
+output for `FULL LOOP: 13/13 phases observed` — a vacuous pass fails the lane.
 
 Lanes downstream of `runner-fast` use the `needs:` keyword so they only
 spin up runners after the fast lane is green — saves runner-minutes on
@@ -46,7 +55,7 @@ time on Rust CI and vice versa.
 | Cache | Key | What it stores |
 |---|---|---|
 | Cargo registry + git + `runner/target` | `Swatinem/rust-cache@v2`, shared-key per lane | crates.io index, downloaded crates, incremental compilation artifacts |
-| Playwright browsers | `playwright-${{ runner.os }}-chromium-v1` | `~/.cache/ms-playwright` (Linux), `~/Library/Caches/ms-playwright` (macOS) |
+| Playwright browsers | `playwright-${{ runner.os }}-<cache-key>`, set by `.github/actions/setup-playwright` | `~/.cache/ms-playwright` (Linux), `~/Library/Caches/ms-playwright` (macOS) |
 | Ollama models | `ollama-${{ runner.os }}-qwen2.5:0.5b-v1` | `~/.ollama/models` (~400 MB for the qwen2.5:0.5b judge model) |
 
 Bump the trailing `-v1` suffix to force a cache rotation when the
@@ -82,13 +91,22 @@ silently invalidate a scenario's reproducibility guarantee.
 
 ## Consuming the runner from another repo's CI
 
+Every `runner-v*` tag publishes prebuilt binaries for
+`x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl`, `x86_64-apple-darwin`,
+`aarch64-apple-darwin`, and `x86_64-pc-windows-msvc`, plus the crate on
+crates.io and a formula in the `jfarcand/homebrew-tap` tap. Pick whichever fits
+the lane; no lane needs to build from source.
+
 ```yaml
-- name: Install mirroir-run
+- name: Install mirroir-run (prebuilt, static musl)
+  env:
+    MIRROIR_RUN_VERSION: 0.2.0
   run: |
-    git clone --depth 1 https://github.com/jfarcand/iphone-mirroir-mcp.git /tmp/mirroir-mcp
-    cd /tmp/mirroir-mcp/runner
-    cargo build --release --bin mirroir-run
-    sudo cp target/release/mirroir-run /usr/local/bin/
+    base="https://github.com/jfarcand/mirroir-mcp/releases/download/runner-v${MIRROIR_RUN_VERSION}"
+    curl -fsSL "${base}/mirroir-run-v${MIRROIR_RUN_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+      | tar -xz -C /tmp
+    sudo install "/tmp/mirroir-run-v${MIRROIR_RUN_VERSION}-x86_64-unknown-linux-musl/mirroir-run" \
+      /usr/local/bin/mirroir-run
 
 - name: Install Playwright + Ollama (see runner-e2e in the upstream workflow)
   run: |
@@ -98,21 +116,84 @@ silently invalidate a scenario's reproducibility guarantee.
   run: mirroir-run --sample path/to/your/sample
 ```
 
-A future release will publish prebuilt binaries (musl-static Linux, dylib
-macOS) under GitHub Releases so this `git clone + cargo build` step can
-collapse to a `curl | tar` install.
+The other two install paths:
+
+```bash
+cargo install mirroir-run --locked          # crates.io
+brew install jfarcand/tap/mirroir-run       # Homebrew (macOS arm64/x86_64, Linux x86_64)
+```
+
+Each release archive ships a `.sha256` sidecar next to it; verify it when the
+lane's threat model calls for it.
 
 ## Exit codes
 
-| Exit | Meaning |
-|---|---|
-| 0 | All scenarios in the chosen set passed |
-| 1 | One or more scenarios failed; check stderr for the typed `RunnerError` |
-| 64-71 | Reserved (per `sysexits.h` convention; not currently used by the runner) |
+| Exit | Verdict | Meaning |
+|---|---|---|
+| 0 | `PASS` | All scenarios in the chosen set passed and nothing drifted |
+| 1 | `FAIL` | One or more scenarios failed; check stderr for the typed `RunnerError` |
+| 65 | `DRIFT` | Every structural assertion held and at least one drift metric moved past its threshold |
+| 64, 66-71 | — | Reserved (per `sysexits.h` convention; not currently used by the runner) |
 
-CI lanes should treat any non-zero exit as a test failure. The runner
-never returns successfully with a partial pass — `must_pass` scenarios
-must all be green.
+The runner never returns successfully with a partial pass — `must_pass`
+scenarios must all be green. It does return a *third* code, and the lane
+decides what that means:
+
+```yaml
+- name: Drive the sample
+  run: |
+    set +e
+    mirroir-run --sample path/to/sample
+    code=$?
+    set -e
+    case "$code" in
+      0)  echo "PASS" ;;
+      # A drifted run held structurally and moved semantically. Uploading the
+      # candidate rows and continuing is the usual choice; `exit 1` here makes
+      # drift block the merge instead.
+      65) echo "DRIFT — review .harness/drift-log.md"; cat .harness/drift-log.md ;;
+      *)  exit "$code" ;;
+    esac
+
+- uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: drift-candidates
+    path: .harness/drift-log.md
+    if-no-files-found: ignore
+```
+
+`--diff-text` returns 65 on drift too, so the code means one thing everywhere.
+
+### Never `accept` in CI
+
+The way out of a DRIFT is `mirroir-run accept`, which re-records every baseline
+from what the run observed. That is a person saying the new output is correct.
+A CI job that ran it would bless its own regressions and report green forever,
+so the refusal is structural rather than a convention this document asks you to
+follow: `accept` exits non-zero the moment it finds `CI`, `GITHUB_ACTIONS`,
+`GITLAB_CI`, `BUILDKITE`, `CIRCLECI`, `JENKINS_URL`, or any of the other CI
+markers set. Adding it to a workflow turns the lane red, not green.
+
+The intended flow is: CI reports 65 and uploads `.harness/drift-log.md`; a
+person reads the rows, runs `mirroir-run accept` on their machine, reviews
+`git diff`, and commits the moved baselines. See
+[drift-and-accept.md](drift-and-accept.md).
+
+### Drift thresholds in CI
+
+Drift comparison is fail-closed: a metric no layer of the hierarchy declares
+stops the run with `unspecified drift threshold for <metric>` (exit 1). A lane
+that runs scenarios with `judge:` steps therefore needs a `drift-defaults.yaml`
+reachable from the invocation — in the sample directory, at `--skills <dir>` /
+`$MIRROIR_SKILLS`, in the working directory, under `<cwd>/.mirroir/`, or under
+`$HOME/.mirroir/`. See the README's "The three verdicts" section for the
+metrics and their starting values.
+
+The baseline drift is measured against lives at `.harness/last-green.json`,
+relative to the invocation directory. A fresh CI runner has none, so the first
+run of a scenario records one and passes; cache or commit that file only if the
+lane genuinely wants cross-run drift detection.
 
 ### Report artifact
 
@@ -122,13 +203,18 @@ build artifact for post-mortem. The shape is `RunSummary`:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "config_path": "/abs/path/.mirroir/mirroir.yaml",
   "generated_at": "2026-06-19T03:00:00Z",
   "samples": [ /* per-sample SampleVerdict entries, in plan order */ ],
-  "totals": { "samples": 3, "passed": 3, "failed": 0, "skipped": 0 }
+  "totals": { "samples": 3, "passed": 2, "failed": 0, "drifted": 1, "skipped": 0 }
 }
 ```
+
+Schema `2` added the third verdict: `samples[].verdict` is one of `"pass"`,
+`"fail"`, `"drift"`, `"skipped"`, `"composed"`, and `totals` carries a
+`drifted` count. The four strings a version-1 consumer already grepped for are
+unchanged.
 
 ## Verbose logging in CI
 

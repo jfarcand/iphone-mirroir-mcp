@@ -1,0 +1,25 @@
+version: 1
+name: web-fixture — a selector that names nothing fails by name
+description: |
+  `place-order` is the button `summary.html` carries; this scenario asks for
+  `place-ordre`. Playwright times out on that locator, its own message names
+  the locator, and the trace / video / screenshot it recorded stay on disk
+  under `target/playwright/wrong-selector/` for the debugging loop to open.
+
+  This scenario is expected to FAIL. It is the negative half of the web leg,
+  so it belongs to no scenario set; the CI lane runs it by name and asserts
+  the non-zero exit. Run it from `runner/`: the spawn's `cwd` is relative.
+tags: ["web-fixture", "negative", "locator"]
+steps:
+  - spawn:
+      id: fixture
+      command: "python3 -m http.server 18904"
+      cwd: "samples/web-fixture/public"
+  - wait_port: { port: 18904, timeout_s: 15 }
+  - target:
+      kind: web
+      browsers: [chrome]
+      url: "http://127.0.0.1:18904/summary.html"
+  - assert_visible: "page-title"
+  - tap: { label: "place-ordre", timeout_s: 5 }
+  - kill: { id: fixture, grace_s: 3 }

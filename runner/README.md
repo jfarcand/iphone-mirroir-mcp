@@ -13,7 +13,7 @@ stays on mirroir's existing Swift `StepExecutor` at the parent level.
 ## Status
 
 Shipped. The full build sequence is delivered (13 / 13) and `main.rs` dispatches
-a multi-mode runner: scenario `--validate` / `--compile-scenario` /
+a multi-mode runner: scenario `--validate` / `--emit playwright` /
 `--run-scenario`, `--sample` session replay, `--diff-text` drift, and the
 `.mirroir/` consumer pipeline (explicit `--config` or bare-invocation
 autodiscovery). Every module carries real implementation — no placeholder code
@@ -60,7 +60,7 @@ cargo build --release --target=x86_64-unknown-linux-musl
 
 ## Usage
 
-Six modes are wired and verified end-to-end:
+Seven modes are wired and verified end-to-end:
 
 ```bash
 # 0) PRIMARY — `.mirroir/` pipeline. A bare invocation walks `cwd ↑` to the
@@ -73,18 +73,25 @@ mirroir-run --config path/to/.mirroir/mirroir.yaml
 # 1) Validate a scenario YAML against the SkillStep grammar.
 mirroir-run --validate scenarios/connect-then-broadcast.yaml
 
-# 2) Compile a scenario's web steps to a Playwright spec + config (prints to stdout).
-mirroir-run --compile-scenario scenarios/connect-then-broadcast.yaml
+# 2) Compile to disk without running: writes target/playwright/<scenario>/
+#    with the .spec.ts + playwright.config.ts a run would execute.
+mirroir-run --emit playwright scenarios/connect-then-broadcast.yaml
+mirroir-run --emit playwright samples/web-fixture --scenarios all
 
-# 3) Run a single scenario end-to-end (process / http / web / judge / drift).
+# 3) Accept what a run observed: re-record every baseline, then review `git diff`.
+#    Refuses to run in CI — a job must never bless its own drift.
+mirroir-run accept
+mirroir-run accept --run-scenario scenarios/connect-then-broadcast.yaml
+
+# 4) Run a single scenario end-to-end (process / http / web / judge / drift).
 MIRROIR_PLAYWRIGHT_HOME=/path/to/playwright \
   mirroir-run --run-scenario scenarios/connect-then-broadcast.yaml
 
-# 4) Drive a full sample (SAMPLE.md + multiple scenarios; supports boot_once).
+# 5) Drive a full sample (SAMPLE.md + multiple scenarios; supports boot_once).
 MIRROIR_PLAYWRIGHT_HOME=/path/to/playwright \
   mirroir-run --sample samples/mega-sample --scenarios must-pass
 
-# 5) Compute drift between two text files (Jaccard + Levenshtein).
+# 6) Compute drift between two text files (Jaccard + Levenshtein).
 mirroir-run --diff-text baseline.txt current.txt --levenshtein-threshold 0.2
 ```
 
@@ -93,26 +100,142 @@ plan, overrides cwd-based discovery), `--no-local` (skip `mirroir.local.yaml`),
 `--compose-only` (compose `.mirroir/.build/` and exit without replaying),
 `--recompose` (delete `.mirroir/.build/` and recompose from scratch),
 `--no-compose` (reuse the existing `.build/` tree as-is), `--locked` (CI gate:
-error when `mirroir.lock` is missing or stale vs `mirroir.yaml`), `--frozen`
-(`--locked` plus no network fetch), `--no-playwright` (skip web step batches),
-`--report <PATH>` (JSON report artifact), `--skills <PATH>`
-(`MIRROIR_SKILLS` checkout), and `--scenarios <set>` (defaults to the config's
-`default_set`, falling back to `must_pass`).
+error when `mirroir.lock` is missing, stale vs `mirroir.yaml`, or recording a
+checksum the archetype tree no longer hashes to), `--frozen`
+(`--locked` plus no network fetch), `--report <PATH>` (JSON report artifact),
+`--skills <PATH>` (`MIRROIR_SKILLS` checkout, which supplies the global
+`drift-defaults.yaml` layer), and `--scenarios <set>`
+(defaults to the config's `default_set`, falling back to `must_pass`).
 
-The `samples/mega-sample/` reference walks every primitive in four scenarios:
-cross-browser web (chromium + firefox + webkit), HTTP probe, judge + drift
-against a local Ollama instance, and cross-surface equivalence. Run it with
-the command above to verify the full pipeline on your machine.
+The `samples/mega-sample/` reference walks every primitive in five scenarios:
+cross-browser web (chromium + firefox + webkit), `role=` / `text=` locator
+engines, HTTP probe, judge + drift against a local Ollama instance, and
+cross-surface equivalence. Run it with the command above to verify the full
+pipeline on your machine. `samples/web-fixture/` is the lighter companion: a
+static-HTML site served by `python3 -m http.server`, with a login flow that
+needs no Ollama and no network.
+
+## The three verdicts
+
+Playwright has `passed`, `failed`, `timedOut`, `skipped` and `interrupted`. None
+of them can say *every assertion is green, the log is clean, and the semantics
+moved*. `mirroir-run` has a third verdict for exactly that, and it gets its own
+exit code so a CI lane can decide for itself whether drift blocks a merge.
+
+| Verdict | Exit | Trigger | Artifact |
+|---|---|---|---|
+| `PASS` | **0** | Every Playwright test passed, every judge score held, every log clean, and no drift metric moved | run summary JSON; `.harness/last-green.json` updated with what this run observed |
+| `FAIL` | **1** | A Playwright test failed / timed out / was interrupted, a judge scored below `pass_threshold - tolerance`, a log was dirty, an HTTP status mismatched, a `measure:` blew its `max_seconds` budget, or the runner errored | run summary JSON with the failure verbatim; Playwright trace / screenshot / video |
+| `DRIFT` | **65** | Everything above held **and** at least one drift metric moved past its resolved threshold | run summary JSON (`"verdict": "drift"`); a candidate row appended to `.harness/drift-log.md`; the baseline left untouched for review |
+
+Exit code 65 is drawn from the `sysexits.h` band this runner reserves (64-71).
+`--diff-text` uses the same code, so `DRIFT` means one thing everywhere.
+
+### Drift metrics
+
+Each is compared against `.harness/last-green.json`, the store the previous
+`PASS` run wrote. A scenario with no baseline yet cannot drift: it records what
+it saw and passes.
+
+| Metric | Direction | Compares |
+|---|---|---|
+| `fingerprint_similarity` | floor (`min`) | Jaccard similarity of the judged response's token set |
+| `judge_score_swing` | ceiling (`max_delta`) | absolute change in the judge's score |
+| `response_levenshtein_pct` | ceiling (`max`) | normalized Levenshtein distance of the judged response |
+| `step_latency_pct_increase` | ceiling (`max`) | fractional growth of a `measure:` latency |
+
+### Threshold resolution is fail-closed
+
+```
+judge.response_drift (per step)
+   ↓ falls back to
+scenario.yaml `drift:` block
+   ↓ falls back to
+<sample>/APP.md `drift_defaults:` block
+   ↓ falls back to
+drift-defaults.yaml
+```
+
+If **no** layer declares a metric the runner needs, the run stops with
+`unspecified drift threshold for <metric>`. There is no built-in default value,
+on purpose: a guessed ceiling silently decides whether a semantic change is
+reported as DRIFT or swallowed as a green run.
+
+The `drift-defaults.yaml` search takes the first that exists: the sample
+directory, `--skills <dir>` / `$MIRROIR_SKILLS`, the working directory,
+`<cwd>/.mirroir/`, then `$HOME/.mirroir/`. This repository ships one at
+`runner/drift-defaults.yaml` with the design's starting values; it is a dev
+fixture, not part of the published crate, so a consumer declares their own.
+
+```yaml
+version: 1
+fingerprint_similarity:    { min: 0.85 }
+judge_score_swing:         { max_delta: 0.10 }
+response_levenshtein_pct:  { max: 0.25 }
+step_latency_pct_increase: { max: 0.30 }
+```
+
+### Seeing it work
+
+`samples/web-fixture/` ships the pair that makes the verdict concrete:
+`summary.html` and `summary-reworded.html` render the same DOM, respond to the
+same click, and set the same `data-test` attribute — only the confirmation's
+prose differs. Run `scenarios/order-summary.yaml` against one, then the other:
+Playwright reports `1 passed` both times and the runner reports `DRIFT` the
+second time.
+
+### `mirroir-run accept` — the way out of a DRIFT
+
+A verdict that routes to human review is a trap without a command for *yes,
+that is correct now*: the suite's steady state goes amber and someone deletes
+it. `accept` runs the same scenarios with the baselines in write mode and turns
+a reviewed drift into a `git diff`.
+
+```bash
+mirroir-run                     # exit 65 — DRIFT, with a row in .harness/drift-log.md
+cat .harness/drift-log.md       # read what moved and by how much
+mirroir-run accept              # re-record every baseline from this run
+git diff                        # the reviewed change, as files
+mirroir-run                     # exit 0 again, now holding to the new output
+```
+
+Four artifacts move, and they are the four a DRIFT verdict can point at:
+`.harness/last-green.json`, every `judge.drift_baseline_file`, every
+`cross_surface.capture.to`, and `.mirroir/mirroir.lock`. `.harness/drift-log.md`
+is deleted first — its rows are the queue accept answers. The judge still runs
+and its `pass_threshold` is still enforced: accept moves the drift baseline, it
+does not bless a response the judge fails.
+
+A `cross_surface:` baseline written by a surface this runner does not drive —
+`baselines/<flow>.ios.txt` comes from mirroir-mcp's `generate_skill` against a
+connected iPhone — is named, not overwritten. Overwriting it with the web
+capture would make the parity oracle compare a file against itself.
+
+**Accept refuses to run in CI.** Accepting a baseline is a person saying the
+new output is correct; a job that could say it would report green forever. The
+refusal is structural: `accept` exits non-zero the moment it finds `CI`,
+`GITHUB_ACTIONS`, `GITLAB_CI`, `BUILDKITE`, `CIRCLECI`, `JENKINS_URL`, or any
+of the other CI markers set.
+
+`accept` takes the same target selectors an ordinary run does — bare (the
+auto-discovered `.mirroir/` plan), `--config <PATH>`, `--sample <DIR>`, or
+`--run-scenario <FILE>` — plus `--scenarios`, `--skills`, `--report`, and
+`--no-local`.
+
+The complete loop, including how captures travel from the browser through the
+Playwright attachment into the post-hooks, is in
+[docs/drift-and-accept.md](docs/drift-and-accept.md).
 
 ## Documentation
 
 | Topic | Doc |
 |---|---|
+| The DRIFT verdict, the threshold hierarchy, and `mirroir-run accept` | [docs/drift-and-accept.md](docs/drift-and-accept.md) |
 | Scenario grammar (every `SkillStep` variant, dispatch routing) | [docs/scenario-grammar.md](docs/scenario-grammar.md) |
 | `SAMPLE.md` schema (`Session`, `Boot`, `Scenarios`, `boot_once`) | [docs/sample-md-format.md](docs/sample-md-format.md) |
 | Judge profile registry + Ollama / OpenAI wire format | [docs/judge-profiles.md](docs/judge-profiles.md) |
 | Playwright install + `MIRROIR_PLAYWRIGHT_HOME` walkthrough | [docs/playwright-setup.md](docs/playwright-setup.md) |
-| CI lanes, caching, integration into downstream repos | [docs/ci-integration.md](docs/ci-integration.md) |
+| CI lanes, caching, exit codes, integration into downstream repos | [docs/ci-integration.md](docs/ci-integration.md) |
 
 ## Build sequence — fully delivered (13 / 13)
 
@@ -135,18 +258,23 @@ the command above to verify the full pipeline on your machine.
 Cross-surface implementation note: the runner provides the equivalence-comparison
 primitive (`cross_surface:` step + pairwise Jaccard fingerprint). Surfaces feed
 their captured responses to it via filesystem paths. The web side captures via
-the Playwright spec calling `page.locator(...).textContent()` and writing out;
-the iOS side captures via `mirroir-mcp` (Swift) writing its observed AX/OCR
-output. The runner is surface-agnostic — both are just files to compare.
+the compiled spec's `mirroir-captures` attachment, which the runner writes to
+the declared path; the iOS side captures via `mirroir-mcp` (Swift) writing its
+observed AX/OCR output. The runner is surface-agnostic — both are just files to
+compare.
 
 ## Module layout
 
 ```
 src/
 ├── main.rs                # CLI entry; clap arg parsing; dispatches to replay:: / mirroir::
-├── error.rs               # RunnerError + Result (thiserror, ~50 typed variants)
-├── replay.rs              # scenario dispatch + sample loop + web-batch buffering
-├── replay_dispatch.rs     # judge / drift / cross_surface step dispatch helpers
+├── accept.rs              # `mirroir-run accept` — re-record every baseline; structural CI refusal
+├── error.rs               # RunnerError + Result (thiserror; sub-enums in compile/, mirroir/, oracle/)
+├── verdict.rs             # PASS / FAIL / DRIFT + the exit codes they map to
+├── replay.rs              # scenario orchestration: pre-hooks, one web invocation, post-hooks
+├── replay_plan.rs         # step partition + the contiguous-web-block rule
+├── replay_dispatch.rs     # judge / drift / cross_surface / measure post-hook helpers
+├── replay_step.rs         # exhaustive SkillStep → runner-side dispatch
 ├── replay_sample.rs       # `--sample <dir>` session machinery (SAMPLE.md + shared boot)
 ├── parser/
 │   ├── mod.rs             # parser index + compiled.json cache structs
@@ -161,13 +289,16 @@ src/
 │   ├── scenario.rs        # Scenario top-level (singleton_map_recursive enum form)
 │   ├── step.rs            # SkillStep enum — 30 variants (Launch..CrossSurface)
 │   ├── step_args.rs       # oracle/verdict step args (judge, drift, http, report, cross_surface)
-│   └── step_process_args.rs # process-target step args (spawn, wait_port, kill, assert_log)
+│   ├── step_process_args.rs # process-target step args (spawn, wait_port, kill, assert_log)
+│   └── surface.rs         # web-vs-runner step classification + step-kind labels
 ├── mirroir/
 │   ├── mod.rs             # `.mirroir/` discovery → resolve → compose → run index
 │   ├── discover.rs        # walk-up cwd discovery of `.mirroir/mirroir.yaml`
 │   ├── resolve.rs         # ArchetypeRef → on-disk directory + manifest (per-kind dispatch)
 │   ├── resolve_version.rs # semver-ish version parsing + constraint matching
-│   ├── lock.rs            # lockfile freshness check + --locked/--frozen enforcement
+│   ├── lock.rs            # lockfile modes + --locked/--frozen enforcement
+│   ├── lock_freshness.rs  # ref-set + version-pin comparison vs mirroir.yaml
+│   ├── lock_checksum.rs   # recompute each locked tree's sha256 vs the recorded checksum
 │   ├── lock_generate.rs   # lockfile generation (source/version/checksum + git provenance)
 │   ├── compose.rs         # archetype + plan entry → `.mirroir/.build/<sample>/` tree
 │   ├── compose_cache.rs   # compose-cache freshness (sha256 + mtime fast-path)
@@ -182,12 +313,20 @@ src/
 │   └── http.rs            # reqwest probe + status/body assertions
 ├── compile/
 │   ├── mod.rs             # compilation targets index (Playwright only today)
-│   ├── playwright.rs      # YAML web steps → .spec.ts + playwright.config.ts
-│   ├── playwright_emit.rs # per-step Playwright emission (key/modifier/swipe translation)
-│   └── invoke.rs          # spawn `npx playwright test` + parse JSON reporter
+│   ├── error.rs           # PlaywrightError (compile / invoke / report-ingest failures)
+│   ├── playwright.rs      # scenario → one .spec.ts, incl. the mirroir-captures attachment
+│   ├── playwright_config.rs # playwright.config.ts (one project per declared browser)
+│   ├── playwright_emit.rs # per-step Playwright emission (key/modifier/swipe/measure)
+│   ├── invoke.rs          # spawn `npx playwright test`, keep its output, ingest the report
+│   └── report.rs          # JSON-reporter shapes: verdicts, failure text, captures
 └── oracle/
-    ├── mod.rs             # oracle index (drift + judge + judge profiles)
+    ├── mod.rs             # oracle index (drift + thresholds + baseline + judge)
+    ├── error.rs           # OracleError (judge scoring + threshold resolution failures)
     ├── drift.rs           # Fingerprint + Jaccard + Levenshtein verdict
+    ├── drift_session.rs   # per-scenario drift accumulator → the DRIFT verdict
+    ├── drift_log.rs       # `.harness/drift-log.md` candidate rows
+    ├── baseline.rs        # `.harness/last-green.json` — what the previous PASS observed
+    ├── thresholds.rs      # fail-closed hierarchy: step → scenario → APP.md → drift-defaults
     ├── judge.rs           # OpenAI-compatible HTTP client + template-hash verification
     └── judge_profiles.rs  # judge profile registry (built-in + overlay, trust-tiered)
 ```
@@ -209,9 +348,14 @@ against which both runtimes operate.
 The runner owns its own `.mirroir/` consumer pipeline (`runner/src/mirroir/`): a
 checked-out repo carries a `.mirroir/mirroir.yaml` plan that lists samples plus
 archetype references. The runner discovers it by walking `cwd ↑`, resolves each
-archetype against `~/.mirroir/skills/`, verifies the `mirroir.lock`, composes the
-ready-to-replay tree into `.mirroir/.build/`, and replays it. This `.mirroir/`
-dotfile (a consumer repo's checked-in plan) is distinct from `.mirroir-mcp/`,
+archetype against `~/.mirroir/skills/`, verifies the `mirroir.lock` — the locked
+ref set, each pin's version constraint, and each recorded `checksum:`
+recomputed against the archetype tree on disk, so an edited or tampered pack is
+caught rather than replayed — composes the ready-to-replay tree into
+`.mirroir/.build/`, and replays it. A stale or drifted lockfile is regenerated
+in local-dev mode and refused under `--locked` / `--frozen`; `mirroir-run
+accept` re-records it. This
+`.mirroir/` dotfile (a consumer repo's checked-in plan) is distinct from `.mirroir-mcp/`,
 the Swift MCP server's home directory for element patterns and skills.
 
 ## Discipline

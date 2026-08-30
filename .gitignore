@@ -27,6 +27,10 @@ scratch/
 # The register-limitation skill ships with the repo — it documents the
 # limitation-register procedure every contributor's agent must follow.
 !.claude/skills/register-limitation/
+# The mirroir-onboard skill is the web recorder half of the runner architecture
+# (agent + chrome-devtools-mcp records; mirroir-run replays). Shipped artifacts
+# reference it by name, so it belongs in the repo.
+!.claude/skills/mirroir-onboard/
 mirroir-test-results/
 integrations/
 scripts/test-vd*

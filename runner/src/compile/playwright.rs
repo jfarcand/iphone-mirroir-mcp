@@ -1,12 +1,16 @@
-// ABOUTME: Compile web SkillSteps into a Playwright `.spec.ts` + emit playwright.config.ts.
-// ABOUTME: Non-web steps (spawn/http/judge/etc.) are emitted as comments; Rust dispatches those.
+// ABOUTME: Compile a scenario into ONE Playwright `.spec.ts` + emit playwright.config.ts.
+// ABOUTME: Runner-side steps are emitted as comments; their captures ride out on the mirroir-captures attachment.
 
 use std::fmt::Write as _;
 
-use crate::compile::playwright_emit::{emit_step, js_string_literal};
-use crate::error::{Result, RunnerError};
+use crate::compile::error::PlaywrightError;
+use crate::compile::playwright_emit::{emit_steps, js_string_literal};
+use crate::compile::playwright_prelude::{ScenarioSource, emit_prelude};
+use crate::compile::report::CAPTURES_ATTACHMENT;
+use crate::error::Result;
 use crate::parser::scenario::Scenario;
 use crate::parser::step::{Browser, SkillStep, TargetArgs, TargetKind};
+use crate::parser::surface::step_kind;
 
 /// Output of [`compile_scenario`].
 ///
@@ -22,50 +26,33 @@ pub struct PlaywrightSpec {
     pub browsers: Vec<Browser>,
 }
 
-/// A request to scrape an element's text from the live page at the end of the
-/// web batch and persist it to disk, so a following `judge:` step can read the
-/// response it should score. Wired by the replay dispatcher from a
-/// `judge.response_selector`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResponseCapture {
-    /// `_by`-compatible locator (raw CSS / locator-engine string / data-test label).
-    pub selector: String,
-    /// Absolute path the spec writes the element's `innerText` to.
-    pub out_path: String,
-}
-
 /// Compile one scenario into a Playwright spec body.
 ///
-/// Requires the scenario to declare a `target: { kind: web, ... }` step. Non-web
-/// `kind:` values are rejected at compile time; non-web step variants
-/// (`spawn:`, `http:`, etc.) are kept in the emitted spec as comments so a
-/// human reader sees the full intent — at runtime, the Rust dispatcher handles
-/// them around the Playwright invocation.
+/// Every web step of the scenario lands in a single `test()` — the runner
+/// invokes Playwright once per scenario. Runner-side step variants (`spawn:`,
+/// `http:`, `judge:`, …) are kept in the emitted spec as comments so a human
+/// reader sees the full intent; at run time the Rust dispatcher executes them
+/// as pre-hooks and post-hooks around the invocation.
+///
+/// Two of those runner-side steps need a value only the live page has:
+/// `judge.response_selector` and `cross_surface.capture.selector`. Their text
+/// is scraped at the step's own position in the flow and written into a
+/// `captures` object, which the test attaches as
+/// [`CAPTURES_ATTACHMENT`] — the channel the Rust post-hooks read it back from.
+///
+/// `source` names the YAML the scenario was loaded from; it becomes the
+/// emitted file's provenance header.
 ///
 /// # Errors
 ///
-/// * [`RunnerError::PlaywrightUnsupported`] when the scenario has no
-///   `target: { kind: web }` step, or declares a non-web kind.
-/// * [`RunnerError::PlaywrightEncode`] if a label, URL, or name can't be
+/// * [`PlaywrightError::Unsupported`] when the scenario has no
+///   `target: { kind: web }` step, declares a non-web kind, or carries a
+///   `measure:` whose `action` has no web equivalent.
+/// * [`PlaywrightError::Encode`] if a label, URL, or name can't be
 ///   encoded as a JS string literal.
-/// * [`RunnerError::Format`] for `std::fmt::Write` failure (unreachable for
-///   `String` but typed for `?` propagation).
-pub fn compile_scenario(scenario: &Scenario) -> Result<PlaywrightSpec> {
-    compile_scenario_with_captures(scenario, &[])
-}
-
-/// Like [`compile_scenario`], but additionally scrapes one or more elements at
-/// the end of the test and writes their `innerText` to disk. Used to satisfy a
-/// following `judge.response_selector` whose response lives in the page DOM.
-///
-/// # Errors
-///
-/// Same as [`compile_scenario`], plus [`RunnerError::PlaywrightEncode`] if a
-/// capture selector or path can't be encoded as a JS string literal.
-pub fn compile_scenario_with_captures(
-    scenario: &Scenario,
-    captures: &[ResponseCapture],
-) -> Result<PlaywrightSpec> {
+/// * [`crate::error::RunnerError::Format`] for `std::fmt::Write` failure
+///   (unreachable for `String` but typed for `?` propagation).
+pub fn compile_scenario(scenario: &Scenario, source: &ScenarioSource) -> Result<PlaywrightSpec> {
     let target = find_web_target(scenario)?;
 
     let browsers = if target.browsers.is_empty() {
@@ -75,59 +62,37 @@ pub fn compile_scenario_with_captures(
     };
 
     let mut body = String::new();
-    writeln!(body, "import {{ test, expect }} from '@playwright/test';")?;
-    if !captures.is_empty() {
-        writeln!(body, "import {{ writeFileSync }} from 'node:fs';")?;
-    }
-    writeln!(body)?;
-    writeln!(
-        body,
-        "// Helper: pass through raw CSS and Playwright locator-engine strings"
-    )?;
-    writeln!(
-        body,
-        "// (role=, text=, xpath=, css=, id=, data-testid=); otherwise prefer the"
-    )?;
-    writeln!(
-        body,
-        "// data-test attribute selector and fall back to visible text."
-    )?;
-    writeln!(body, "const _by = (page, label) => {{")?;
-    writeln!(
-        body,
-        "  if (/^[\\[#.:>*]/.test(label)) return page.locator(label);"
-    )?;
-    writeln!(
-        body,
-        "  if (/^(role|text|xpath|css|id|data-testid)=/.test(label)) return page.locator(label);"
-    )?;
-    writeln!(body, "  return page")?;
-    writeln!(body, "    .locator(`[data-test=\"${{label}}\"]`)")?;
-    writeln!(body, "    .or(page.getByText(label, {{ exact: true }}));")?;
-    writeln!(body, "}};")?;
-    writeln!(body)?;
+    emit_prelude(source, &mut body)?;
 
     let title = js_string_literal(&scenario.name, "scenario name")?;
     writeln!(body, "test({title}, async ({{ page }}) => {{")?;
+    writeln!(
+        body,
+        "  const _captures = {{ metrics: {{}}, judge: {{}}, cross_surface: {{}}, page_errors: [], failed_requests: [] }};"
+    )?;
+    writeln!(body, "  _watch(page, _captures);")?;
 
     if let Some(url) = target.url.as_deref() {
         let lit = js_string_literal(url, "target.url")?;
         writeln!(body, "  await page.goto({lit});")?;
     }
 
-    for step in &scenario.steps {
-        emit_step(step, &mut body)?;
-    }
+    emit_steps(scenario, &mut body)?;
 
-    for capture in captures {
-        let sel = js_string_literal(&capture.selector, "capture selector")?;
-        let path = js_string_literal(&capture.out_path, "capture out_path")?;
-        writeln!(
-            body,
-            "  {{ const _v = await _by(page, {sel}).innerText(); writeFileSync({path}, _v); }}"
-        )?;
-    }
-
+    // Attached before the invariants are asserted, so a run that trips one
+    // still carries every capture the post-hooks read.
+    writeln!(
+        body,
+        "  await test.info().attach('{CAPTURES_ATTACHMENT}', {{ body: JSON.stringify(_captures), contentType: 'application/json' }});"
+    )?;
+    writeln!(
+        body,
+        "  expect(_captures.page_errors, 'uncaught page errors').toEqual([]);"
+    )?;
+    writeln!(
+        body,
+        "  expect(_captures.failed_requests, 'failed requests').toEqual([]);"
+    )?;
     writeln!(body, "}});")?;
 
     Ok(PlaywrightSpec {
@@ -136,60 +101,29 @@ pub fn compile_scenario_with_captures(
     })
 }
 
-/// Emit a Playwright config that materialises one `projects:` entry per
-/// requested browser. JSON reporter is enabled so the Rust side can ingest
-/// per-test verdicts in the invocation chunk.
-///
-/// # Errors
-///
-/// [`RunnerError::Format`] on `std::fmt::Write` failure (unreachable for `String`).
-pub fn emit_playwright_config(browsers: &[Browser]) -> Result<String> {
-    let mut s = String::new();
-    writeln!(
-        s,
-        "import {{ defineConfig, devices }} from '@playwright/test';"
-    )?;
-    writeln!(s)?;
-    writeln!(s, "export default defineConfig({{")?;
-    writeln!(
-        s,
-        "  reporter: [['json', {{ outputFile: 'playwright-report.json' }}]],"
-    )?;
-    writeln!(s, "  projects: [")?;
-    for browser in browsers {
-        let (name, device) = match browser {
-            Browser::Chrome => ("chromium", "Desktop Chrome"),
-            Browser::Firefox => ("firefox", "Desktop Firefox"),
-            Browser::Webkit => ("webkit", "Desktop Safari"),
-        };
-        writeln!(
-            s,
-            "    {{ name: '{name}', use: {{ ...devices['{device}'] }} }},"
-        )?;
-    }
-    writeln!(s, "  ],")?;
-    writeln!(s, "}});")?;
-    Ok(s)
-}
-
 fn find_web_target(scenario: &Scenario) -> Result<&TargetArgs> {
     for step in &scenario.steps {
         if let SkillStep::Target(t) = step {
             return if matches!(t.kind, TargetKind::Web) {
                 Ok(t)
             } else {
-                Err(RunnerError::PlaywrightUnsupported {
+                Err(PlaywrightError::Unsupported {
                     reason: format!(
                         "first target has kind={:?}; only `web` compiles to Playwright",
                         t.kind
                     ),
-                })
+                }
+                .into())
             };
         }
     }
-    Err(RunnerError::PlaywrightUnsupported {
-        reason: "scenario has no `target: { kind: web, ... }` step".to_owned(),
-    })
+    Err(PlaywrightError::Unsupported {
+        reason: format!(
+            "scenario has no `target: {{ kind: web, ... }}` step (first step is `{}`)",
+            scenario.steps.first().map_or("<empty>", step_kind)
+        ),
+    }
+    .into())
 }
 
 #[cfg(test)]
@@ -206,7 +140,11 @@ mod tests {
         use serde_yaml::with::singleton_map_recursive;
         let de = Deserializer::from_str(yaml);
         let scenario: Scenario = singleton_map_recursive::deserialize(de)?;
-        Ok(compile_scenario(&scenario)?)
+        let source = ScenarioSource {
+            path: "scenarios/unit.yaml".to_owned(),
+            digest: "sha256:0".to_owned(),
+        };
+        Ok(compile_scenario(&scenario, &source)?)
     }
 
     fn assert_contains(haystack: &str, needle: &str) -> TestResult {
@@ -214,6 +152,14 @@ mod tests {
             Ok(())
         } else {
             Err(format!("expected `{needle}` in output, got:\n{haystack}").into())
+        }
+    }
+
+    fn assert_missing(haystack: &str, needle: &str) -> TestResult {
+        if haystack.contains(needle) {
+            Err(format!("did not expect `{needle}` in output, got:\n{haystack}").into())
+        } else {
+            Ok(())
         }
     }
 
@@ -233,14 +179,45 @@ steps:
         let spec = compile(yaml)?;
         assert_eq!(spec.browsers, vec![Browser::Chrome, Browser::Firefox]);
         let s = &spec.spec_ts;
+        assert_contains(s, "// AUTO-GENERATED by mirroir-run — DO NOT EDIT.")?;
+        assert_contains(s, "// Source: scenarios/unit.yaml")?;
+        assert_contains(s, "// Source hash: sha256:0")?;
         assert_contains(s, "import { test, expect } from '@playwright/test';")?;
         assert_contains(s, "test(\"connect-and-broadcast\"")?;
         assert_contains(s, "await page.goto(\"http://localhost:8081/\")")?;
         assert_contains(s, "await _by(page, \"Connected\").waitFor")?;
-        assert_contains(s, "await _by(page, \"prompt-input\").click();")?;
-        assert_contains(s, "await page.keyboard.type(\"hello\");")?;
-        assert_contains(s, "await _by(page, \"send\").click();")?;
-        assert_contains(s, "await expect(_by(page, \"delivered\")).toBeVisible();")?;
+        assert_contains(
+            s,
+            "await _by(page, \"prompt-input\").click({ timeout: 30000 });",
+        )?;
+        // `type:` clears and fills the element the preceding tap touched — no
+        // keystrokes at whatever happens to hold focus.
+        assert_contains(
+            s,
+            "await _by(page, \"prompt-input\").fill(\"hello\", { timeout: 30000 });",
+        )?;
+        assert_missing(s, "page.keyboard.type")?;
+        assert_contains(s, "await _by(page, \"send\").click({ timeout: 30000 });")?;
+        assert_contains(
+            s,
+            "await expect(_by(page, \"delivered\")).toBeVisible({ timeout: 30000 });",
+        )?;
+        // The browser-side invariants every scenario gets for free.
+        assert_contains(s, "page.on('pageerror'")?;
+        assert_contains(s, "page.on('response'")?;
+        assert_contains(
+            s,
+            "expect(_captures.page_errors, 'uncaught page errors').toEqual([]);",
+        )?;
+        assert_contains(
+            s,
+            "expect(_captures.failed_requests, 'failed requests').toEqual([]);",
+        )?;
+        // Every compiled scenario closes on the captures attachment.
+        assert_contains(
+            s,
+            "await test.info().attach('mirroir-captures', { body: JSON.stringify(_captures), contentType: 'application/json' });",
+        )?;
         Ok(())
     }
 
@@ -262,9 +239,23 @@ steps:
             s,
             "if (/^(role|text|xpath|css|id|data-testid)=/.test(label)) return page.locator(label);",
         )?;
+        // Bare labels resolve in Playwright's own priority: role first, the
+        // test attribute after the user-facing locators, visible text last.
+        let role_at = s
+            .find("page.getByRole('button', { name: label, exact: true })")
+            .ok_or("default chain lost its getByRole branch")?;
+        let test_attr_at = s
+            .find("page.locator(`[data-test=")
+            .ok_or("default chain lost its data-test branch")?;
+        let text_at = s
+            .find("page.getByText(label, { exact: true })")
+            .ok_or("default chain lost its getByText branch")?;
+        if !(role_at < test_attr_at && test_attr_at < text_at) {
+            return Err(format!("default chain is out of priority order:\n{s}").into());
+        }
         assert_contains(
             s,
-            "await _by(page, \"role=button[name=\\\"Submit\\\"]\").click();",
+            "await _by(page, \"role=button[name=\\\"Submit\\\"]\").click({ timeout: 30000 });",
         )?;
         Ok(())
     }
@@ -293,50 +284,102 @@ version: 1
 name: mixed
 steps:
   - target: { kind: web, browsers: [chrome], url: "http://localhost/" }
+  - tap: "Send"
   - spawn: { id: server, command: "echo hi" }
   - http: { method: GET, url: "http://x/" }
-  - judge: { profile: fast-ci, user_prompt_template_hash: "sha256:abc", response_selector: "[data-test=reply]", pass_threshold: 0.9 }
-  - tap: "Send"
 "#;
         let spec = compile(yaml)?;
         let s = &spec.spec_ts;
         assert_contains(s, "// step (handled outside Playwright): spawn")?;
         assert_contains(s, "// step (handled outside Playwright): http")?;
-        assert_contains(s, "// step (handled outside Playwright): judge")?;
-        assert_contains(s, "await _by(page, \"Send\").click();")?;
+        assert_contains(s, "await _by(page, \"Send\").click({ timeout: 30000 });")?;
         Ok(())
     }
 
     #[test]
-    fn compiles_response_capture_writes_innertext_to_file() -> TestResult {
-        use serde_yaml::Deserializer;
-        use serde_yaml::with::singleton_map_recursive;
+    fn judge_response_selector_is_captured_into_the_attachment_not_a_file() -> TestResult {
         let yaml = r#"
 version: 1
-name: cap
+name: judged
 steps:
   - target: { kind: web, browsers: [chrome], url: "http://x/" }
   - tap: "Send"
+  - judge: { profile: fast-ci, user_prompt_template_hash: "sha256:abc", response_selector: "[data-test=reply]", pass_threshold: 0.9 }
 "#;
-        let de = Deserializer::from_str(yaml);
-        let scenario: Scenario = singleton_map_recursive::deserialize(de)?;
-        let caps = vec![ResponseCapture {
-            selector: "[data-test=reply]".to_owned(),
-            out_path: "/tmp/judge-response.txt".to_owned(),
-        }];
-        let spec = compile_scenario_with_captures(&scenario, &caps)?;
+        let spec = compile(yaml)?;
         let s = &spec.spec_ts;
-        assert_contains(s, "import { writeFileSync } from 'node:fs';")?;
         assert_contains(
             s,
-            "const _v = await _by(page, \"[data-test=reply]\").innerText();",
+            "_captures.judge[\"2\"] = await _by(page, \"[data-test=reply]\").innerText();",
         )?;
-        assert_contains(s, "writeFileSync(\"/tmp/judge-response.txt\", _v)")?;
-        // No capture import leaks into a plain compile.
-        let plain = compile_scenario(&scenario)?;
-        if plain.spec_ts.contains("node:fs") {
-            return Err("plain compile must not import fs".into());
-        }
+        // The file round-trip this replaces is gone for good.
+        assert_missing(s, "writeFileSync")?;
+        assert_missing(s, "node:fs")?;
+        Ok(())
+    }
+
+    #[test]
+    fn judge_with_an_inline_response_needs_no_capture() -> TestResult {
+        let yaml = r#"
+version: 1
+name: inline-judged
+steps:
+  - target: { kind: web, browsers: [chrome], url: "http://x/" }
+  - tap: "Send"
+  - judge:
+      profile: fast-ci
+      user_prompt_template_hash: "sha256:abc"
+      response_selector: "[data-test=reply]"
+      pass_threshold: 0.9
+      response_text: "already captured"
+"#;
+        let spec = compile(yaml)?;
+        assert_missing(&spec.spec_ts, "_captures.judge")?;
+        Ok(())
+    }
+
+    #[test]
+    fn cross_surface_capture_is_emitted_at_its_step_position() -> TestResult {
+        let yaml = r#"
+version: 1
+name: cross
+steps:
+  - target: { kind: web, browsers: [chrome], url: "http://x/" }
+  - tap: "Send"
+  - cross_surface:
+      response_files: ["/tmp/a.txt", "/tmp/b.txt"]
+      min_similarity: 0.5
+      capture: { selector: "main", to: "/tmp/b.txt" }
+"#;
+        let spec = compile(yaml)?;
+        assert_contains(
+            &spec.spec_ts,
+            "_captures.cross_surface[\"2\"] = await _by(page, \"main\").innerText();",
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn measure_times_its_action_into_the_metrics_capture() -> TestResult {
+        let yaml = r#"
+version: 1
+name: measured
+steps:
+  - target: { kind: web, browsers: [chrome], url: "http://x/" }
+  - measure: { name: "first_token_latency", action: "tap:send", until: "streaming-caret", max_seconds: 5 }
+"#;
+        let spec = compile(yaml)?;
+        let s = &spec.spec_ts;
+        assert_contains(s, "const _t0 = Date.now();")?;
+        assert_contains(s, "await _by(page, \"send\").click({ timeout: 30000 });")?;
+        assert_contains(
+            s,
+            "await _by(page, \"streaming-caret\").waitFor({ state: 'visible', timeout: 5000 });",
+        )?;
+        assert_contains(
+            s,
+            "_captures.metrics[\"first_token_latency\"] = Date.now() - _t0;",
+        )?;
         Ok(())
     }
 
@@ -350,7 +393,7 @@ steps:
 "#;
         let res = compile(yaml);
         let Err(boxed) = res else {
-            return Err("expected PlaywrightUnsupported".into());
+            return Err("expected Unsupported".into());
         };
         if !boxed
             .to_string()
@@ -372,25 +415,11 @@ steps:
 "#;
         let res = compile(yaml);
         let Err(boxed) = res else {
-            return Err("expected PlaywrightUnsupported".into());
+            return Err("expected Unsupported".into());
         };
         if !boxed.to_string().contains("only `web` compiles") {
             return Err(format!("wrong error: {boxed}").into());
         }
-        Ok(())
-    }
-
-    #[test]
-    fn emits_playwright_config_with_all_three_browsers() -> TestResult {
-        let cfg = emit_playwright_config(&[Browser::Chrome, Browser::Firefox, Browser::Webkit])?;
-        assert_contains(&cfg, "import { defineConfig, devices }")?;
-        assert_contains(&cfg, "name: 'chromium'")?;
-        assert_contains(&cfg, "name: 'firefox'")?;
-        assert_contains(&cfg, "name: 'webkit'")?;
-        assert_contains(&cfg, "devices['Desktop Chrome']")?;
-        assert_contains(&cfg, "devices['Desktop Firefox']")?;
-        assert_contains(&cfg, "devices['Desktop Safari']")?;
-        assert_contains(&cfg, "playwright-report.json")?;
         Ok(())
     }
 

@@ -1,42 +1,30 @@
-// ABOUTME: Invoke `npx playwright test` against a compiled spec, ingest JSON reporter, return verdict.
-// ABOUTME: One-shot per scenario; npx must be on PATH (or supplied via PlaywrightRunner::with_npx).
+// ABOUTME: Invoke `npx playwright test` against a compiled spec, ingest JSON reporter, return outcome.
+// ABOUTME: The workspace persists under target/playwright/, so trace/video/screenshot outlive the run.
 
 use std::env;
 use std::ffi::OsStr;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Stdio;
 
-use serde::Deserialize;
-use tempfile::TempDir;
 use tokio::fs;
 use tokio::process::Command;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
-use crate::compile::playwright::{PlaywrightSpec, emit_playwright_config};
-use crate::error::{Result, RunnerError};
+use crate::compile::error::PlaywrightError;
+use crate::compile::playwright::PlaywrightSpec;
+use crate::compile::report::{PlaywrightOutcome, parse_report_body};
+use crate::compile::workspace::PlaywrightWorkspace;
+use crate::error::Result;
 
-/// Per-scenario summary of Playwright test outcomes across all browser projects.
-///
-/// `passed + failed + skipped + flaky` equals the total result records the JSON
-/// reporter wrote — one per (test × browser project × retry) tuple.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct PlaywrightVerdict {
-    /// Number of result records with `status: "passed"`.
-    pub passed: usize,
-    /// Number of result records with `status: "failed"`.
-    pub failed: usize,
-    /// Number of result records with `status: "skipped"`.
-    pub skipped: usize,
-    /// Number of result records with `status: "flaky"` (passed on retry).
-    pub flaky: usize,
-}
+/// Maximum bytes of subprocess output kept for diagnostics.
+const OUTPUT_TAIL_BYTES: usize = 4096;
 
 /// Driver for spawning a Playwright invocation.
 ///
-/// Constructed once per process — typically inside [`crate::replay`] when the
-/// first web step is encountered. Reuses no state across calls; every
-/// [`Self::run`] gets its own tempdir workspace.
+/// Constructed once per scenario — the whole scenario compiles to a single
+/// spec, so a scenario is exactly one [`Self::run`]. Reuses no state across
+/// calls; every run owns the workspace directory it is handed.
 pub struct PlaywrightRunner {
     npx: PathBuf,
 }
@@ -46,7 +34,7 @@ impl PlaywrightRunner {
     ///
     /// # Errors
     ///
-    /// [`RunnerError::PlaywrightNotInstalled`] when no `npx` is on `PATH`.
+    /// [`PlaywrightError::NotInstalled`] when no `npx` is on `PATH`.
     pub fn from_env() -> Result<Self> {
         let path = env::var_os("PATH").unwrap_or_default();
         Self::from_path(&path)
@@ -57,11 +45,11 @@ impl PlaywrightRunner {
     ///
     /// # Errors
     ///
-    /// [`RunnerError::PlaywrightNotInstalled`] when no `npx` is on `path`.
+    /// [`PlaywrightError::NotInstalled`] when no `npx` is on `path`.
     pub fn from_path(path: &OsStr) -> Result<Self> {
         which_in(path, "npx")
             .map(|npx| Self { npx })
-            .ok_or(RunnerError::PlaywrightNotInstalled)
+            .ok_or_else(|| PlaywrightError::NotInstalled.into())
     }
 
     /// Override the binary used as `npx`. Test-only — production callers go
@@ -71,187 +59,109 @@ impl PlaywrightRunner {
         Self { npx }
     }
 
-    /// Compile + write workspace + invoke Playwright + ingest the JSON reporter.
+    /// Write the workspace at `root`, invoke Playwright, and ingest the JSON
+    /// reporter.
+    ///
+    /// The workspace directory is recreated empty on every call and left in
+    /// place afterwards:
+    /// the trace, video, screenshot, and HTML report Playwright writes for a
+    /// failing test are the whole point of running it, and a tempdir would
+    /// delete them at exactly the moment they became useful.
     ///
     /// # Errors
     ///
-    /// * [`RunnerError::PlaywrightWorkspace`] on workspace setup failure.
-    /// * [`RunnerError::PlaywrightInvoke`] when npx exits non-zero AND
-    ///   no `playwright-report.json` was produced.
-    /// * [`RunnerError::PlaywrightReport`] when the report JSON can't be parsed.
-    /// * [`RunnerError::PlaywrightTestFailures`] when at least one result has
-    ///   `status: "failed"`.
-    pub async fn run(&self, spec: &PlaywrightSpec) -> Result<PlaywrightVerdict> {
-        let workspace = build_workspace(spec).await?;
-        self.spawn_npx(&workspace).await?;
-        parse_report(&workspace).await
+    /// * [`PlaywrightError::Workspace`] on workspace setup failure.
+    /// * [`PlaywrightError::Invoke`] when npx exits non-zero AND no
+    ///   `playwright-report.json` was produced.
+    /// * Anything [`parse_report_body`] returns — a parse failure, per-test
+    ///   failures, an empty report, or an undecodable captures attachment.
+    pub async fn run(
+        &self,
+        spec: &PlaywrightSpec,
+        target: &PlaywrightWorkspace,
+    ) -> Result<PlaywrightOutcome> {
+        target.materialize(&spec.spec_ts, &spec.browsers).await?;
+        self.spawn_npx(target).await?;
+        let report_path = target.report_path();
+        let path = report_path.display().to_string();
+        let body = fs::read_to_string(&report_path).await.map_err(|source| {
+            PlaywrightError::Workspace {
+                context: format!("read {path}"),
+                source,
+            }
+        })?;
+        parse_report_body(&path, &body)
     }
 
-    async fn spawn_npx(&self, workspace: &Workspace) -> Result<()> {
+    async fn spawn_npx(&self, workspace: &PlaywrightWorkspace) -> Result<()> {
         let mut cmd = Command::new(&self.npx);
         cmd.arg("-p")
             .arg("@playwright/test")
             .arg("playwright")
             .arg("test")
             .arg("--config")
-            .arg(&workspace.config_path)
-            .arg(&workspace.spec_path)
-            .current_dir(workspace.root())
+            .arg(workspace.config_path())
+            .arg(workspace.spec_path())
+            .current_dir(&workspace.dir)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        debug!(npx = %self.npx.display(), workspace = %workspace.root().display(), "spawning playwright");
+        debug!(npx = %self.npx.display(), workspace = %workspace.dir.display(), "spawning playwright");
 
         let output = match cmd.output().await {
             Ok(out) => out,
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                return Err(RunnerError::PlaywrightNotInstalled);
+                return Err(PlaywrightError::NotInstalled.into());
             }
             Err(source) => {
-                return Err(RunnerError::PlaywrightWorkspace {
+                return Err(PlaywrightError::Workspace {
                     context: "spawn npx playwright test".to_owned(),
                     source,
-                });
+                }
+                .into());
             }
         };
 
-        info!(
-            status = ?output.status.code(),
-            stdout_bytes = output.stdout.len(),
-            stderr_bytes = output.stderr.len(),
-            "playwright invocation finished"
-        );
+        // Playwright narrates itself on stdout and reports config / install
+        // failures on stderr. Both are kept, not counted: a byte count tells a
+        // reader nothing about why the invocation went the way it did.
+        let stdout_tail = tail(&output.stdout);
+        let stderr_tail = tail(&output.stderr);
+        if output.status.success() {
+            info!(status = ?output.status.code(), "playwright invocation finished");
+            debug!(stdout = %stdout_tail, stderr = %stderr_tail, "playwright output");
+        } else {
+            warn!(
+                status = ?output.status.code(),
+                stdout = %stdout_tail,
+                stderr = %stderr_tail,
+                "playwright invocation exited non-zero"
+            );
+        }
 
-        // Defer exit-code interpretation to parse_report: when the JSON
-        // reporter has structured failure detail, PlaywrightTestFailures is
-        // more informative than the raw exit code. parse_report still errors
-        // when the report is empty (total == 0), which catches config errors
-        // and other non-test failure paths.
-        if !output.status.success() && !workspace.report_path.exists() {
-            return Err(RunnerError::PlaywrightInvoke {
+        // Defer exit-code interpretation to the reporter ingest: when the JSON
+        // report has structured failure detail, `TestFailures` names the
+        // locator that failed and the raw exit code adds nothing. The ingest
+        // still errors on an empty report, which catches config errors and
+        // other non-test failure paths.
+        if !output.status.success() && !workspace.report_path().exists() {
+            return Err(PlaywrightError::Invoke {
                 status: output.status.code(),
-                stderr_tail: tail_stderr(&output.stderr),
-            });
+                stdout_tail,
+                stderr_tail,
+            }
+            .into());
         }
         Ok(())
     }
 }
 
-struct Workspace {
-    dir: TempDir,
-    config_path: PathBuf,
-    spec_path: PathBuf,
-    report_path: PathBuf,
-}
-
-impl Workspace {
-    fn root(&self) -> &Path {
-        self.dir.path()
-    }
-}
-
-async fn build_workspace(spec: &PlaywrightSpec) -> Result<Workspace> {
-    let dir = TempDir::new().map_err(|source| RunnerError::PlaywrightWorkspace {
-        context: "create tempdir".to_owned(),
-        source,
-    })?;
-    let config_path = dir.path().join("playwright.config.ts");
-    let spec_path = dir.path().join("scenario.spec.ts");
-    let report_path = dir.path().join("playwright-report.json");
-
-    let config = emit_playwright_config(&spec.browsers)?;
-    fs::write(&config_path, config)
-        .await
-        .map_err(|source| RunnerError::PlaywrightWorkspace {
-            context: format!("write {}", config_path.display()),
-            source,
-        })?;
-    fs::write(&spec_path, &spec.spec_ts)
-        .await
-        .map_err(|source| RunnerError::PlaywrightWorkspace {
-            context: format!("write {}", spec_path.display()),
-            source,
-        })?;
-    link_playwright_home(dir.path()).await?;
-    Ok(Workspace {
-        dir,
-        config_path,
-        spec_path,
-        report_path,
-    })
-}
-
-/// If `MIRROIR_PLAYWRIGHT_HOME` points at a directory containing
-/// `node_modules/@playwright/test`, symlink that `node_modules/` into the
-/// workspace so the emitted `playwright.config.ts` can resolve its imports.
-///
-/// Silently no-ops when the env var is unset or the target dir is missing —
-/// in those cases the runner relies on `npx` to find Playwright via its own
-/// cache (works only when @playwright/test is installed globally).
-async fn link_playwright_home(workspace_root: &Path) -> Result<()> {
-    let Some(home) = env::var_os("MIRROIR_PLAYWRIGHT_HOME") else {
-        return Ok(());
-    };
-    let src = PathBuf::from(home).join("node_modules");
-    if !src.is_dir() {
-        debug!(src = %src.display(), "MIRROIR_PLAYWRIGHT_HOME has no node_modules; skipping link");
-        return Ok(());
-    }
-    let dst = workspace_root.join("node_modules");
-    #[cfg(unix)]
-    {
-        fs::symlink(&src, &dst)
-            .await
-            .map_err(|source| RunnerError::PlaywrightWorkspace {
-                context: format!("symlink {} → {}", src.display(), dst.display()),
-                source,
-            })?;
-        debug!(src = %src.display(), dst = %dst.display(), "linked playwright home");
-    }
-    #[cfg(not(unix))]
-    {
-        // Non-unix platforms aren't a target right now; left as a no-op.
-        let _ = (src, dst);
-    }
-    Ok(())
-}
-
-async fn parse_report(workspace: &Workspace) -> Result<PlaywrightVerdict> {
-    let body = fs::read_to_string(&workspace.report_path)
-        .await
-        .map_err(|source| RunnerError::PlaywrightWorkspace {
-            context: format!("read {}", workspace.report_path.display()),
-            source,
-        })?;
-    let parsed: ReporterRoot =
-        serde_json::from_str(&body).map_err(|source| RunnerError::PlaywrightReport {
-            path: workspace.report_path.display().to_string(),
-            source,
-        })?;
-    let mut verdict = PlaywrightVerdict::default();
-    walk_suites(&parsed.suites, &mut verdict);
-    let total = verdict.passed + verdict.failed + verdict.skipped + verdict.flaky;
-    if verdict.failed > 0 {
-        return Err(RunnerError::PlaywrightTestFailures {
-            failed: verdict.failed,
-            total,
-        });
-    }
-    if total == 0 {
-        return Err(RunnerError::PlaywrightTestFailures {
-            failed: 0,
-            total: 0,
-        });
-    }
-    Ok(verdict)
-}
-
-fn tail_stderr(buf: &[u8]) -> String {
-    const MAX_BYTES: usize = 4096;
-    let slice = if buf.len() <= MAX_BYTES {
+/// Keep the last [`OUTPUT_TAIL_BYTES`] of a subprocess stream, lossily decoded.
+fn tail(buf: &[u8]) -> String {
+    let slice = if buf.len() <= OUTPUT_TAIL_BYTES {
         buf
     } else {
-        &buf[buf.len() - MAX_BYTES..]
+        &buf[buf.len() - OUTPUT_TAIL_BYTES..]
     };
     String::from_utf8_lossy(slice).into_owned()
 }
@@ -268,66 +178,25 @@ fn which_in(path: &OsStr, name: &str) -> Option<PathBuf> {
     None
 }
 
-#[derive(Deserialize)]
-struct ReporterRoot {
-    #[serde(default)]
-    suites: Vec<ReporterSuite>,
-}
-
-#[derive(Deserialize)]
-struct ReporterSuite {
-    #[serde(default)]
-    specs: Vec<ReporterSpec>,
-    #[serde(default)]
-    suites: Vec<Self>,
-}
-
-#[derive(Deserialize)]
-struct ReporterSpec {
-    #[serde(default)]
-    tests: Vec<ReporterTest>,
-}
-
-#[derive(Deserialize)]
-struct ReporterTest {
-    #[serde(default)]
-    results: Vec<ReporterResult>,
-}
-
-#[derive(Deserialize)]
-struct ReporterResult {
-    status: String,
-}
-
-fn walk_suites(suites: &[ReporterSuite], verdict: &mut PlaywrightVerdict) {
-    for suite in suites {
-        for spec in &suite.specs {
-            for t in &spec.tests {
-                for r in &t.results {
-                    match r.status.as_str() {
-                        "passed" | "expected" => verdict.passed += 1,
-                        "failed" | "unexpected" => verdict.failed += 1,
-                        "skipped" => verdict.skipped += 1,
-                        "flaky" => verdict.flaky += 1,
-                        _ => {}
-                    }
-                }
-            }
-        }
-        walk_suites(&suite.suites, verdict);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::error::Error as StdError;
     use std::os::unix::fs::PermissionsExt;
     use std::result::Result as StdResult;
 
+    use std::path::Path;
+
+    use tempfile::TempDir;
+
     use super::*;
+    use crate::error::RunnerError;
     use crate::parser::step::Browser;
 
     type TestResult = StdResult<(), Box<dyn StdError>>;
+
+    fn workspace(scratch: &Path) -> PlaywrightWorkspace {
+        PlaywrightWorkspace::for_scenario(scratch, None, "unit")
+    }
 
     fn sample_spec() -> PlaywrightSpec {
         PlaywrightSpec {
@@ -363,31 +232,61 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn run_returns_verdict_on_all_passing_report() -> TestResult {
+    async fn run_returns_outcome_on_all_passing_report() -> TestResult {
         let scratch = TempDir::new()?;
-        let canned =
-            r#"{"suites":[{"specs":[{"tests":[{"results":[{"status":"passed"}]}]}],"suites":[]}]}"#;
+        let canned = r#"{"suites":[{"title":"s","specs":[{"title":"t","tests":[{"results":[{"status":"passed"}]}]}],"suites":[]}]}"#;
         let stub = make_stub_npx(scratch.path(), canned, 0).await?;
         let runner = PlaywrightRunner::with_npx(stub);
-        let verdict = runner.run(&sample_spec()).await?;
-        assert_eq!(verdict.passed, 1);
-        assert_eq!(verdict.failed, 0);
+        let outcome = runner
+            .run(&sample_spec(), &workspace(scratch.path()))
+            .await?;
+        assert_eq!(outcome.verdict.passed, 1);
+        assert_eq!(outcome.verdict.failed, 0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn run_carries_captures_out_of_the_attachment() -> TestResult {
+        let scratch = TempDir::new()?;
+        let canned = include_str!("fixtures/playwright-captures.json");
+        let stub = make_stub_npx(scratch.path(), canned, 0).await?;
+        let runner = PlaywrightRunner::with_npx(stub);
+        let outcome = runner
+            .run(&sample_spec(), &workspace(scratch.path()))
+            .await?;
+        assert_eq!(
+            outcome.captures.judge.get("6").map(String::as_str),
+            Some("The reply mentions WebSocket and SSE.")
+        );
         Ok(())
     }
 
     #[tokio::test]
     async fn run_returns_failure_when_report_has_failed_test() -> TestResult {
         let scratch = TempDir::new()?;
-        let canned =
-            r#"{"suites":[{"specs":[{"tests":[{"results":[{"status":"failed"}]}]}],"suites":[]}]}"#;
+        let canned = include_str!("fixtures/playwright-strict-mode.json");
         let stub = make_stub_npx(scratch.path(), canned, 1).await?;
         let runner = PlaywrightRunner::with_npx(stub);
-        let res = runner.run(&sample_spec()).await;
-        let Err(RunnerError::PlaywrightTestFailures { failed, total }) = res else {
-            return Err(format!("expected PlaywrightTestFailures, got {res:?}").into());
+        let res = runner.run(&sample_spec(), &workspace(scratch.path())).await;
+        let Err(RunnerError::Playwright(PlaywrightError::TestFailures {
+            failed,
+            total,
+            failures,
+        })) = res
+        else {
+            return Err(format!("expected TestFailures, got {res:?}").into());
         };
         if failed != 1 || total != 1 {
             return Err(format!("wrong counts: failed={failed} total={total}").into());
+        }
+        let Some(first) = failures.first() else {
+            return Err("no failure detail captured".into());
+        };
+        if !first
+            .message
+            .contains("strict mode violation: resolved to 3 elements")
+        {
+            return Err(format!("locator text lost: {}", first.message).into());
         }
         Ok(())
     }
@@ -397,27 +296,75 @@ mod tests {
         let scratch = TempDir::new()?;
         // Stub that exits non-zero and does NOT write any report.json.
         let script_path = scratch.path().join("fake-npx");
-        let script = "#!/bin/sh\necho 'simulated failure' >&2\nexit 17\n";
+        let script = "#!/bin/sh\necho 'stdout detail' \necho 'simulated failure' >&2\nexit 17\n";
         fs::write(&script_path, script).await?;
         let mut perms = fs::metadata(&script_path).await?.permissions();
         perms.set_mode(0o755);
         fs::set_permissions(&script_path, perms).await?;
 
         let runner = PlaywrightRunner::with_npx(script_path);
-        let res = runner.run(&sample_spec()).await;
-        let Err(RunnerError::PlaywrightInvoke {
+        let res = runner.run(&sample_spec(), &workspace(scratch.path())).await;
+        let Err(RunnerError::Playwright(PlaywrightError::Invoke {
             status,
+            stdout_tail,
             stderr_tail,
-            ..
-        }) = res
+        })) = res
         else {
-            return Err(format!("expected PlaywrightInvoke, got {res:?}").into());
+            return Err(format!("expected Invoke, got {res:?}").into());
         };
         if status != Some(17) {
             return Err(format!("expected status 17, got {status:?}").into());
         }
         if !stderr_tail.contains("simulated failure") {
             return Err(format!("stderr_tail missing message: {stderr_tail}").into());
+        }
+        if !stdout_tail.contains("stdout detail") {
+            return Err(format!("stdout_tail missing message: {stdout_tail}").into());
+        }
+        Ok(())
+    }
+
+    /// A tempdir workspace deleted the trace, video, and screenshot at the
+    /// exact moment they became useful. The workspace is a real directory now
+    /// and everything Playwright wrote into it is still there afterwards.
+    #[tokio::test]
+    async fn the_workspace_and_its_artifacts_survive_the_run() -> TestResult {
+        let scratch = TempDir::new()?;
+        let canned = r#"{"suites":[{"title":"s","specs":[{"title":"t","tests":[{"results":[{"status":"passed"}]}]}],"suites":[]}]}"#;
+        let stub = make_stub_npx(scratch.path(), canned, 0).await?;
+        let runner = PlaywrightRunner::with_npx(stub);
+        let target = workspace(scratch.path());
+        runner.run(&sample_spec(), &target).await?;
+
+        for path in [
+            target.spec_path(),
+            target.config_path(),
+            target.report_path(),
+        ] {
+            if !path.exists() {
+                return Err(format!("{} did not survive the run", path.display()).into());
+            }
+        }
+        Ok(())
+    }
+
+    /// A second run of the same scenario must not read as carrying the first
+    /// run's evidence, so the workspace is recreated empty each time.
+    #[tokio::test]
+    async fn a_rerun_clears_the_previous_run_artifacts() -> TestResult {
+        let scratch = TempDir::new()?;
+        let canned = r#"{"suites":[{"title":"s","specs":[{"title":"t","tests":[{"results":[{"status":"passed"}]}]}],"suites":[]}]}"#;
+        let stub = make_stub_npx(scratch.path(), canned, 0).await?;
+        let runner = PlaywrightRunner::with_npx(stub);
+        let target = workspace(scratch.path());
+        runner.run(&sample_spec(), &target).await?;
+
+        let stale = target.dir.join("test-results").join("trace.zip");
+        fs::create_dir_all(target.dir.join("test-results")).await?;
+        fs::write(&stale, "stale").await?;
+        runner.run(&sample_spec(), &target).await?;
+        if stale.exists() {
+            return Err("a previous run's artifact survived into the next run".into());
         }
         Ok(())
     }
@@ -426,14 +373,20 @@ mod tests {
     fn from_path_returns_not_installed_when_npx_absent() -> TestResult {
         // An empty path string yields no candidate directories.
         let res = PlaywrightRunner::from_path(OsStr::new(""));
-        if !matches!(res, Err(RunnerError::PlaywrightNotInstalled)) {
-            return Err(format!("expected PlaywrightNotInstalled, got {:?}", res.err()).into());
+        if !matches!(
+            res,
+            Err(RunnerError::Playwright(PlaywrightError::NotInstalled))
+        ) {
+            return Err(format!("expected NotInstalled, got {:?}", res.err()).into());
         }
         // A path pointing at a directory with no `npx` also yields the error.
         let empty_dir = TempDir::new()?;
         let res2 = PlaywrightRunner::from_path(empty_dir.path().as_os_str());
-        if !matches!(res2, Err(RunnerError::PlaywrightNotInstalled)) {
-            return Err(format!("expected PlaywrightNotInstalled, got {:?}", res2.err()).into());
+        if !matches!(
+            res2,
+            Err(RunnerError::Playwright(PlaywrightError::NotInstalled))
+        ) {
+            return Err(format!("expected NotInstalled, got {:?}", res2.err()).into());
         }
         Ok(())
     }
@@ -447,27 +400,6 @@ mod tests {
         fs::rename(&stub, &renamed).await?;
         // If from_path errored we'd never get here; that itself is the assertion.
         let _runner = PlaywrightRunner::from_path(dir.path().as_os_str())?;
-        Ok(())
-    }
-
-    #[test]
-    fn walk_suites_counts_nested_suites() -> TestResult {
-        let json = r#"{
-            "suites": [
-              {
-                "specs": [{"tests": [{"results": [{"status": "passed"}]}]}],
-                "suites": [
-                  {"specs": [{"tests": [{"results": [{"status": "failed"}, {"status": "flaky"}]}]}], "suites": []}
-                ]
-              }
-            ]
-        }"#;
-        let root: ReporterRoot = serde_json::from_str(json)?;
-        let mut v = PlaywrightVerdict::default();
-        walk_suites(&root.suites, &mut v);
-        assert_eq!(v.passed, 1);
-        assert_eq!(v.failed, 1);
-        assert_eq!(v.flaky, 1);
         Ok(())
     }
 }

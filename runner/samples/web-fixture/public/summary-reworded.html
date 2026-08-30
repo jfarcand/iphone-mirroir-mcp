@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Order summary — mirroir web fixture</title>
+<link rel="stylesheet" href="fixture.css">
+</head>
+<body>
+<h1 data-test="page-title">Order summary</h1>
+
+<!-- The reworded twin of summary.html. Same button, same data-test
+     attributes, same state change — every structural assertion a scenario
+     makes against summary.html holds here too. Only the confirmation's wording
+     moved, which is exactly the change Playwright's four statuses cannot
+     express and the DRIFT verdict exists for. -->
+<p>Widget &times; 1 &mdash; $19.00</p>
+<p>
+  <button type="button" data-test="place-order">Place order</button>
+</p>
+
+<p class="result" data-test="order-summary">Nothing ordered yet.</p>
+
+<script>
+document.querySelector('[data-test=place-order]').addEventListener('click', () => {
+  document.querySelector('[data-test=order-summary]').textContent =
+    'We have received your purchase request, chief. A single gadget goes out in the morning for a fee of $19.';
+});
+</script>
+</body>
+</html>

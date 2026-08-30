@@ -111,21 +111,25 @@ mirroir-run --sample samples/mega-sample --scenarios nice-to-pass
 
 # Run both, in order: must_pass first then nice_to_pass
 mirroir-run --sample samples/mega-sample --scenarios all
-
-# Skip web batches (process + http + judge + drift only)
-mirroir-run --sample samples/mega-sample --no-playwright
 ```
 
 ## Reference: the `mega-sample` walk-through
 
-`runner/samples/mega-sample/` exercises every primitive in four scenarios:
+`runner/samples/mega-sample/` exercises every primitive in five scenarios:
 
 | Scenario | Drives |
 |---|---|
 | `scenarios/web-cross-browser.yaml` | Playwright across chromium + firefox + webkit |
+| `scenarios/web-locator-engines.yaml` | `role=` / `text=` locator-engine pass-through (chromium) |
 | `scenarios/http-probe.yaml` | reqwest GET 200 + body match |
 | `scenarios/judge-and-drift.yaml` | Ollama judge + drift vs. baseline |
 | `scenarios/cross-surface.yaml` | Pairwise fingerprint equivalence (web ↔ iOS captures) |
+
+`runner/samples/web-fixture/` is the hermetic companion: static HTML served by
+`python3 -m http.server`, driven through Playwright with no Ollama and no
+network. Its `scenarios/login.yaml` is the reference contiguous web block —
+process lifecycle and HTTP probes in Rust, one adjacent run of web steps
+between them.
 
 Run it locally:
 

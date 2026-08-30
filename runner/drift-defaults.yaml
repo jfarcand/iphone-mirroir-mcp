@@ -1,0 +1,32 @@
+# ABOUTME: Global drift thresholds — the outermost layer of the fail-closed hierarchy.
+# ABOUTME: A scenario `drift:` block or an APP.md `drift_defaults:` block overrides any line here.
+#
+# Resolution order, most specific first:
+#
+#   step (`judge.response_drift`) → scenario `drift:` → APP.md `drift_defaults:` → this file
+#
+# A metric no layer declares is not defaulted: the run stops with
+# `unspecified drift threshold for <metric>`. That is deliberate — a guessed
+# ceiling silently decides whether a semantic change is reported as DRIFT or
+# swallowed as a green run.
+#
+# The runner looks for a `drift-defaults.yaml` in this order and takes the
+# first that exists: the sample directory, `--skills <dir>` / `$MIRROIR_SKILLS`,
+# the working directory, `<cwd>/.mirroir/`, then `$HOME/.mirroir/`.
+version: 1
+
+# Jaccard similarity of the response's token set against the last green run.
+# A floor: below this the answer is made of different words.
+fingerprint_similarity: { min: 0.85 }
+
+# How far the judge's score may move between two runs of the same scenario.
+# A ceiling on the absolute delta.
+judge_score_swing: { max_delta: 0.10 }
+
+# Normalized Levenshtein distance of the response text against the last green
+# run. A ceiling: above this the answer was rewritten, not just re-tokenized.
+response_levenshtein_pct: { max: 0.25 }
+
+# How much a `measure:` latency may grow over its last green reading, as a
+# fraction. A ceiling: 0.30 is a 30% regression.
+step_latency_pct_increase: { max: 0.30 }

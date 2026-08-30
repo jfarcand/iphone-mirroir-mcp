@@ -1,7 +1,8 @@
 // ABOUTME: Archetype reference parsing for `mirroir.yaml` plan entries.
 // ABOUTME: Classifies `<pack>/<name>[@v]`, `./<path>`, and `user/<name>[@v]` refs into a typed ArchetypeRef.
 
-use crate::error::{Result, RunnerError};
+use crate::error::Result;
+use crate::mirroir::error::MirroirError;
 
 /// A parsed archetype reference. The runner consumes this via the resolver
 /// (see Stage 2) to locate the archetype on disk.
@@ -40,7 +41,7 @@ impl ArchetypeRef {
     ///
     /// # Errors
     ///
-    /// Returns [`RunnerError::MirroirInvalidArchetypeRef`] on any of:
+    /// Returns [`MirroirError::InvalidArchetypeRef`] on any of:
     /// - Empty string
     /// - Bare name with no prefix
     /// - `<pack>/` with no name component
@@ -48,10 +49,11 @@ impl ArchetypeRef {
     pub fn parse(input: &str) -> Result<Self> {
         let trimmed = input.trim();
         if trimmed.is_empty() {
-            return Err(RunnerError::MirroirInvalidArchetypeRef {
+            return Err(MirroirError::InvalidArchetypeRef {
                 value: input.to_owned(),
                 reason: "empty reference".to_owned(),
-            });
+            }
+            .into());
         }
 
         // Project-local: anything starting with `./` or `../`.
@@ -73,16 +75,17 @@ impl ArchetypeRef {
 
         // Split prefix from the rest. Need at least `<prefix>/<something>`.
         let Some((prefix, rest)) = path_part.split_once('/') else {
-            return Err(RunnerError::MirroirInvalidArchetypeRef {
+            return Err(MirroirError::InvalidArchetypeRef {
                 value: input.to_owned(),
                 reason: "bare names without a prefix are ambiguous; use `<pack>/<name>`, `./<path>`, or `user/<name>`".to_owned(),
-            });
+            }.into());
         };
         if rest.is_empty() {
-            return Err(RunnerError::MirroirInvalidArchetypeRef {
+            return Err(MirroirError::InvalidArchetypeRef {
                 value: input.to_owned(),
                 reason: format!("`{prefix}/` is missing the name component"),
-            });
+            }
+            .into());
         }
 
         if prefix == "user" {
@@ -109,6 +112,7 @@ mod tests {
     use std::result::Result as StdResult;
 
     use super::*;
+    use crate::error::RunnerError;
 
     type TestResult = StdResult<(), Box<dyn StdError>>;
 
@@ -153,7 +157,8 @@ mod tests {
     #[test]
     fn reject_bare_name() -> TestResult {
         let result = ArchetypeRef::parse("just-a-name");
-        let Err(RunnerError::MirroirInvalidArchetypeRef { value, .. }) = result else {
+        let Err(RunnerError::Mirroir(MirroirError::InvalidArchetypeRef { value, .. })) = result
+        else {
             return Err(format!("expected MirroirInvalidArchetypeRef, got {result:?}").into());
         };
         assert_eq!(value, "just-a-name");
@@ -165,7 +170,9 @@ mod tests {
         let result = ArchetypeRef::parse("   ");
         assert!(matches!(
             result,
-            Err(RunnerError::MirroirInvalidArchetypeRef { .. })
+            Err(RunnerError::Mirroir(
+                MirroirError::InvalidArchetypeRef { .. }
+            ))
         ));
     }
 
@@ -174,7 +181,9 @@ mod tests {
         let result = ArchetypeRef::parse("mirroir-skills/");
         assert!(matches!(
             result,
-            Err(RunnerError::MirroirInvalidArchetypeRef { .. })
+            Err(RunnerError::Mirroir(
+                MirroirError::InvalidArchetypeRef { .. }
+            ))
         ));
     }
 }

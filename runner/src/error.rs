@@ -4,10 +4,13 @@
 use std::fmt;
 use std::io;
 use std::ops::RangeInclusive;
-use std::path::PathBuf;
 use std::result::Result as StdResult;
 
 use thiserror::Error;
+
+use crate::compile::error::PlaywrightError;
+use crate::mirroir::error::MirroirError;
+use crate::oracle::error::OracleError;
 
 /// `Result` alias used throughout the `mirroir-run` binary.
 ///
@@ -63,6 +66,20 @@ pub enum RunnerError {
         found: u32,
         /// Inclusive range of major versions the binary supports.
         expected: RangeInclusive<u32>,
+    },
+
+    /// `mirroir-run accept` was invoked in a CI environment.
+    ///
+    /// Accept re-records every baseline from what the run observed — it is a
+    /// person saying the new output is correct. A CI job that could do that
+    /// would bless its own regressions, so the refusal is structural rather
+    /// than a documented convention.
+    #[error(
+        "`mirroir-run accept` refuses to run in CI ({variable} is set): accepting a baseline is a human review, and a job that accepts its own drift reports green forever"
+    )]
+    AcceptRefusedInCi {
+        /// The CI environment variable that was found set.
+        variable: String,
     },
 
     /// `spawn` step could not start the requested subprocess.
@@ -204,152 +221,110 @@ pub enum RunnerError {
         id: String,
     },
 
+    /// A `- report: fail` step declared the scenario a failure. The verdict is
+    /// the scenario author's, and the runner honors it rather than walking past
+    /// the step.
+    #[error("scenario `{scenario}` declared the `fail` verdict via a report: step")]
+    ScenarioReportedFailure {
+        /// Name of the scenario that declared the failure.
+        scenario: String,
+    },
+
+    /// The scenario finished without the runner evaluating anything: every step
+    /// was lifecycle-only, buffered, or of a kind that has no replay dispatch.
+    /// A run that checked nothing about the system under test is not a pass.
+    #[error(
+        "scenario `{scenario}` evaluated nothing ({steps} steps, {skipped} skipped for want of a replay dispatch)"
+    )]
+    ScenarioNothingEvaluated {
+        /// Name of the scenario.
+        scenario: String,
+        /// How many steps the scenario declared.
+        steps: usize,
+        /// How many of those the runner skipped.
+        skipped: usize,
+    },
+
     /// At least one `must_pass` scenario in a `--sample` run reported FAIL.
-    #[error("sample run: {failed} of {total} scenarios failed")]
+    ///
+    /// `first_error` carries the first failing scenario's own message so the
+    /// locator, status code, or judge score that actually failed reaches the
+    /// run summary instead of a bare count.
+    #[error("sample run: {failed} of {total} scenarios failed; first failure: {first_error}")]
     SampleScenarioFailures {
         /// Number of scenarios that returned `Err`.
         failed: usize,
         /// Total scenarios attempted in the run.
         total: usize,
+        /// Display text of the first scenario failure, verbatim.
+        first_error: String,
     },
 
-    /// Scenario can't be compiled into a Playwright `.spec.ts` file.
-    #[error("cannot compile scenario for Playwright: {reason}")]
-    PlaywrightUnsupported {
-        /// Why this scenario isn't web-compilable (missing target, wrong kind, …).
-        reason: String,
+    /// A scenario's web steps are split by a runner-side step. Every scenario
+    /// compiles to exactly one Playwright invocation, so a second run of web
+    /// steps would execute out of the order the file reads.
+    #[error(
+        "scenario splits its web steps: step {index} (`{kind}`) resumes web work after step {block_end} ended the web block and step `{separator_kind}` ran on the runner side. A scenario compiles to one Playwright invocation — move every web step into a single adjacent run"
+    )]
+    WebBlockNotContiguous {
+        /// Index of the offending web step (0-based, as the file reads).
+        index: usize,
+        /// Step kind at `index`.
+        kind: &'static str,
+        /// Index of the last web step in the scenario's first web run.
+        block_end: usize,
+        /// Kind of the runner-side step that ended the web run.
+        separator_kind: &'static str,
     },
 
-    /// Internal: failed to encode a TypeScript string literal during compilation.
-    #[error("playwright compile: {context}")]
-    PlaywrightEncode {
-        /// What was being encoded (label, scenario name, URL, …).
-        context: String,
-        /// Underlying `serde_json` encode error.
-        #[source]
-        source: serde_json::Error,
+    /// A web step reached the runner-side dispatcher. Web steps belong to the
+    /// scenario's single Playwright invocation and are never dispatched one by
+    /// one; reaching this means the execution plan and the dispatcher disagree.
+    #[error("step {index} (`{kind}`) is a web step and cannot be dispatched outside the web block")]
+    WebStepOutsideBlock {
+        /// Index of the step, as the file reads.
+        index: usize,
+        /// Step kind at `index`.
+        kind: &'static str,
+    },
+
+    /// A `measure:` step declared a `max_seconds` budget the observed latency
+    /// exceeded.
+    #[error("measure `{name}` took {observed_s:.3}s, over its {max_seconds:.3}s budget")]
+    MeasureBudgetExceeded {
+        /// The measure step's `name`.
+        name: String,
+        /// Observed latency in seconds, from the Playwright attachment.
+        observed_s: f64,
+        /// Declared ceiling in seconds.
+        max_seconds: f64,
+    },
+
+    /// A `measure:` step ran inside the web block but the invocation's
+    /// `mirroir-captures` attachment carried no timing for it.
+    #[error("measure `{name}` recorded no timing in the `mirroir-captures` attachment")]
+    MeasureNotCaptured {
+        /// The measure step's `name`.
+        name: String,
+    },
+
+    /// A `cross_surface.capture` was declared but the invocation's
+    /// `mirroir-captures` attachment carried no text for it — its `to` file
+    /// would be compared stale, or not at all.
+    #[error(
+        "cross_surface step {index} declared a capture into `{to}` but the `mirroir-captures` attachment carried no text for it"
+    )]
+    CrossSurfaceNotCaptured {
+        /// Index of the `cross_surface` step, as the file reads.
+        index: usize,
+        /// The capture's `to` path.
+        to: String,
     },
 
     /// `std::fmt::Write` failure while building emitter output. Theoretically
     /// unreachable when writing to `String`, but typed for `?`-propagation.
     #[error("internal formatting error")]
     Format(#[from] fmt::Error),
-
-    /// Failed to set up the temporary workspace for a Playwright invocation.
-    #[error("playwright workspace setup failed: {context}")]
-    PlaywrightWorkspace {
-        /// What was being done (mkdir, write spec, write config, …).
-        context: String,
-        /// Underlying I/O error.
-        #[source]
-        source: io::Error,
-    },
-
-    /// `npx playwright test` exited non-zero without a parseable report.
-    #[error("playwright invocation failed (status: {status:?})\nstderr tail:\n{stderr_tail}")]
-    PlaywrightInvoke {
-        /// Exit status of `npx`, `None` if killed by signal.
-        status: Option<i32>,
-        /// Stderr captured from the subprocess (truncated to ~4 KiB).
-        stderr_tail: String,
-    },
-
-    /// `npx` could not be found on `PATH` — Playwright cannot be invoked.
-    #[error("`npx` is not on PATH; install Node + run `npm i -D @playwright/test`")]
-    PlaywrightNotInstalled,
-
-    /// The JSON reporter file is missing or unparseable.
-    #[error("could not parse playwright-report.json at `{path}`")]
-    PlaywrightReport {
-        /// Path to the JSON reporter output we tried to read.
-        path: String,
-        /// Underlying parse error.
-        #[source]
-        source: serde_json::Error,
-    },
-
-    /// Playwright completed and reported per-test failures.
-    #[error("playwright: {failed} of {total} test cases failed")]
-    PlaywrightTestFailures {
-        /// Number of test cases that reporter marked `status != passed`.
-        failed: usize,
-        /// Total test cases recorded by reporter.
-        total: usize,
-    },
-
-    /// Drift detection flagged the current response as too far from baseline.
-    #[error("drift detected: {reason}")]
-    DriftDetected {
-        /// Human-readable description of which thresholds tripped.
-        reason: String,
-    },
-
-    /// Scenario named a judge profile the registry doesn't know.
-    #[error("unknown judge profile `{profile}`")]
-    JudgeUnknownProfile {
-        /// Name of the missing profile.
-        profile: String,
-    },
-
-    /// The judge profile required an environment variable for its API key.
-    #[error("judge profile `{profile}` requires env `{env_var}` to be set")]
-    JudgeMissingApiKey {
-        /// The profile that requires the key.
-        profile: String,
-        /// Name of the environment variable that wasn't found.
-        env_var: String,
-    },
-
-    /// HTTP transport to the LLM provider failed.
-    #[error("judge HTTP transport to `{url}` failed")]
-    JudgeTransport {
-        /// Provider URL that was being contacted.
-        url: String,
-        /// Underlying `reqwest` error.
-        #[source]
-        source: reqwest::Error,
-    },
-
-    /// The provider responded but the shape was unexpected.
-    #[error("judge response decode failed: {reason}")]
-    JudgeDecode {
-        /// Short human-readable description of what was wrong.
-        reason: String,
-    },
-
-    /// `oracles/profiles.yaml` exists but could not be read or parsed as a
-    /// `profiles:` list of judge profiles.
-    #[error("failed to load judge profiles from {path}: {reason}")]
-    JudgeProfilesParse {
-        /// Path to the offending `profiles.yaml`.
-        path: PathBuf,
-        /// Read or parse error description.
-        reason: String,
-    },
-
-    /// Scenario pinned a `user_prompt_template_hash` that no longer matches the
-    /// current oracle prompt template — the prompt changed, so the scenario's
-    /// score calibration is stale and must be re-pinned.
-    #[error(
-        "judge user_prompt_template_hash mismatch: scenario pinned `{declared}` but current template is `{expected}` — re-pin the scenario"
-    )]
-    JudgeTemplateMismatch {
-        /// Hash of the current oracle user-prompt template.
-        expected: String,
-        /// Hash the scenario declared.
-        declared: String,
-    },
-
-    /// Judge scored the response below `pass_threshold - tolerance`.
-    #[error("judge score {score:.3} below pass_threshold {threshold:.3} (profile `{profile}`)")]
-    JudgeBelowThreshold {
-        /// Profile that ran the scoring.
-        profile: String,
-        /// Score the judge returned.
-        score: f64,
-        /// Effective pass threshold (after tolerance subtracted).
-        threshold: f64,
-    },
 
     /// `cross_surface:` step found a pair of responses whose fingerprint
     /// similarity dropped below the configured threshold.
@@ -386,112 +361,16 @@ pub enum RunnerError {
         response_files: Vec<String>,
     },
 
-    /// An archetype reference in `mirroir.yaml` could not be parsed.
-    ///
-    /// Valid forms: `<pack>/<name>[@<version>]`, `./<path>`, `user/<name>[@<version>]`.
-    /// Bare `<name>` refs are rejected to eliminate pack/user collision ambiguity.
-    #[error("invalid archetype reference `{value}`: {reason}")]
-    MirroirInvalidArchetypeRef {
-        /// The reference string from `mirroir.yaml`.
-        value: String,
-        /// Human-readable explanation of why parsing failed.
-        reason: String,
-    },
+    /// A judge-scoring or drift-threshold failure.
+    #[error(transparent)]
+    Oracle(#[from] OracleError),
 
-    /// A plan entry declares more than one archetype. Cross-archetype
-    /// composition is on the roadmap but not implemented in v1.
-    #[error(
-        "plan entry `{entry_name}` declares {count} archetypes; v1 supports exactly one (cross-archetype composition is planned)"
-    )]
-    MirroirCompositionUnsupported {
-        /// `name` field of the offending plan entry.
-        entry_name: String,
-        /// Number of archetypes declared.
-        count: usize,
-    },
+    /// A Playwright compile / invoke / report-ingest failure.
+    #[error(transparent)]
+    Playwright(#[from] PlaywrightError),
 
-    /// A plan entry has both `archetypes:` and `local:` set, or neither.
-    /// Exactly one is required.
-    #[error("plan entry `{entry_name}`: {reason}")]
-    MirroirPlanEntryAmbiguous {
-        /// `name` field of the offending plan entry.
-        entry_name: String,
-        /// "both archetypes and local set" or "neither archetypes nor local set".
-        reason: String,
-    },
-
-    /// `mirroir-run` walked from `searched_from` to the filesystem root and
-    /// never found a `.mirroir/mirroir.yaml`. Run inside a consumer repo, or
-    /// pass `--config <PATH>` explicitly.
-    #[error("no `.mirroir/mirroir.yaml` found walking up from `{searched_from}`")]
-    MirroirConfigNotFound {
-        /// Starting directory of the walk.
-        searched_from: PathBuf,
-    },
-
-    /// An archetype reference could not be resolved to a directory on disk.
-    #[error("archetype `{reference}` not found (searched: {searched:?})")]
-    MirroirArchetypeNotFound {
-        /// The reference string from `mirroir.yaml`.
-        reference: String,
-        /// Directories the resolver inspected.
-        searched: Vec<PathBuf>,
-    },
-
-    /// A plan entry referenced a local sample that doesn't exist on disk.
-    #[error("plan entry `{sample}` declared `local: {expected_path}` but the path does not exist")]
-    MirroirSampleMissing {
-        /// Plan entry name.
-        sample: String,
-        /// The resolved path that was missing.
-        expected_path: PathBuf,
-    },
-
-    /// At least one sample in a `mirroir-run` invocation reported failures.
-    #[error("mirroir plan: {failed} of {total} samples failed")]
-    MirroirPlanFailures {
-        /// Number of failed samples.
-        failed: usize,
-        /// Total samples attempted.
-        total: usize,
-    },
-
-    /// The composed `.build/<sample>/` could not be built for the named sample.
-    #[error("compose failed for sample `{sample}`: {context}")]
-    MirroirComposeFailed {
-        /// Plan entry name being composed.
-        sample: String,
-        /// Human-readable description of the compose step that failed.
-        context: String,
-        /// Underlying I/O error from the compose subprocess (file write, etc.).
-        #[source]
-        source: io::Error,
-    },
-
-    /// The lockfile drifted from `mirroir.yaml` and the run mode is `--locked`.
-    #[error("lockfile is stale relative to mirroir.yaml: {reason}")]
-    MirroirLockfileStale {
-        /// What drifted (ref added, ref removed, version changed, …).
-        reason: String,
-    },
-
-    /// `--frozen` mode requires the lockfile to be present and not require
-    /// network fetch; one of those conditions was violated.
-    #[error("frozen mode violation: {reason}")]
-    MirroirFrozenViolation {
-        /// What violated the frozen invariant.
-        reason: String,
-    },
-
-    /// `mirroir.lock` was expected but is missing. Run `mirroir-run` without
-    /// `--locked` to regenerate, or commit a lockfile.
-    #[error("mirroir.lock not found at `{path}` (required by --locked)")]
-    MirroirLockfileMissing {
-        /// Where the lockfile was expected.
-        path: PathBuf,
-    },
-
-    /// `HOME` environment variable is not set; can't locate `~/.mirroir/`.
-    #[error("cannot resolve user home directory ($HOME is unset)")]
-    MirroirHomeDirUnavailable,
+    /// A `.mirroir/` pipeline failure — config discovery, archetype
+    /// resolution, lockfile freshness, compose, or plan aggregation.
+    #[error(transparent)]
+    Mirroir(#[from] MirroirError),
 }

@@ -58,6 +58,7 @@ mod tests {
     use tokio::net::TcpListener;
 
     use super::*;
+    use crate::target::dark_port::dark_port;
 
     type TestResult = StdResult<(), Box<dyn StdError>>;
 
@@ -101,8 +102,11 @@ mod tests {
 
     #[tokio::test]
     async fn wait_port_open_times_out_when_port_dark() -> TestResult {
+        // A port the OS reserved and released: nothing is listening on it, so
+        // the poll never sees `open` and runs out its budget.
+        let port = dark_port().await?;
         let res = wait_for_port(&WaitPortArgs {
-            port: 1, // privileged + unlikely to be bound
+            port,
             timeout_s: 1,
             expect: PortState::Open,
         })
@@ -115,8 +119,11 @@ mod tests {
 
     #[tokio::test]
     async fn wait_port_closed_resolves_when_nothing_listens() -> TestResult {
+        // Both loopback families refuse this port, which is exactly what
+        // `expect: closed` waits for.
+        let port = dark_port().await?;
         wait_for_port(&WaitPortArgs {
-            port: 1,
+            port,
             timeout_s: 2,
             expect: PortState::Closed,
         })

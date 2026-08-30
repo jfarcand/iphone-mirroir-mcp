@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Console error — mirroir web fixture</title>
+<link rel="stylesheet" href="fixture.css">
+</head>
+<body>
+<h1 data-test="page-title">Dashboard</h1>
+
+<!-- The DOM assertions all pass while the page is broken underneath: the
+     render throws before it can fill in the metric, and the console carries
+     both an uncaught TypeError and an explicit console.error. A scenario that
+     only asserts visible text goes green here — the console oracle is what
+     catches it. -->
+<p>Active sessions: <span data-test="sessions">—</span></p>
+<p class="result" data-test="status">Dashboard ready</p>
+
+<script>
+console.error('metrics: failed to load /api/sessions (503)');
+
+const renderSessions = (payload) => {
+  // payload is undefined; reading .count throws an uncaught TypeError.
+  document.querySelector('[data-test=sessions]').textContent = String(payload.count);
+};
+
+renderSessions(undefined);
+</script>
+</body>
+</html>

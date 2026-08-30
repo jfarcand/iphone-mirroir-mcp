@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use serde::Deserialize;
 
 use crate::error::{Result, RunnerError};
+use crate::mirroir::error::MirroirError;
 use crate::parser::mirroir::{
     ArchetypeRef, MIRROIR_SCHEMA_VERSION, MirroirConfig, PlanEntry, PlanEntrySource,
 };
@@ -121,7 +122,7 @@ pub fn parse_local_overrides(source_label: &str, yaml: &str) -> Result<MirroirLo
 ///
 /// # Errors
 ///
-/// Returns [`RunnerError::MirroirInvalidArchetypeRef`] if an override declares
+/// Returns [`MirroirError::InvalidArchetypeRef`] if an override declares
 /// an unparseable archetype reference. Other validation (e.g., new entries
 /// missing `boot`) surfaces when the runner consumes the merged config.
 pub fn apply_overrides(base: &mut MirroirConfig, overrides: MirroirLocalOverrides) -> Result<()> {
@@ -187,10 +188,11 @@ fn apply_entry_override(entry: &mut PlanEntry, ov: PlanEntryOverride) -> Result<
             entry.source = PlanEntrySource::Local { path };
         }
         (Some(_), Some(_)) => {
-            return Err(RunnerError::MirroirPlanEntryAmbiguous {
+            return Err(MirroirError::PlanEntryAmbiguous {
                 entry_name: entry.name.clone(),
                 reason: "override sets both `archetypes:` and `local:`".to_owned(),
-            });
+            }
+            .into());
         }
         (None, None) => {}
     }

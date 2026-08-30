@@ -1,0 +1,39 @@
+{
+  "config": { "version": "1.56.0" },
+  "suites": [
+    {
+      "title": "scenario.spec.ts",
+      "specs": [],
+      "suites": [
+        {
+          "title": "chromium",
+          "specs": [
+            {
+              "title": "web-fixture — order button resolves uniquely",
+              "tests": [
+                {
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "status": "failed",
+                      "error": {
+                        "message": "Error: strict mode violation: resolved to 3 elements:\n    1) <button data-test=\"place-order\">Place order</button>\n    2) <button data-test=\"place-order\">Place order</button>\n    3) <button data-test=\"place-order\">Place order</button>"
+                      },
+                      "errors": [
+                        {
+                          "message": "Error: strict mode violation: resolved to 3 elements:\n    1) <button data-test=\"place-order\">Place order</button>"
+                        }
+                      ],
+                      "attachments": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "suites": []
+        }
+      ]
+    }
+  ]
+}

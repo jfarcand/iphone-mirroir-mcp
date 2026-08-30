@@ -11,6 +11,7 @@ pub use crate::parser::step_args::{
 pub use crate::parser::step_process_args::{
     AssertLogArgs, AssertLogCleanArgs, KillArgs, PortState, SpawnArgs, WaitPortArgs,
 };
+pub use crate::parser::step_web_args::{AssertArgs, TapArgs, TypeArgs, WaitForArgs};
 
 /// The grammar mirroir emits and mirroir-run replays.
 ///
@@ -24,20 +25,20 @@ pub enum SkillStep {
     // ── mirroir SkillStep variants (Sources/mirroir-mcp/SkillParser.swift) ──
     /// `- launch: "Expo Go"` — launch an app by name.
     Launch(String),
-    /// `- tap: "Email"` — tap a labeled element.
-    Tap(String),
-    /// `- type: "user@example.com"` — type text into the focused element.
-    Type(String),
+    /// `- tap: "Email"` or `- tap: { label, last?, timeout_s? }`.
+    Tap(TapArgs),
+    /// `- type: "user@example.com"` or `- type: { text, into?, last?, timeout_s? }`.
+    Type(TypeArgs),
     /// `- press_key: "return"` or `- press_key: { key, modifiers }`.
     PressKey(PressKeyArgs),
     /// `- swipe: "up"` — perform a directional swipe.
     Swipe(String),
-    /// `- wait_for: "Connected"` or `- wait_for: { label, timeout_s }`.
+    /// `- wait_for: "Connected"` or `- wait_for: { label, timeout_s?, last? }`.
     WaitFor(WaitForArgs),
-    /// `- assert_visible: "Welcome"`.
-    AssertVisible(String),
-    /// `- assert_not_visible: "Error toast"`.
-    AssertNotVisible(String),
+    /// `- assert_visible: "Welcome"` or `- assert_visible: { label, contains?, last?, timeout_s? }`.
+    AssertVisible(AssertArgs),
+    /// `- assert_not_visible: "Error toast"` — same arguments, inverted.
+    AssertNotVisible(AssertArgs),
     /// `- screenshot: "name"`.
     Screenshot(String),
     /// `- home: null` — return to home screen (iOS).
@@ -148,40 +149,6 @@ impl<'de> Deserialize<'de> for PressKeyArgs {
     }
 }
 
-/// Arguments for `wait_for`. Accepts string shorthand (label only) or full record form.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WaitForArgs {
-    /// The text label or `data-test` identifier to wait for.
-    pub label: String,
-    /// Optional per-step timeout override, in seconds. `None` lets the runner pick a default.
-    pub timeout_s: Option<u32>,
-}
-
-impl<'de> Deserialize<'de> for WaitForArgs {
-    fn deserialize<D>(deserializer: D) -> StdResult<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum Repr {
-            Shorthand(String),
-            Full {
-                label: String,
-                #[serde(default)]
-                timeout_s: Option<u32>,
-            },
-        }
-        Ok(match Repr::deserialize(deserializer)? {
-            Repr::Shorthand(label) => Self {
-                label,
-                timeout_s: None,
-            },
-            Repr::Full { label, timeout_s } => Self { label, timeout_s },
-        })
-    }
-}
-
 /// Arguments for `scroll_to`. Accepts string shorthand (label only) or full record form.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScrollToArgs {
@@ -247,8 +214,11 @@ pub struct MeasureArgs {
     pub name: String,
     /// Action to perform before timing starts, in `type:value` shorthand.
     pub action: String,
-    /// Label / text to wait for after the action; stops the clock.
-    pub until: String,
+    /// Label / text to wait for after the action; stops the clock. Optional when
+    /// `action` is itself a waiting verb (`wait_for` / `wait_visible`), which is
+    /// self-terminating — then the action's own label stops the clock.
+    #[serde(default)]
+    pub until: Option<String>,
     /// Optional ceiling — fails the step if `until` doesn't appear within this many seconds.
     #[serde(default)]
     pub max_seconds: Option<f64>,
@@ -385,7 +355,10 @@ mod tests {
 
     #[test]
     fn tap_string() -> TestResult {
-        assert_eq!(parse("tap: \"Email\"")?, SkillStep::Tap("Email".to_owned()));
+        assert_eq!(
+            parse("tap: \"Email\"")?,
+            SkillStep::Tap(TapArgs::new("Email".to_owned()))
+        );
         Ok(())
     }
 

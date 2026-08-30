@@ -1,0 +1,32 @@
+version: 1
+name: web-fixture — sign in with valid credentials
+description: |
+  The contiguous web-block shape the runner compiles into exactly one
+  Playwright spec: process lifecycle (spawn / wait_port / kill) and the HTTP
+  probe stay Rust-native; every web step sits in one adjacent run between them.
+tags: ["web-fixture", "login", "smoke"]
+steps:
+  - spawn: { id: session, from: SAMPLE.md }
+  - wait_port: { port: 18902, timeout_s: 15 }
+  - target:
+      kind: web
+      browsers: [chrome]
+      url: "http://127.0.0.1:18902/login.html"
+  - assert_visible: "page-title"
+  - tap: "email"
+  - type: "ada@example.com"
+  - tap: "password"
+  - type: "correct-horse"
+  - tap: "sign-in"
+  - wait_for: { label: "welcome", timeout_s: 10 }
+  - assert_visible: "Welcome, ada@example.com"
+  - http:
+      method: GET
+      url: "http://127.0.0.1:18902/login.html"
+      expect_status: 200
+      expect_body_contains: ["data-test=\"sign-in\""]
+  - kill: { id: session, grace_s: 3 }
+  - assert_log_clean:
+      id: session
+      deny:
+        - { pattern: "Traceback \\(most recent call last\\)" }

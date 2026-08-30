@@ -1,0 +1,25 @@
+version: 1
+name: web-fixture — a page that throws is not a pass
+description: |
+  Every locator on `console-error.html` resolves and every structural
+  assertion holds; the page throws an uncaught TypeError while rendering.
+  The browser-side invariants each compiled spec installs — a `pageerror`
+  collector and a failed-response collector — are what catch it.
+
+  This scenario is expected to FAIL. It is the negative half of the web leg,
+  so it belongs to no scenario set; the CI lane runs it by name and asserts
+  the non-zero exit. Run it from `runner/`: the spawn's `cwd` is relative.
+tags: ["web-fixture", "negative", "console"]
+steps:
+  - spawn:
+      id: fixture
+      command: "python3 -m http.server 18903"
+      cwd: "samples/web-fixture/public"
+  - wait_port: { port: 18903, timeout_s: 15 }
+  - target:
+      kind: web
+      browsers: [chrome]
+      url: "http://127.0.0.1:18903/console-error.html"
+  - assert_visible: "page-title"
+  - assert_visible: { label: "status", contains: "Dashboard ready" }
+  - kill: { id: fixture, grace_s: 3 }

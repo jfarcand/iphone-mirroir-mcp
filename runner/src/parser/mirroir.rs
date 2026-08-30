@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use serde::Deserialize;
 
 use crate::error::{Result, RunnerError};
+use crate::mirroir::error::MirroirError;
 
 pub use crate::parser::mirroir_plan::{ArchetypeRef, ArchetypeRefKind};
 
@@ -181,9 +182,9 @@ struct PlanEntryRaw {
 ///
 /// * [`RunnerError::YamlParse`] when serde rejects the input.
 /// * [`RunnerError::UnsupportedVersion`] when `version != 1`.
-/// * [`RunnerError::MirroirInvalidArchetypeRef`] for malformed refs.
-/// * [`RunnerError::MirroirCompositionUnsupported`] for `archetypes.len() > 1`.
-/// * [`RunnerError::MirroirPlanEntryAmbiguous`] when neither/both of
+/// * [`MirroirError::InvalidArchetypeRef`] for malformed refs.
+/// * [`MirroirError::CompositionUnsupported`] for `archetypes.len() > 1`.
+/// * [`MirroirError::PlanEntryAmbiguous`] when neither/both of
 ///   `archetypes` and `local` are set.
 pub fn parse_mirroir_config(source_label: &str, yaml: &str) -> Result<MirroirConfig> {
     let raw: MirroirConfigRaw =
@@ -230,16 +231,18 @@ impl PlanEntry {
         let source = match (raw.archetypes, raw.local) {
             (Some(refs), None) => {
                 if refs.is_empty() {
-                    return Err(RunnerError::MirroirPlanEntryAmbiguous {
+                    return Err(MirroirError::PlanEntryAmbiguous {
                         entry_name: raw.name,
                         reason: "`archetypes:` is present but empty".to_owned(),
-                    });
+                    }
+                    .into());
                 }
                 if refs.len() > 1 {
-                    return Err(RunnerError::MirroirCompositionUnsupported {
+                    return Err(MirroirError::CompositionUnsupported {
                         entry_name: raw.name,
                         count: refs.len(),
-                    });
+                    }
+                    .into());
                 }
                 let parsed = refs
                     .iter()
@@ -249,16 +252,18 @@ impl PlanEntry {
             }
             (None, Some(path)) => PlanEntrySource::Local { path },
             (Some(_), Some(_)) => {
-                return Err(RunnerError::MirroirPlanEntryAmbiguous {
+                return Err(MirroirError::PlanEntryAmbiguous {
                     entry_name: raw.name,
                     reason: "both `archetypes:` and `local:` are set; pick one".to_owned(),
-                });
+                }
+                .into());
             }
             (None, None) => {
-                return Err(RunnerError::MirroirPlanEntryAmbiguous {
+                return Err(MirroirError::PlanEntryAmbiguous {
                     entry_name: raw.name,
                     reason: "neither `archetypes:` nor `local:` is set; one is required".to_owned(),
-                });
+                }
+                .into());
             }
         };
 
@@ -357,7 +362,7 @@ plan:
       boot:
         command: "true"
 "#;
-        let Err(RunnerError::MirroirPlanEntryAmbiguous { entry_name, .. }) =
+        let Err(RunnerError::Mirroir(MirroirError::PlanEntryAmbiguous { entry_name, .. })) =
             parse_mirroir_config("test", yaml)
         else {
             return Err("expected MirroirPlanEntryAmbiguous".into());
@@ -378,7 +383,9 @@ plan:
 "#;
         assert!(matches!(
             parse_mirroir_config("test", yaml),
-            Err(RunnerError::MirroirPlanEntryAmbiguous { .. })
+            Err(RunnerError::Mirroir(
+                MirroirError::PlanEntryAmbiguous { .. }
+            ))
         ));
     }
 
@@ -396,7 +403,7 @@ plan:
       boot:
         command: "true"
 "#;
-        let Err(RunnerError::MirroirCompositionUnsupported { entry_name, count }) =
+        let Err(RunnerError::Mirroir(MirroirError::CompositionUnsupported { entry_name, count })) =
             parse_mirroir_config("test", yaml)
         else {
             return Err("expected MirroirCompositionUnsupported".into());

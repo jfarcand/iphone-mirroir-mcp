@@ -11,17 +11,25 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Result, RunnerError};
 use crate::mirroir::discover::{LOCAL_OVERRIDES_FILE, MIRROIR_DIR};
+use crate::mirroir::error::MirroirError;
 use crate::parser::local_overrides::{apply_overrides, parse_local_overrides};
 use crate::parser::mirroir::{MirroirConfig, parse_mirroir_config};
+pub use crate::verdict::SampleStatus;
+
+/// Schema version of the run summary JSON.
+///
+/// Bumped to 2 when the verdict gained its third state: `samples[].verdict`
+/// can now read `"drift"`, and `totals` carries a `drifted` count.
+pub const SUMMARY_SCHEMA_VERSION: u32 = 2;
 
 /// Per-sample outcome line in the summary JSON.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SampleVerdict {
     /// Plan entry name.
     pub name: String,
-    /// `pass` / `fail` / `skipped`.
-    pub verdict: String,
-    /// Optional error message when the sample failed.
+    /// `pass` / `fail` / `drift` / `skipped` / `composed`.
+    pub verdict: SampleStatus,
+    /// Optional message when the sample failed or drifted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -42,14 +50,16 @@ pub struct RunSummary {
 }
 
 /// Aggregate counts for [`RunSummary`].
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct RunTotals {
     /// Samples discovered in the plan.
     pub samples: usize,
-    /// Samples whose `run_sample` returned `Ok`.
+    /// Samples whose every scenario passed with nothing drifting.
     pub passed: usize,
     /// Samples whose `run_sample` returned `Err`.
     pub failed: usize,
+    /// Samples that held structurally but whose semantics moved.
+    pub drifted: usize,
     /// Samples that were skipped (`skip: true` in overrides).
     pub skipped: usize,
 }
@@ -75,15 +85,17 @@ pub fn load_config(config_path: &Path) -> Result<MirroirConfig> {
 ///
 /// # Errors
 ///
-/// [`RunnerError::MirroirConfigNotFound`] when the path has too few components.
+/// [`MirroirError::ConfigNotFound`] when the path has too few components.
 pub fn project_root_for_config(config_path: &Path) -> Result<PathBuf> {
     // config_path is `<root>/.mirroir/mirroir.yaml`; project root is the parent's parent.
     config_path
         .parent() // .mirroir/
         .and_then(Path::parent) // <root>
         .map(Path::to_path_buf)
-        .ok_or_else(|| RunnerError::MirroirConfigNotFound {
-            searched_from: config_path.to_path_buf(),
+        .ok_or_else(|| {
+            RunnerError::Mirroir(MirroirError::ConfigNotFound {
+                searched_from: config_path.to_path_buf(),
+            })
         })
 }
 
@@ -113,24 +125,14 @@ pub fn load_and_apply_local_overrides(
 ///
 /// # Errors
 ///
-/// [`RunnerError::MirroirHomeDirUnavailable`] when `$HOME` is unset.
+/// [`MirroirError::HomeDirUnavailable`] when `$HOME` is unset.
 pub fn resolve_home_root() -> Result<PathBuf> {
     std_env::var_os("HOME")
         .map(PathBuf::from)
-        .ok_or(RunnerError::MirroirHomeDirUnavailable)
+        .ok_or(RunnerError::Mirroir(MirroirError::HomeDirUnavailable))
 }
 
-/// Write a summary JSON treating every verdict as `passed` (compose-only mode).
-///
-/// # Errors
-///
-/// Same as [`write_summary_full`].
-pub fn write_summary(path: &Path, config_path: &Path, verdicts: Vec<SampleVerdict>) -> Result<()> {
-    let total = verdicts.len();
-    write_summary_full(path, config_path, verdicts, total, 0, 0)
-}
-
-/// Write the full run-summary JSON with explicit pass/fail/skip counts.
+/// Write the full run-summary JSON with explicit pass/fail/drift/skip counts.
 ///
 /// # Errors
 ///
@@ -139,21 +141,17 @@ pub fn write_summary_full(
     path: &Path,
     config_path: &Path,
     verdicts: Vec<SampleVerdict>,
-    passed: usize,
-    failed: usize,
-    skipped: usize,
+    totals: RunTotals,
 ) -> Result<()> {
     let total = verdicts.len();
     let summary = RunSummary {
-        version: 1,
+        version: SUMMARY_SCHEMA_VERSION,
         config_path: config_path.to_path_buf(),
         generated_at: Utc::now(),
         samples: verdicts,
         totals: RunTotals {
             samples: total,
-            passed,
-            failed,
-            skipped,
+            ..totals
         },
     };
     let json = serde_json::to_string_pretty(&summary).map_err(|source| RunnerError::Io {
@@ -164,4 +162,84 @@ pub fn write_summary_full(
         context: format!("write summary at {}", path.display()),
         source,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs as std_fs;
+    use std::result::Result as StdResult;
+
+    use tempfile::tempdir;
+
+    use super::{RunSummary, RunTotals, SampleStatus, SampleVerdict, write_summary_full};
+    use crate::compile::report::parse_report_body;
+    use crate::error::RunnerError;
+
+    type TestResult = StdResult<(), String>;
+
+    /// The Playwright JSON reporter a failing strict-mode locator produces.
+    const STRICT_MODE_REPORT: &str =
+        include_str!("../compile/fixtures/playwright-strict-mode.json");
+
+    /// The locator text Playwright produced must survive every hop to the run
+    /// summary a CI lane reads: reporter JSON → `PlaywrightError::TestFailures`
+    /// → the sample's first scenario failure → `samples[].error`. A bare count
+    /// at any hop makes the artifact useless for diagnosis.
+    #[test]
+    fn a_strict_mode_violation_reaches_samples_error_in_the_summary() -> TestResult {
+        let Err(playwright) = parse_report_body("playwright-report.json", STRICT_MODE_REPORT)
+        else {
+            return Err("the canned report should have parsed as a failure".to_owned());
+        };
+        // `run_sample` records the first failing scenario's message verbatim.
+        let sample_failure = RunnerError::SampleScenarioFailures {
+            failed: 1,
+            total: 1,
+            first_error: format!("scenarios/checkout.yaml: {playwright}"),
+        };
+        // `run_mirroir` writes that message into the plan entry's verdict.
+        let verdict = SampleVerdict {
+            name: "checkout".to_owned(),
+            verdict: SampleStatus::Fail,
+            error: Some(sample_failure.to_string()),
+        };
+
+        let dir = tempdir().map_err(|e| format!("tempdir: {e}"))?;
+        let summary_path = dir.path().join("mirroir-run-report.json");
+        write_summary_full(
+            &summary_path,
+            &dir.path().join(".mirroir").join("mirroir.yaml"),
+            vec![verdict],
+            RunTotals {
+                failed: 1,
+                ..RunTotals::default()
+            },
+        )
+        .map_err(|e| format!("write summary: {e}"))?;
+
+        let raw = std_fs::read_to_string(&summary_path).map_err(|e| format!("read: {e}"))?;
+        let summary: RunSummary =
+            serde_json::from_str(&raw).map_err(|e| format!("parse summary: {e}"))?;
+        if summary.version != super::SUMMARY_SCHEMA_VERSION {
+            return Err(format!(
+                "summary schema version drifted: {}",
+                summary.version
+            ));
+        }
+        let Some(sample) = summary.samples.first() else {
+            return Err("summary carried no samples".to_owned());
+        };
+        let Some(error) = sample.error.as_deref() else {
+            return Err("samples[0].error is null".to_owned());
+        };
+        if !error.contains("strict mode violation: resolved to 3 elements") {
+            return Err(format!(
+                "locator text lost on the way to the summary: {error}"
+            ));
+        }
+        if !error.contains("web-fixture — order button resolves uniquely") {
+            return Err(format!("failing test title lost: {error}"));
+        }
+        Ok(())
+    }
 }

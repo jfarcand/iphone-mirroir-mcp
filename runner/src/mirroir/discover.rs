@@ -3,7 +3,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::error::{Result, RunnerError};
+use crate::error::Result;
+use crate::mirroir::error::MirroirError;
 
 /// Filename of the config inside `.mirroir/`.
 pub const CONFIG_FILE: &str = "mirroir.yaml";
@@ -23,7 +24,7 @@ pub const MIRROIR_DIR: &str = ".mirroir";
 ///
 /// # Errors
 ///
-/// Returns [`RunnerError::MirroirConfigNotFound`] when no ancestor contains the
+/// Returns [`MirroirError::ConfigNotFound`] when no ancestor contains the
 /// expected file. The error captures the starting directory for diagnostics.
 pub fn discover_mirroir_config(start: &Path) -> Result<PathBuf> {
     let mut current = start.to_path_buf();
@@ -34,9 +35,10 @@ pub fn discover_mirroir_config(start: &Path) -> Result<PathBuf> {
         }
         if !current.pop() {
             // pop() returned false → we were already at the root.
-            return Err(RunnerError::MirroirConfigNotFound {
+            return Err(MirroirError::ConfigNotFound {
                 searched_from: start.to_path_buf(),
-            });
+            }
+            .into());
         }
     }
 }
@@ -48,6 +50,7 @@ mod tests {
     use std::result::Result as StdResult;
 
     use super::*;
+    use crate::error::RunnerError;
 
     type TestResult = StdResult<(), Box<dyn StdError>>;
 
@@ -88,7 +91,7 @@ mod tests {
         let nested = tmp.path().join("a").join("b").join("c");
         fs::create_dir_all(&nested)?;
         match discover_mirroir_config(&nested) {
-            Err(RunnerError::MirroirConfigNotFound { .. }) => Ok(()),
+            Err(RunnerError::Mirroir(MirroirError::ConfigNotFound { .. })) => Ok(()),
             other => Err(format!("expected MirroirConfigNotFound, got {other:?}").into()),
         }
     }

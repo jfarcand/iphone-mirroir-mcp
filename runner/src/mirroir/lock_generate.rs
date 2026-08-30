@@ -113,7 +113,16 @@ fn build_locked_record(resolved: &ResolvedArchetype) -> Result<ResolvedRecord> {
 
 /// SHA-256 of all files in `dir` (recursive). Filenames are folded into the
 /// hash in sorted order to produce a deterministic content checksum.
-fn checksum_directory(dir: &Path) -> Result<String> {
+///
+/// Generation records the result in each [`ResolvedRecord::checksum`];
+/// [`crate::mirroir::lock::enforce_freshness`] recomputes it against the tree
+/// on disk, which is what makes an edited archetype fail `--locked` /
+/// `--frozen` instead of replaying silently.
+///
+/// # Errors
+///
+/// [`RunnerError::Io`] when the directory cannot be walked or a file read.
+pub fn checksum_directory(dir: &Path) -> Result<String> {
     let mut hasher = Sha256::new();
     let mut entries: Vec<PathBuf> = Vec::new();
     collect_files(dir, dir, &mut entries)?;

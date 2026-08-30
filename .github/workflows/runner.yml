@@ -1,7 +1,9 @@
-# CI for runner/ (mirroir-run Rust binary). Three lanes:
-#   - runner-fast  : fmt + clippy + test + diff-text smoke on linux + macos.
-#   - runner-smoke : process + http + cross_surface end-to-end (no Playwright, no Ollama).
-#   - runner-e2e   : full pipeline — Playwright (chromium) + real Ollama judge + mega-sample.
+# CI for runner/ (mirroir-run Rust binary). Four per-push lanes:
+#   - runner-fast      : fmt + clippy + test + diff-text smoke on linux + macos.
+#   - runner-smoke     : process + http + web + cross_surface end-to-end (no Ollama).
+#   - runner-full-loop : the thirteen-phase acceptance test for the whole loop.
+#   - runner-e2e       : full pipeline — Playwright (chromium) + real Ollama judge + mega-sample.
+# Plus runner-e2e-allbrowsers on a Sunday cron, and the deny / publish audits.
 
 name: runner
 
@@ -10,7 +12,10 @@ on:
     paths:
       - 'runner/**'
       - '.github/workflows/runner.yml'
-    branches: [main]
+    # Every branch, not just main: this repo squash-merges locally and opens no
+    # pull requests, so a feature branch has no other way to reach these lanes
+    # before it lands. The paths filter above keeps unrelated pushes out, and the
+    # concurrency group below cancels superseded runs on the same branch.
   pull_request:
     paths:
       - 'runner/**'
@@ -95,7 +100,10 @@ jobs:
           echo "Hello world from mirroir" > /tmp/diff-b.txt
           ./target/release/mirroir-run --diff-text /tmp/diff-a.txt /tmp/diff-b.txt
 
-      - name: --diff-text DRIFT path (expected exit 1)
+      # DRIFT has its own exit code (65) so a lane can tell "the semantics
+      # moved" from "something broke" (1). Pinning the code here keeps that
+      # distinction from regressing into a plain failure.
+      - name: --diff-text DRIFT path (expected exit 65)
         working-directory: runner
         run: |
           echo "Completely unrelated text from a parallel universe" > /tmp/diff-c.txt
@@ -103,14 +111,14 @@ jobs:
           ./target/release/mirroir-run --diff-text /tmp/diff-a.txt /tmp/diff-c.txt
           status=$?
           set -e
-          if [ "$status" != "1" ]; then
-            echo "Expected exit 1 from DRIFT path, got $status"
+          if [ "$status" != "65" ]; then
+            echo "Expected exit 65 (DRIFT) from the drift path, got $status"
             exit 1
           fi
-          echo "DRIFT path correctly exited 1"
+          echo "DRIFT path correctly exited 65"
 
   runner-smoke:
-    name: process + http + cross_surface smoke (${{ matrix.os }})
+    name: process + http + web + cross_surface smoke (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -119,7 +127,9 @@ jobs:
     needs: runner-fast
     permissions:
       contents: read
-    timeout-minutes: 10
+    timeout-minutes: 15
+    env:
+      MIRROIR_PLAYWRIGHT_HOME: /tmp/mirroir-pw
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -134,6 +144,9 @@ jobs:
         with:
           workspaces: runner -> target
           shared-key: runner-smoke-${{ matrix.os }}
+
+      - name: Setup Playwright + chromium
+        uses: ./.github/actions/setup-playwright
 
       - name: Build release binary
         working-directory: runner
@@ -203,42 +216,116 @@ jobs:
           fi
           echo "cross_surface mismatch path correctly exited 1"
 
-      - name: --sample with --no-playwright (judge + Playwright skipped)
+      - name: --sample with a real web scenario (web-fixture through Playwright)
         working-directory: runner
         run: |
-          # `--no-playwright` skips web batches; this lane has no Ollama so
-          # we author a small SAMPLE.md whose scenarios use only process + http
-          # steps. Full mega-sample with Playwright + Ollama runs in runner-e2e.
-          mkdir -p /tmp/smoke-sample
-          cat > /tmp/smoke-sample/SAMPLE.md <<'EOF'
-          # CI smoke sample (no Playwright, no Ollama)
+          # samples/web-fixture boots a python http.server over static pages and
+          # signs in through Playwright. There is no way to ask the runner to
+          # skip the web block, so a lane without Node fails here instead of
+          # reporting a green run over assertions that never executed.
+          ./target/release/mirroir-run --sample samples/web-fixture
 
-          ```yaml
-          version: 1
-          name: ci-smoke-sample
-          session:
-            boot_once: true
-            boot_ready_port: 18951
-            boot_ready_timeout_s: 15
-            boot:
-              command: "python3 -m http.server 18951"
-            scenarios:
-              must_pass:
-                - probe.yaml
-          ```
-          EOF
-          cat > /tmp/smoke-sample/probe.yaml <<'EOF'
-          version: 1
-          name: smoke probe
-          steps:
-            - spawn: { id: session, from: SAMPLE.md }
-            - http:
-                method: GET
-                url: "http://127.0.0.1:18951/"
-                expect_status: 200
-                expect_body_contains: ["Directory listing"]
-          EOF
-          ./target/release/mirroir-run --sample /tmp/smoke-sample --no-playwright
+      - name: --emit playwright writes the workspace a run executes
+        working-directory: runner
+        run: |
+          ./target/release/mirroir-run --emit playwright samples/web-fixture --scenarios all
+          for f in target/playwright/web-fixture/login/login.spec.ts \
+                   target/playwright/web-fixture/login/playwright.config.ts \
+                   target/playwright/web-fixture/order-summary/order-summary.spec.ts; do
+            if [ ! -f "$f" ]; then
+              echo "--emit did not write $f"
+              exit 1
+            fi
+          done
+          grep -q "AUTO-GENERATED by mirroir-run" target/playwright/web-fixture/login/login.spec.ts
+          grep -q "retain-on-failure" target/playwright/web-fixture/login/playwright.config.ts
+          echo "--emit playwright wrote both scenario workspaces"
+
+      - name: negative web scenarios (expected exit 1)
+        working-directory: runner
+        run: |
+          # console-error.html: every locator resolves and both assertions hold,
+          # and the page throws — the compiled spec's pageerror collector is the
+          # only thing that catches it. wrong-selector: a locator naming nothing
+          # must fail by name AND leave its trace on disk.
+          set +e
+          ./target/release/mirroir-run --run-scenario samples/web-fixture/scenarios/console-error.yaml
+          console_status=$?
+          ./target/release/mirroir-run --run-scenario samples/web-fixture/scenarios/wrong-selector.yaml
+          selector_status=$?
+          set -e
+          if [ "$console_status" != "1" ]; then
+            echo "Expected exit 1 from the throwing page, got $console_status"
+            exit 1
+          fi
+          if [ "$selector_status" != "1" ]; then
+            echo "Expected exit 1 from the wrong selector, got $selector_status"
+            exit 1
+          fi
+          trace=$(find target/playwright/wrong-selector/test-results -name trace.zip | head -1)
+          if [ -z "$trace" ]; then
+            echo "The failing run left no trace.zip on disk"
+            find target/playwright/wrong-selector -type f
+            exit 1
+          fi
+          echo "Both negative paths exited 1; trace kept at $trace"
+
+  # The acceptance test for the whole runner loop, in one run and in order:
+  # boot, one browser invocation, the capture channel, the oracle, the
+  # runner-side hooks, PASS, an idempotent rerun, DRIFT, accept, green again,
+  # a real break, the artifacts it leaves, and the lockfile gate. The suite
+  # lives in runner/tests/e2e_full_loop.rs and needs a browser, which is why it
+  # runs here rather than in runner-fast.
+  runner-full-loop:
+    name: e2e — the whole loop (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    needs: runner-fast
+    permissions:
+      contents: read
+    timeout-minutes: 25
+    env:
+      MIRROIR_PLAYWRIGHT_HOME: /tmp/mirroir-pw
+      # This is the lane that owes the loop. If its browser setup ever breaks,
+      # the test must go red rather than announce a skip and pass.
+      MIRROIR_E2E_REQUIRED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - name: Cache cargo registry + git + runner target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: runner -> target
+          shared-key: runner-full-loop-${{ matrix.os }}
+
+      - name: Setup Playwright + chromium
+        uses: ./.github/actions/setup-playwright
+
+      - name: Verify python3 available (the fixture's static server)
+        run: python3 --version
+
+      - name: The thirteen-phase loop
+        working-directory: runner
+        run: |
+          set -euo pipefail
+          # On a host that provisioned no browser the suite reports "NOT RUN"
+          # and stays green — that is what keeps runner-fast honest without an
+          # #[ignore]. This lane provisioned one, so a run that did not observe
+          # all thirteen phases is a failure here, not a skip.
+          cargo test --test e2e_full_loop -- --nocapture 2>&1 | tee /tmp/full-loop.log
+          if ! grep -q 'FULL LOOP: 13/13 phases observed' /tmp/full-loop.log; then
+            echo "::error::the full-loop suite did not observe all thirteen phases"
+            exit 1
+          fi
 
   runner-e2e:
     name: e2e — Playwright + Ollama + mega-sample (${{ matrix.os }})
@@ -269,31 +356,8 @@ jobs:
           workspaces: runner -> target
           shared-key: runner-e2e-${{ matrix.os }}
 
-      - name: Setup Node (for npx playwright)
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/ms-playwright
-            ~/Library/Caches/ms-playwright
-          # Bump the cache key suffix to force a re-pull when Playwright
-          # major-versions or chromium-channel changes.
-          key: playwright-${{ runner.os }}-chromium-v1
-
-      - name: Install Playwright + chromium
-        run: |
-          mkdir -p "$MIRROIR_PLAYWRIGHT_HOME"
-          cd "$MIRROIR_PLAYWRIGHT_HOME"
-          npm init -y > /dev/null
-          npm install --no-save --silent @playwright/test
-          # `playwright install` honors the cached browsers dir; skips the
-          # download when the binary digest already matches.
-          npx playwright install chromium
+      - name: Setup Playwright + chromium
+        uses: ./.github/actions/setup-playwright
 
       - name: Cache Ollama models
         id: ollama-cache
@@ -395,34 +459,12 @@ jobs:
           workspaces: runner -> target
           shared-key: runner-e2e-allbrowsers-${{ matrix.os }}
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Setup Playwright + all browsers
+        uses: ./.github/actions/setup-playwright
         with:
-          node-version: '20'
-
-      - name: Cache Playwright browsers (all three)
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/ms-playwright
-            ~/Library/Caches/ms-playwright
-          key: playwright-${{ runner.os }}-allbrowsers-v1
-
-      - name: Install Playwright + all browsers
-        run: |
-          mkdir -p "$MIRROIR_PLAYWRIGHT_HOME"
-          cd "$MIRROIR_PLAYWRIGHT_HOME"
-          npm init -y > /dev/null
-          npm install --no-save --silent @playwright/test
-          # Linux: webkit/firefox link against OS libs (libwoff2, libgstreamer,
-          # libenchant, …) that the runner lacks by default; --with-deps
-          # apt-installs them. macOS uses system frameworks, so install the
-          # browser binaries only (that lane already passes without deps).
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            npx playwright install --with-deps chromium firefox webkit
-          else
-            npx playwright install chromium firefox webkit
-          fi
+          browsers: chromium firefox webkit
+          cache-key: allbrowsers-v1
+          with-deps: 'true'
 
       - name: Cache Ollama models
         uses: actions/cache@v4
