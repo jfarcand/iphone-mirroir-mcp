@@ -324,6 +324,19 @@ STOP and surface to ChefFamille before proceeding when you find:
    git commit
    git push
    ```
+4. Delete the spent branch, local and remote — this is part of the merge, not a
+   separate decision to raise:
+   ```bash
+   git diff --stat main origin/feature/my-feature   # must be empty
+   git branch -D feature/my-feature
+   git push origin --delete feature/my-feature
+   ```
+   A squash merge leaves no merge parent, so `git branch -d` will not recognize
+   the branch as merged — verify with the empty diff above, then use `-D`.
+
+The merge itself is a documented procedure, not an approval gate. Whoever is
+holding a validated branch performs steps 3 and 4; do not park a green branch
+waiting for someone to authorize the merge.
 
 ### Bug Fixes
 - Bug fixes go directly to `main` branch (no feature branch needed)
