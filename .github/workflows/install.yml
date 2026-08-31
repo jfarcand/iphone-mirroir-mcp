@@ -2,10 +2,50 @@ name: Install
 
 on:
   push:
-    branches: [main]
+    # Every branch, not just main: this repo squash-merges locally and opens no
+    # pull requests of its own, so a feature branch has no other way to reach
+    # this lane before it lands. `branches-ignore` rather than deleting the key —
+    # a push trigger that names `tags` and omits `branches` fires ONLY on tags,
+    # which would disable branch CI outright. Dependabot is excluded because it
+    # pushes its branch AND opens a PR, and the two land in different
+    # concurrency groups, so the push run is a pure duplicate of the PR run.
+    branches-ignore: ['dependabot/**']
     tags: ['v*']
+    paths:
+      - 'Sources/**'
+      - 'Package.swift'
+      - '.github/actions/setup-embacle/**'
+      - '.github/workflows/install.yml'
+      # Not a build input. Path filters ARE evaluated for tag pushes, against
+      # the tagged commit's own diff, so `paths` now gates the v* release lane
+      # that has fired on all 8 releases. release.yml tags its "chore: bump
+      # version" commit, which always writes server.json — listing it pins the
+      # release lane to a file the bump owns rather than leaving it to depend
+      # on Version.swift continuing to live under Sources/.
+      - 'server.json'
   pull_request:
     branches: [main]
+    # Same list as `push` — the Actions parser has no YAML anchors. Without it,
+    # dependabot bumps for /website and /runner burn a full macOS release build
+    # on code this workflow never compiles.
+    paths:
+      - 'Sources/**'
+      - 'Package.swift'
+      - '.github/actions/setup-embacle/**'
+      - '.github/workflows/install.yml'
+      # Not a build input. Path filters ARE evaluated for tag pushes, against
+      # the tagged commit's own diff, so `paths` now gates the v* release lane
+      # that has fired on all 8 releases. release.yml tags its "chore: bump
+      # version" commit, which always writes server.json — listing it pins the
+      # release lane to a file the bump owns rather than leaving it to depend
+      # on Version.swift continuing to live under Sources/.
+      - 'server.json'
+  workflow_dispatch:
+
+# Cancel superseded runs on the same branch / PR to save runner-minutes.
+concurrency:
+  group: install-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   install-test:

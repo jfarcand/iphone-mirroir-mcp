@@ -4,7 +4,12 @@ name: MCP Compliance
 
 on:
   push:
-    branches: [ "main", "feature/*", "claude/*" ]
+    # Every branch, not just main: this repo squash-merges locally and opens no
+    # pull requests of its own, so a feature branch has no other way to reach
+    # this gate before it lands. The removed glob list could not match the
+    # branch names actually used here (feat/..., fix/...) in any case — and
+    # 'feature/*' would not have matched a nested name even with that prefix.
+    # This workflow names no `tags`, so omitting `branches` means every branch.
     paths:
       - 'Sources/mirroir-mcp/**'
       - 'Sources/HelperLib/**'

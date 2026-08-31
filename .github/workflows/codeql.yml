@@ -2,12 +2,48 @@ name: CodeQL
 
 on:
   push:
-    branches: [main]
+    # Every branch, not just main: this repo squash-merges locally and opens no
+    # pull requests of its own, so a feature branch has no other way to reach
+    # CodeQL before it lands. Tags are excluded — a release tag points at a
+    # commit main has already analyzed, and a duplicate macOS run would compete
+    # with release.yml for the small macOS pool at exactly the wrong moment.
+    tags-ignore: ['**']
+    # Paths filters are workflow-scoped, not per-job: any match starts both
+    # language lanes, so a JS-only change still pays for the Swift analysis.
+    paths:
+      - '**.swift'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - '**.ts'
+      - '**.tsx'
+      - '**.js'
+      - '**.mjs'
+      - '**.cjs'
+      - '**/package.json'
+      - '**/package-lock.json'
+      - '.github/workflows/codeql.yml'
   pull_request:
     branches: [main]
+    paths:
+      - '**.swift'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - '**.ts'
+      - '**.tsx'
+      - '**.js'
+      - '**.mjs'
+      - '**.cjs'
+      - '**/package.json'
+      - '**/package-lock.json'
+      - '.github/workflows/codeql.yml'
   workflow_dispatch:
   schedule:
     - cron: '0 6 * * 1'
+
+# Cancel superseded runs on the same branch / PR to save runner-minutes.
+concurrency:
+  group: codeql-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze-swift:

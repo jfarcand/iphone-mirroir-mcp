@@ -2,11 +2,48 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    # Every branch, not just main: this repo squash-merges locally and opens no
+    # pull requests of its own, so a feature branch has no other way to reach
+    # these lanes before it lands. `branches-ignore` rather than deleting the
+    # key — a push trigger that names `tags` and omits `branches` entirely fires
+    # ONLY on tags, which would disable branch CI outright. Dependabot is
+    # excluded because it pushes its branch AND opens a PR; the two land in
+    # different concurrency groups, so the push run is a pure duplicate.
+    branches-ignore: ['dependabot/**']
+    # Path filters ARE evaluated for tag pushes, against the tagged commit's own
+    # diff. release.yml tags its "chore: bump version" commit, which writes
+    # Sources/mirroir-mcp/Version.swift — so `Sources/**` keeps this lane firing
+    # on releases.
     tags: ['v*']
+    paths:
+      - 'Sources/**'
+      - 'Tests/**'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - 'scripts/**'
+      - '.github/actions/setup-embacle/**'
+      - '.github/workflows/build.yml'
   pull_request:
     branches: [main]
+    # Same list as `push` — the Actions parser has no YAML anchors, so it is
+    # repeated (as in runner.yml and limitation-register.yml). Without it every
+    # dependabot bump for /website, /runner or /npm burns both macOS jobs on
+    # code this workflow never compiles.
+    paths:
+      - 'Sources/**'
+      - 'Tests/**'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - 'scripts/**'
+      - '.github/actions/setup-embacle/**'
+      - '.github/workflows/build.yml'
   workflow_dispatch:
+
+# Cancel superseded runs to save the scarce macOS runner slots. Keyed on
+# `head_ref || ref` so a branch push and the pull request for it share one group.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:

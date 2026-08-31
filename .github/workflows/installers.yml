@@ -2,11 +2,46 @@ name: Installers
 
 on:
   push:
-    branches: [main, 'feature/**']
+    # Every branch, not just main: this repo squash-merges locally and opens no
+    # pull requests of its own, so a feature branch has no other way to reach
+    # this lane before it lands. `branches-ignore` rather than deleting the key —
+    # a push trigger that names `tags` and omits `branches` fires ONLY on tags,
+    # which would disable branch CI outright. Dependabot is excluded because it
+    # pushes its branch AND opens a PR, and the two land in different
+    # concurrency groups, so the push run is a pure duplicate of the PR run.
+    branches-ignore: ['dependabot/**']
+    # The old 'feature/**' glob could not match the branch names actually used
+    # here (feat/..., fix/...), so non-main pushes were effectively unbuilt.
     tags: ['v*']
+    paths:
+      - 'Package.swift'
+      - 'Sources/**'
+      - 'Tests/**'
+      - 'Resources/**'
+      - 'mirroir.sh'
+      - 'npm/**'
+      - 'scripts/package-fake-app.sh'
+      - '.github/actions/setup-embacle/**'
+      - '.github/workflows/installers.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'Package.swift'
+      - 'Sources/**'
+      - 'Tests/**'
+      - 'Resources/**'
+      - 'mirroir.sh'
+      - 'npm/**'
+      - 'scripts/package-fake-app.sh'
+      - '.github/actions/setup-embacle/**'
+      - '.github/workflows/installers.yml'
   workflow_dispatch:
+
+# Cancel superseded runs on the same branch / PR — three macos-15 jobs run here,
+# so a superseded run is expensive to leave in flight.
+concurrency:
+  group: installers-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   source-install:
