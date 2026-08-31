@@ -57,6 +57,22 @@ public enum EnvConfig {
         readUInt32("keystrokeDelayUs", default: TimingConstants.keystrokeDelayUs)
     }
 
+    public static var pasteboardSyncUs: UInt32 {
+        readUInt32("pasteboardSyncUs", default: TimingConstants.pasteboardSyncUs)
+    }
+
+    public static var pasteCommitUs: UInt32 {
+        readUInt32("pasteCommitUs", default: TimingConstants.pasteCommitUs)
+    }
+
+    public static var frameSettlePollUs: UInt32 {
+        readUInt32("frameSettlePollUs", default: TimingConstants.frameSettlePollUs)
+    }
+
+    public static var frameSettleTimeoutUs: UInt32 {
+        readUInt32("frameSettleTimeoutUs", default: TimingConstants.frameSettleTimeoutUs)
+    }
+
     // MARK: - App Switching & Navigation
 
     public static var spaceSwitchSettleUs: UInt32 {

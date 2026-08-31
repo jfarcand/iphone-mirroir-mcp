@@ -20,6 +20,9 @@ struct TestRunConfig {
     /// Agent mode: nil = no agent, "" = deterministic only, non-empty = AI model name.
     let agent: String?
     let noAutoRecompile: Bool
+    /// Allow steps with real-world consequences to execute. Off by default so a
+    /// skill cannot send, delete, or buy anything without an explicit say-so.
+    let confirmDestructive: Bool
     let showHelp: Bool
 }
 
@@ -62,6 +65,11 @@ enum TestRunner {
                 fputs("Error parsing \(filePath): \(error.localizedDescription)\n", stderr)
                 return 1
             }
+        }
+
+        if let refusal = DestructiveStepGate.refuse(
+            skills: skills, dryRun: config.dryRun, confirmed: config.confirmDestructive) {
+            return refusal
         }
 
         // Initialize subsystems (skip for dry run — no system access needed)
@@ -262,6 +270,7 @@ enum TestRunner {
         var noCompiled = false
         var agent: String?
         var noAutoRecompile = false
+        var confirmDestructive = false
         var showHelp = false
 
         var i = 0
@@ -285,6 +294,8 @@ enum TestRunner {
                 dryRun = true
             case "--no-compiled":
                 noCompiled = true
+            case "--confirm-destructive":
+                confirmDestructive = true
             case "--no-auto-recompile":
                 noAutoRecompile = true
             case "--agent":
@@ -319,6 +330,7 @@ enum TestRunner {
             noCompiled: noCompiled,
             agent: agent,
             noAutoRecompile: noAutoRecompile,
+            confirmDestructive: confirmDestructive,
             showHelp: showHelp
         )
     }
@@ -418,6 +430,9 @@ enum TestRunner {
           --timeout <sec>     wait_for timeout in seconds (default: 15)
           --verbose, -v       Show detailed output
           --dry-run           Parse and validate without executing
+          --confirm-destructive
+                              Allow steps that send, remove, spend, or reset
+                              something on the device. Refused by default.
           --no-compiled       Skip compiled skills (force full OCR)
           --no-auto-recompile Skip auto-recompilation of drifted compiled skills
           --agent [model]     Diagnose compiled failures. Without model: deterministic OCR only.

@@ -111,8 +111,43 @@ final class InputSimulationLogicTests: XCTestCase {
         XCTAssertEqual(segments.count, 2)
         XCTAssertEqual(segments[0].method, .keyEvent)
         XCTAssertEqual(segments[0].text, "résumé ")
-        XCTAssertEqual(segments[1].method, .skip)
+        XCTAssertEqual(segments[1].method, .paste)
         XCTAssertEqual(segments[1].text, "😀")
+    }
+
+    // MARK: - Mixed text must not split into multiple clipboard writes
+
+    func testMixedTextStillSegmentsButPasteIsCoalescedByTypeText() {
+        // buildTypeSegments still reports the true shape — two paste runs either
+        // side of a typeable space. typeText must NOT paste them separately:
+        // Universal Clipboard is async, so a second write races the first and
+        // the device re-pastes the stale value. Observed on-device as
+        // "hello world" arriving twice with the emoji dropped.
+        let segments = simulation.buildTypeSegments("\u{3053}\u{3093}\u{306b}\u{3061}\u{306f} \u{1f389}")
+        let pasteRuns = segments.filter { $0.method == .paste }
+        XCTAssertEqual(pasteRuns.count, 2, "two separate unmappable runs")
+        XCTAssertEqual(segments.filter { $0.method == .keyEvent }.count, 1, "the space is typeable")
+        // The guard typeText relies on: any paste run at all means paste it all.
+        XCTAssertFalse(pasteRuns.isEmpty)
+    }
+
+    // MARK: - Clipboard dependency warning
+
+    func testPasteWarningNamesTheCountAndTheCause() {
+        let warning = InputSimulation.pasteDependencyWarning(5)
+        XCTAssertTrue(warning.contains("5 character(s)"), "got: \(warning)")
+        XCTAssertTrue(warning.contains("Handoff"),
+                      "The warning must name the thing to check — got: \(warning)")
+        XCTAssertTrue(warning.contains("Cmd+V"), "got: \(warning)")
+    }
+
+    func testPasteWarningDoesNotClaimSuccess() {
+        // Cmd+V is verified to work on-device; what cannot be verified is that
+        // the Mac pasteboard reached the phone. The wording must not imply it did.
+        let warning = InputSimulation.pasteDependencyWarning(3)
+        XCTAssertFalse(warning.lowercased().contains("typed successfully"))
+        XCTAssertTrue(warning.contains("verify") || warning.contains("still empty"),
+                      "got: \(warning)")
     }
 
     func testBuildTypeSegmentsNaiveAllHID() {
@@ -195,13 +230,13 @@ final class InputSimulationLogicTests: XCTestCase {
             XCTFail("Canadian-CSA layout not available on this system")
             return
         }
-        // "é😀" — é gets substituted to "/" (keyEvent), 😀 is skip
+        // "é😀" — é gets substituted to "/" (keyEvent), 😀 is pasted
         let segments = csa.buildTypeSegments("é😀")
         XCTAssertEqual(segments.count, 2)
         XCTAssertEqual(segments[0].method, .keyEvent)
         XCTAssertEqual(segments[0].text, "/",
                        "Canadian-CSA 'é' should be substituted to US QWERTY '/'")
-        XCTAssertEqual(segments[1].method, .skip)
+        XCTAssertEqual(segments[1].method, .paste)
         XCTAssertEqual(segments[1].text, "😀")
     }
 }

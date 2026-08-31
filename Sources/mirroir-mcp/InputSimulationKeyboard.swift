@@ -118,42 +118,114 @@ extension InputSimulation {
         DebugLog.log("typeText", "typing \(text.count) char(s)")
         ensureTargetFrontmost()
 
-        // Split text into segments: typeable (substituted) vs skip (no mapping).
+        // Split text into segments: typeable via keycodes vs pasted via clipboard.
         let segments = buildTypeSegments(text)
-        var skippedChars = ""
 
-        for segment in segments {
-            switch segment.method {
-            case .keyEvent:
-                if let error = typeViaCGEvent(segment.text) {
-                    return error
-                }
-            case .skip:
-                // No working paste mechanism — collect skipped characters for the warning
-                skippedChars += segment.text
-                fputs("InputSimulation: skipping \(segment.text.count) char(s) with no key mapping\n", stderr)
-            }
+        // One clipboard round-trip per call, never one per segment. Universal
+        // Clipboard propagates asynchronously and slower than a keystroke, so
+        // two writes in quick succession race: the second Cmd+V fires while the
+        // device still holds the first value and pastes it AGAIN. Observed
+        // on-device — "\u{3053}\u{3093}\u{306b}\u{3061}\u{306f}\u{4e16}\u{754c} \u{1f389}" arrived as the Japanese run twice with the
+        // emoji missing. Pasting the whole string once cannot race itself, and a
+        // wrong-but-plausible result is worse than a warned-about empty field.
+        let unmappable = segments.filter { $0.method == .paste }
+        if !unmappable.isEmpty {
+            let result = pasteText(text)
+            guard result.success else { return result }
+            let count = unmappable.reduce(0) { $0 + $1.text.count }
+            return TypeResult(success: true, warning: Self.pasteDependencyWarning(count),
+                              error: nil)
         }
 
-        if !skippedChars.isEmpty {
+        for segment in segments {
+            if let error = typeViaCGEvent(segment.text) {
+                return error
+            }
+        }
+        return TypeResult(success: true, warning: nil, error: nil)
+    }
+
+    /// Warning attached whenever some of the text had to go through the clipboard.
+    ///
+    /// The keystroke path is self-contained, but the clipboard path is not: it
+    /// relies on Universal Clipboard to carry the Mac pasteboard to the device.
+    /// Cmd+V itself is reliable — verified on-device to paste the *iPhone's*
+    /// clipboard — so when the field ends up empty, the missing piece is the
+    /// Mac-to-iPhone sync, not the keystroke. There is no API to read the
+    /// device's pasteboard back, so this cannot be verified from here; saying so
+    /// is better than reporting a success the caller cannot trust.
+    static func pasteDependencyWarning(_ count: Int) -> String {
+        """
+        \(count) character(s) have no key mapping and were sent through the \
+        clipboard with Cmd+V. That path needs Universal Clipboard: Handoff \
+        enabled on both the Mac and the iPhone, Bluetooth and Wi-Fi on, and both \
+        signed into the same iCloud account. If the field is still empty, \
+        Handoff is the thing to check — verify before relying on this text.
+        """
+    }
+
+    /// Enter text that has no keycode mapping by routing it through the shared
+    /// pasteboard and pressing Cmd+V.
+    ///
+    /// CJK, emoji, and most non-Latin characters have no macOS virtual keycode:
+    /// they are composed through an input method, which CGEvent cannot drive.
+    /// The pasteboard is therefore the only path that enters them at all.
+    /// iOS handles Cmd+V as a standard text-editing shortcut in a focused field
+    /// — verified on-device, along with Cmd+A and Cmd+C, so Cmd-modified keys do
+    /// reach iOS text fields through mirroring.
+    ///
+    /// What is NOT guaranteed is that the Mac pasteboard reaches the device at
+    /// all: that is Universal Clipboard, which needs Handoff enabled on both
+    /// ends. With Handoff off, Cmd+V still fires and still pastes — but it
+    /// pastes the iPhone's own clipboard, so the text written here never
+    /// arrives. The device pasteboard cannot be read back from here, so callers
+    /// are warned rather than given a success they cannot trust.
+    ///
+    /// The previous pasteboard contents are restored afterwards so automation
+    /// does not clobber what the user had copied. Only the plain-text
+    /// representation is preserved — richer flavors (RTF, images) are lost, so
+    /// the restore is a courtesy, not a guarantee.
+    ///
+    /// Requires a focused text field on the device; with nothing focused, iOS
+    /// has nowhere to paste and the text is silently dropped.
+    func pasteText(_ text: String) -> TypeResult {
+        let pasteboard = NSPasteboard.general
+        let saved = pasteboard.string(forType: .string)
+
+        pasteboard.clearContents()
+        guard pasteboard.setString(text, forType: .string) else {
             return TypeResult(
-                success: true,
-                warning: "Skipped \(skippedChars.count) character(s) with no key mapping",
-                error: nil
-            )
+                success: false, warning: nil,
+                error: "Failed to place \(text.count) character(s) on the pasteboard")
+        }
+        usleep(EnvConfig.pasteboardSyncUs)
+
+        DebugLog.log("pasteText", "pasting \(text.count) char(s) via Cmd+V")
+        let result = pressKey(keyName: "v", modifiers: ["command"])
+        usleep(EnvConfig.pasteCommitUs)
+
+        if let saved {
+            pasteboard.clearContents()
+            _ = pasteboard.setString(saved, forType: .string)
+        }
+
+        guard result.success else {
+            return TypeResult(
+                success: false, warning: nil,
+                error: result.error ?? "Cmd+V paste failed")
         }
         return TypeResult(success: true, warning: nil, error: nil)
     }
 
     /// A segment of text to be typed, with the method to use.
-    enum TypeMethod { case keyEvent, skip }
+    enum TypeMethod { case keyEvent, paste }
     struct TypeSegment {
         let text: String
         let method: TypeMethod
     }
 
     /// Split text into segments based on whether each character can be typed
-    /// via CGEvent key events (after layout substitution) or must be skipped.
+    /// via CGEvent key events (after layout substitution) or must be pasted.
     func buildTypeSegments(_ text: String) -> [TypeSegment] {
         var segments: [TypeSegment] = []
         var currentText = ""
@@ -161,9 +233,10 @@ extension InputSimulation {
 
         for char in text {
             let substituted = layoutSubstitution[char] ?? char
-            let method: TypeMethod = CGKeyMap.lookupSequence(substituted) != nil ? .keyEvent : .skip
+            let method: TypeMethod = CGKeyMap.lookupSequence(substituted) != nil ? .keyEvent : .paste
             // For key-event segments, use the substituted character (US QWERTY equivalent).
-            // For skip segments, use the original character.
+            // For paste segments, use the original character — the clipboard carries
+            // it verbatim, so no layout substitution applies.
             let outputChar = method == .keyEvent ? substituted : char
 
             if method == currentMethod {

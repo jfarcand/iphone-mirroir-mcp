@@ -19,10 +19,26 @@ extension MirroirMCP {
                 Capture a screenshot of the iPhone Mirroring window. \
                 Returns the current screen content as a PNG image. \
                 Use this to see what is displayed on the mirrored iPhone.
+
+                By default the capture waits for the screen to stop changing, \
+                because the mirrored frame lags the device: a capture taken \
+                immediately after an action can still show the pre-action \
+                screen. Never retry an action that "looks like a no-op" — the \
+                first one landed, so the retry fires on the next screen and \
+                mis-taps. Use settle_ms to tune the wait, or 0 to disable it.
                 """,
             inputSchema: [
                 "type": .string("object"),
-                "properties": .object([:]),
+                "properties": .object([
+                    "settle_ms": .object([
+                        "type": .string("integer"),
+                        "description": .string(
+                            "How long to wait for two consecutive identical frames before "
+                            + "returning, in milliseconds. 0 returns the first frame "
+                            + "immediately, which may be stale. Defaults to the "
+                            + "frameSettleTimeoutUs setting."),
+                    ]),
+                ]),
             ],
             handler: { args in
                 let (ctx, err) = registry.resolveForTool(args)
@@ -42,7 +58,15 @@ extension MirroirMCP {
                     }
                 }
 
-                guard let base64 = capture.captureBase64() else {
+                // A settle window of 0 is an explicit opt-out: the caller wants
+                // the first available frame and accepts that it may be stale.
+                let settleUs = args["settle_ms"]?.asInt().map { UInt32(max(0, $0)) * 1000 }
+                    ?? EnvConfig.frameSettleTimeoutUs
+                let base64 = settleUs == 0
+                    ? capture.captureBase64()
+                    : capture.captureSettledBase64(timeoutUs: settleUs)
+
+                guard let base64 else {
                     return .error(
                         "Failed to capture screenshot. Is the '\(ctx.name)' window visible?")
                 }

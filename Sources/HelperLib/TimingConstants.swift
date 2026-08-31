@@ -9,27 +9,6 @@
 public enum TimingConstants {
     // MARK: - Cursor & Input Settling
 
-    /// Delay after CGWarpMouseCursorPosition for cursor to settle (microseconds).
-    public static let cursorSettleUs: UInt32 = 10_000
-
-    /// Hold duration for a standard click (microseconds).
-    public static let clickHoldUs: UInt32 = 80_000
-
-    /// Hold duration per tap in a double-tap gesture (microseconds).
-    public static let doubleTapHoldUs: UInt32 = 40_000
-
-    /// Gap between the two taps in a double-tap gesture (microseconds).
-    public static let doubleTapGapUs: UInt32 = 50_000
-
-    /// Initial hold before drag movement to trigger iOS drag recognition (microseconds).
-    public static let dragModeHoldUs: UInt32 = 150_000
-
-    /// Delay after focus click for keyboard focus to settle (microseconds).
-    public static let focusSettleUs: UInt32 = 200_000
-
-    /// Delay between individual keystrokes during typing (microseconds).
-    public static let keystrokeDelayUs: UInt32 = 15_000
-
     // MARK: - App Switching & Navigation
 
     /// Delay after Space switch for macOS to settle (microseconds).
@@ -125,7 +104,6 @@ public enum TimingConstants {
     /// download bar) pack variable-width buttons with uneven gaps (observed
     /// ratio ≥ 4.0). 1.5 separates the two cleanly with margin for OCR jitter.
     public static let tapIconRowMaxSpacingRatio: Double = 1.5
-
 
     // MARK: - Safe Area
 

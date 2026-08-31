@@ -56,6 +56,9 @@ final class ScreenCapture: Sendable {
     /// Capture the target window and return base64-encoded PNG.
     func captureBase64() -> String? { captureData()?.base64EncodedString() }
 
+    // Settled capture is a default capability of every ScreenCapturing
+    // implementation — see the protocol extension at the bottom of this file.
+
     // MARK: - Capture strategies
 
     /// Capture a specific window by its CGWindowID using `screencapture -l`.
@@ -105,5 +108,51 @@ final class ScreenCapture: Sendable {
             DebugLog.log("ScreenCapture", "Failed to read screenshot: \(error)")
             return nil
         }
+    }
+}
+
+/// Settled capture, available to every `ScreenCapturing` implementation.
+///
+/// Written against `captureWithInfo()` alone so it needs no cooperation from
+/// conformers — real captures and test doubles settle by the same rules.
+extension ScreenCapturing {
+
+    /// Capture the target window once the screen has stopped changing.
+    ///
+    /// `screencapture` returns whatever the window server has already
+    /// composited, and during mirroring that lags the device by at least a
+    /// frame. A capture taken right after an action therefore shows the
+    /// *pre-action* screen, so the action reads as a no-op even though it
+    /// registered. Retrying on that false no-op is worse than slow: the first
+    /// action did land, so the retry fires on the next screen and mis-taps.
+    ///
+    /// Capturing until two consecutive frames show identical pixels removes the
+    /// ambiguity — a lagged frame differs from its successor, a settled one does
+    /// not. A screen that never settles (spinner, video, blinking caret) returns
+    /// its most recent frame once `timeoutUs` elapses: a live screen is still a
+    /// truthful answer, and only a *stale* one is a lie.
+    func captureSettledWithInfo(
+        timeoutUs: UInt32 = EnvConfig.frameSettleTimeoutUs
+    ) -> CaptureResult? {
+        guard var previous = captureWithInfo() else { return nil }
+        let deadline = DispatchTime.now().uptimeNanoseconds
+            + (UInt64(timeoutUs) * UInt64(NSEC_PER_USEC))
+
+        while DispatchTime.now().uptimeNanoseconds < deadline {
+            usleep(EnvConfig.frameSettlePollUs)
+            guard let current = captureWithInfo() else { return previous }
+            if FrameFingerprint.sameContent(previous.data, current.data) {
+                return current
+            }
+            previous = current
+        }
+
+        DebugLog.log("ScreenCapture", "frame did not settle within \(timeoutUs)us")
+        return previous
+    }
+
+    /// Capture a settled frame and return base64-encoded PNG.
+    func captureSettledBase64(timeoutUs: UInt32 = EnvConfig.frameSettleTimeoutUs) -> String? {
+        captureSettledWithInfo(timeoutUs: timeoutUs)?.data.base64EncodedString()
     }
 }

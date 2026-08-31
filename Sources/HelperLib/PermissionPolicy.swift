@@ -39,6 +39,12 @@ public struct PermissionConfig: Codable, Sendable {
     public var blockedApps: [String]?
     /// Element text patterns the explorer should never tap (case-insensitive containment).
     public var skipElements: [String]?
+    /// Extra text patterns that make a skill step require confirmation before a
+    /// run may execute it. Layered on top of
+    /// `DestructiveStepDetector.builtInConfirmPatterns`, never replacing them —
+    /// the built-ins are safety-critical. A pattern wrapped in slashes is a
+    /// regular expression.
+    public var confirmElements: [String]?
     /// Per-app tool rules. Keys are app display names (case-insensitive).
     /// When an app is being explored, its entry — if any — layers on top of the
     /// global `allow`/`deny` lists: per-app `deny` wins over global `allow`, and
@@ -48,12 +54,14 @@ public struct PermissionConfig: Codable, Sendable {
     public init(
         allow: [String]? = nil, deny: [String]? = nil,
         blockedApps: [String]? = nil, skipElements: [String]? = nil,
+        confirmElements: [String]? = nil,
         perApp: [String: AppToolRules]? = nil
     ) {
         self.allow = allow
         self.deny = deny
         self.blockedApps = blockedApps
         self.skipElements = skipElements
+        self.confirmElements = confirmElements
         self.perApp = perApp
     }
 }
