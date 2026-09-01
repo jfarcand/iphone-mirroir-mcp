@@ -1,18 +1,41 @@
-## CRITICAL: Keyboard Commands DO NOT Work in iOS Apps
+## CRITICAL: Which Keyboard Shortcuts Reach iOS
 
-**ALL keyboard commands (Cmd+[, Cmd+L, Cmd+T, Cmd+R, etc.) DO NOT WORK with iOS apps via iPhone Mirroring.**
+Key events DO reach iOS through mirroring. What decides the outcome is whether
+the focused iOS app implements that shortcut — not whether the keystroke arrives.
+Do not assume "keyboard never works"; assume "only shortcuts iOS itself defines
+work", and verify on the device.
 
-iPhone Mirroring only passes through to iOS apps:
-- **tap** — touch at coordinates
-- **swipe** — scroll gestures
-- **drag** — touch-and-drag (rearranging, sliders)
-- **long press** — context menus
-- **double tap** — zoom, text selection
-- **type_text** — character input (ONLY when a text field is active on the iPhone)
+**Verified working** (on-device, 2026-08-31, in a focused text field):
+- `Cmd+A` select all, `Cmd+C` copy, `Cmd+V` paste — a full
+  type → Cmd+A → Cmd+C → Cmd+A → delete → Cmd+V round-trip restores the text.
+- `Cmd+L` selects Safari's address bar — `open_url` has always depended on this.
 
-**Back navigation**: The ONLY way to go back in an iOS app is to OCR-detect the "<" back chevron in the top 15% of screen and tap it. `press_key(key: "[", modifiers: ["command"])` does NOT work. The explorers use `tapBackButton()` for this.
+These are the standard iOS text-editing and Safari shortcuts. `type_text` RELIES
+on `Cmd+V`: characters with no keycode (CJK, emoji) are routed through the
+clipboard, because CGEvent cannot drive an input method — see the next
+paragraph for the failure mode that comes with it.
 
-**press_key with modifiers**: Only works for Mac-level actions (e.g., shake via Ctrl+Cmd+Z). iOS apps do not receive keyboard shortcuts through iPhone Mirroring.
+**Universal Clipboard is the fragile part, not the keystroke.** `Cmd+V` pastes the
+*iPhone's* clipboard. Getting the Mac's pasteboard onto the phone is Continuity:
+Handoff on both ends, Bluetooth + Wi-Fi, same iCloud account. With it off, the
+paste silently produces nothing; worse, the sync is asynchronous, so a paste
+issued too soon pastes the device's PREVIOUS clipboard value and looks like it
+worked. `type_text` waits `pasteboardSyncUs` (1.5s) and pastes at most once per
+call for exactly this reason.
+
+**Still true — back navigation.** `press_key(key: "[", modifiers: ["command"])`
+does NOT navigate back: `Cmd+[` is a macOS convention that iOS apps do not
+implement, so the event arrives and nothing handles it. Back navigation is
+OCR-detecting the "<" chevron in the top 15% of the screen and tapping it. The
+explorers use `tapBackButton()`; desktop targets, which DO implement `Cmd+[`,
+use it via `DesktopAppStrategy`.
+
+**Gestures** remain the way to drive app UI: tap, swipe, drag, long press,
+double tap, and `type_text` (which needs a focused text field on the iPhone).
+
+**Not yet verified**: the shortcuts above were confirmed in system UI (Spotlight)
+and, for `Cmd+L`, in Safari. Behaviour inside an arbitrary third-party app has
+not been measured — if you depend on a shortcut there, test it first.
 
 ---
 
