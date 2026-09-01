@@ -34,6 +34,24 @@ jobs:
     outputs:
       version: ${{ steps.bump.outputs.version }}
     steps:
+      - name: Require dispatch from the default branch
+        env:
+          DISPATCH_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DEFAULT_BRANCH" ]; then
+            echo "::error::Could not resolve the repository default branch from the event payload"
+            exit 1
+          fi
+          if [ "$DISPATCH_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
+            echo "::error::Runner Release must be dispatched from '$DEFAULT_BRANCH', but this run is on '$DISPATCH_REF'"
+            echo "The bump step runs 'git push origin HEAD:\$DEFAULT_BRANCH'. From any other branch that"
+            echo "silently FAST-FORWARDS \$DEFAULT_BRANCH onto this branch's tip, then tags and publishes it."
+            exit 1
+          fi
+          echo "Dispatched from '$DEFAULT_BRANCH' - proceeding."
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
