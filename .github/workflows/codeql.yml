@@ -22,6 +22,7 @@ on:
       - '**/package.json'
       - '**/package-lock.json'
       - '.github/workflows/codeql.yml'
+      - '.github/actions/setup-embacle/**'
   pull_request:
     branches: [main]
     paths:
@@ -36,6 +37,7 @@ on:
       - '**/package.json'
       - '**/package-lock.json'
       - '.github/workflows/codeql.yml'
+      - '.github/actions/setup-embacle/**'
   workflow_dispatch:
   schedule:
     - cron: '0 6 * * 1'

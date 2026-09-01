@@ -12,6 +12,7 @@ on:
     paths:
       - 'runner/**'
       - '.github/workflows/runner.yml'
+      - '.github/actions/setup-playwright/**'
     # Every branch, not just main: this repo squash-merges locally and opens no
     # pull requests, so a feature branch has no other way to reach these lanes
     # before it lands. The paths filter above keeps unrelated pushes out, and the
@@ -20,6 +21,7 @@ on:
     paths:
       - 'runner/**'
       - '.github/workflows/runner.yml'
+      - '.github/actions/setup-playwright/**'
   # Sunday 03:00 UTC — gates the all-browsers lane.
   schedule:
     - cron: '0 3 * * 0'
