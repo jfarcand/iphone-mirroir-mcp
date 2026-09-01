@@ -1,0 +1,64 @@
+# ABOUTME: Builds, packages and launches FakeMirroring, the stand-in iPhone the integration tests drive.
+# ABOUTME: One definition for every workflow, so the launch preamble cannot drift between them.
+name: Setup FakeMirroring
+description: >
+  Build FakeMirroring from source, package it into a .app bundle, clear the two
+  macos-15 runner conditions that swallow synthetic taps (a foreground Setup
+  Assistant, and a display too short for the window), then launch it. Leaves
+  FakeMirroring running and settled, ready for `swift test --filter
+  IntegrationTests`. The calling job supplies MIRROIR_BUNDLE_ID and
+  MIRROIR_PROCESS_NAME for those tests, at job or step level; no step in this
+  action reads either.
+
+runs:
+  using: composite
+  steps:
+    - name: Build and package FakeMirroring
+      shell: bash
+      run: |
+        set -euo pipefail
+        swift build -c release --product FakeMirroring
+        ./scripts/package-fake-app.sh
+
+    - name: Quit Setup Assistant (macos-15 runner intercepts taps)
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Some macos-15 runners boot with Setup Assistant in the foreground
+        # (Welcome / first-run dialog). It sits above other windows and
+        # intercepts mouse events posted via cghidEventTap, so FakeMirroring
+        # receives no mouseUp and integration taps silently no-op. Quit it
+        # before launching FakeMirroring. `|| true` keeps the step idempotent
+        # on runners where Setup Assistant isn't present.
+        osascript -e 'tell application "Setup Assistant" to quit' 2>/dev/null || true
+        pkill -f "Setup Assistant" 2>/dev/null || true
+        sleep 1
+        ps -ef | grep -i "setup assistant" | grep -v grep \
+          && echo "Setup Assistant still running" \
+          || echo "Setup Assistant absent or quit"
+
+    - name: Ensure display fits the FakeMirroring window
+      shell: bash
+      run: |
+        set -euo pipefail
+        brew install --quiet jakehilborn/jakehilborn/displayplacer || brew install --quiet displayplacer || true
+        echo "--- displays before ---"
+        displayplacer list 2>/dev/null | grep -E "Persistent|Resolution" || true
+        SCREEN_ID=$(displayplacer list 2>/dev/null | awk -F': ' '/Persistent screen id/{print $2; exit}')
+        if [ -n "$SCREEN_ID" ]; then
+          for RES in 1920x1080 1680x1050 1600x1200; do
+            if displayplacer "id:$SCREEN_ID res:$RES" 2>/dev/null; then
+              echo "display set to $RES"
+              break
+            fi
+          done
+        fi
+        echo "--- displays after ---"
+        displayplacer list 2>/dev/null | grep -E "Resolution" || true
+
+    - name: Launch FakeMirroring
+      shell: bash
+      run: |
+        set -euo pipefail
+        open .build/release/FakeMirroring.app
+        sleep 3
