@@ -33,6 +33,10 @@ on:
         description: 'Explanation shown to registry consumers'
         required: false
         type: string
+      confirm:
+        description: 'Only for status=deleted: retype the full server name to confirm'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -75,6 +79,22 @@ jobs:
                exit 1 ;;
           esac
 
+      - name: Confirm an irreversible delete
+        env:
+          SERVER: ${{ inputs.server }}
+          STATUS: ${{ inputs.status }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          # mcp-publisher asks "Continue? [y/N]" interactively; CI has no stdin, so the
+          # step below answers it. That removes a real safety gate, so restore it here
+          # for the only status that cannot be undone by re-running this workflow.
+          if [ "$STATUS" = "deleted" ] && [ "$CONFIRM" != "$SERVER" ]; then
+            echo "::error::status=deleted requires 'confirm' to be the full server name ('$SERVER')"
+            exit 1
+          fi
+          echo "Confirmation OK for status=$STATUS"
+
       - uses: actions/checkout@v4
 
       - name: Install mcp-publisher
@@ -105,7 +125,11 @@ jobs:
             ARGS+=(--all-versions "$SERVER")
           fi
           echo "Running: mcp-publisher ${ARGS[*]}"
-          ./mcp-publisher "${ARGS[@]}"
+          # `mcp-publisher status` confirms interactively and there is no --yes flag,
+          # so answer its prompt. It prints the exact transition it is about to make
+          # ("0.4.1: active -> deprecated") before asking, and that lands in this log.
+          # pipefail is on, so the pipeline's status is mcp-publisher's own.
+          printf 'y\n' | ./mcp-publisher "${ARGS[@]}"
 
       - name: Show the resulting registry state
         env:
