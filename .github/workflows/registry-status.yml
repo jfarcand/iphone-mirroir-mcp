@@ -1,0 +1,127 @@
+# Maintenance lane for MCP Registry entries under the io.github.jfarcand/* namespace.
+#
+# Publishing happens in release.yml; this is the other half — changing the STATUS of
+# an already-published entry. Its first use is deprecating the pre-rename listing
+# io.github.jfarcand/iphone-mirroir-mcp, which still reads "active" and shows up in
+# registry search beside the current mirroir-mcp.
+#
+# Auth is GitHub OIDC, the same mechanism release.yml uses: the id-token below proves
+# ownership of the io.github.jfarcand/* namespace, so NO secret is involved. That is
+# also why this cannot be done from a laptop without an interactive device login.
+name: Registry Status
+
+on:
+  workflow_dispatch:
+    inputs:
+      server:
+        description: 'Full server name (e.g. io.github.jfarcand/iphone-mirroir-mcp)'
+        required: true
+        type: string
+      status:
+        description: 'New status'
+        required: true
+        type: choice
+        options:
+          - deprecated
+          - active
+          - deleted
+      version:
+        description: 'Version to change; leave EMPTY to apply to all versions'
+        required: false
+        type: string
+      message:
+        description: 'Explanation shown to registry consumers'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  set-status:
+    name: Set registry status
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for OIDC authentication to the MCP Registry.
+    steps:
+      - name: Require dispatch from the default branch
+        env:
+          DISPATCH_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DEFAULT_BRANCH" ]; then
+            echo "::error::Could not resolve the repository default branch from the event payload"
+            exit 1
+          fi
+          if [ "$DISPATCH_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
+            echo "::error::Registry Status must be dispatched from '$DEFAULT_BRANCH', but this run is on '$DISPATCH_REF'"
+            echo "This writes to a public registry under the repository's identity; it runs from one branch only."
+            exit 1
+          fi
+          echo "Dispatched from '$DEFAULT_BRANCH' - proceeding."
+
+      - name: Refuse a namespace this repository does not own
+        env:
+          SERVER: ${{ inputs.server }}
+        run: |
+          set -euo pipefail
+          # OIDC only proves ownership of io.github.jfarcand/*. Naming anything else
+          # fails at the registry anyway; catching it here says why.
+          case "$SERVER" in
+            io.github.jfarcand/*) echo "Namespace OK: $SERVER" ;;
+            *) echo "::error::'$SERVER' is outside io.github.jfarcand/*, which is the only namespace this workflow's OIDC token owns"
+               exit 1 ;;
+          esac
+
+      - uses: actions/checkout@v4
+
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Authenticate to MCP Registry (GitHub OIDC)
+        run: ./mcp-publisher login github-oidc
+
+      - name: Set status
+        env:
+          SERVER: ${{ inputs.server }}
+          STATUS: ${{ inputs.status }}
+          VERSION: ${{ inputs.version }}
+          MESSAGE: ${{ inputs.message }}
+        run: |
+          set -euo pipefail
+          # Flags must precede the positional arguments, per `mcp-publisher status --help`.
+          ARGS=(status --status "$STATUS")
+          # An `if`, not `[ -n ... ] && ...`: under `set -e` that compound statement
+          # returns non-zero when MESSAGE is empty and would abort the whole step.
+          if [ -n "$MESSAGE" ]; then
+            ARGS+=(--message "$MESSAGE")
+          fi
+          if [ -n "$VERSION" ]; then
+            ARGS+=("$SERVER" "$VERSION")
+          else
+            ARGS+=(--all-versions "$SERVER")
+          fi
+          echo "Running: mcp-publisher ${ARGS[*]}"
+          ./mcp-publisher "${ARGS[@]}"
+
+      - name: Show the resulting registry state
+        env:
+          SERVER: ${{ inputs.server }}
+        run: |
+          set -euo pipefail
+          # Read the registry back rather than trusting the command's exit code.
+          SEARCH="${SERVER#io.github.jfarcand/}"
+          curl -sS "https://registry.modelcontextprotocol.io/v0/servers?search=${SEARCH}&limit=100" > /tmp/registry.json
+          MATCHES=$(jq --arg want "$SERVER" '[.servers[] | select(.server.name == $want)] | length' /tmp/registry.json)
+          if [ "$MATCHES" = "0" ]; then
+            echo "::error::$SERVER not found in the registry after the status change"
+            exit 1
+          fi
+          jq -r --arg want "$SERVER" '
+            .servers[]
+            | select(.server.name == $want)
+            | "\(.server.name)  version=\(.server.version)  status=\(._meta["io.modelcontextprotocol.registry/official"].status)"
+          ' /tmp/registry.json
