@@ -18,6 +18,7 @@ on:
     paths:
       - 'Sources/**'
       - 'Tests/**'
+      - 'Resources/**'
       - 'Package.swift'
       - 'Package.resolved'
       - 'scripts/**'
@@ -33,6 +34,7 @@ on:
     paths:
       - 'Sources/**'
       - 'Tests/**'
+      - 'Resources/**'
       - 'Package.swift'
       - 'Package.resolved'
       - 'scripts/**'
