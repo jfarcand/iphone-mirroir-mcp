@@ -37,6 +37,8 @@ use crate::parser::step::CrossSurfaceArgs;
 ///   no text in the `mirroir-captures` attachment.
 /// * [`RunnerError::Io`] when a response file can't be read or the capture
 ///   can't be written.
+/// * [`RunnerError::CrossSurfaceEmptySurface`] when a listed file carries no
+///   comparable text, in either baseline mode.
 /// * [`RunnerError::CrossSurfaceMismatch`] when a pair falls below threshold
 ///   in [`BaselineMode::Compare`].
 pub fn dispatch_cross_surface(
@@ -82,25 +84,33 @@ pub fn dispatch_cross_surface(
         report_surfaces_accept_cannot_regenerate(args);
     }
 
-    let threshold = args.min_similarity.unwrap_or(0.7);
-    let mut bodies: Vec<(String, String)> = Vec::with_capacity(args.response_files.len());
+    let threshold = args.min_similarity;
+    let mut surfaces: Vec<(String, Fingerprint)> = Vec::with_capacity(args.response_files.len());
     for path in &args.response_files {
         let body = fs::read_to_string(path).map_err(|source| RunnerError::Io {
             context: format!("read cross_surface.response_files entry `{path}`"),
             source,
         })?;
-        bodies.push((path.clone(), body));
+        // Rejected before any pair is scored, in both baseline modes: Jaccard
+        // reads two empty token sets as identical — the right answer for drift
+        // against a recorded baseline, and a free pass here. An iOS capture of a
+        // screen that yielded no OCR text is a lone newline, so the empty
+        // surface is a real arrival, not a hypothetical one, and accepting it
+        // would bless a gate that can never fail.
+        let fingerprint = Fingerprint::of(&body);
+        if fingerprint.is_empty() {
+            return Err(RunnerError::CrossSurfaceEmptySurface { path: path.clone() });
+        }
+        surfaces.push((path.clone(), fingerprint));
     }
 
     // Compute pairwise Jaccard similarity. Fail on the first pair below threshold.
-    for i in 0..bodies.len() {
-        for j in (i + 1)..bodies.len() {
-            let fp_a = Fingerprint::of(&bodies[i].1);
-            let fp_b = Fingerprint::of(&bodies[j].1);
-            let sim = jaccard_similarity(&fp_a, &fp_b);
+    for i in 0..surfaces.len() {
+        for j in (i + 1)..surfaces.len() {
+            let sim = jaccard_similarity(&surfaces[i].1, &surfaces[j].1);
             info!(
-                a = %bodies[i].0,
-                b = %bodies[j].0,
+                a = %surfaces[i].0,
+                b = %surfaces[j].0,
                 similarity = sim,
                 threshold,
                 "cross_surface pairwise check"
@@ -112,8 +122,8 @@ pub fn dispatch_cross_surface(
                     // not drive has to be re-captured, and the next ordinary run
                     // fails on it.
                     warn!(
-                        a = %bodies[i].0,
-                        b = %bodies[j].0,
+                        a = %surfaces[i].0,
+                        b = %surfaces[j].0,
                         similarity = sim,
                         threshold,
                         "cross_surface pair is still below threshold after accept"
@@ -121,8 +131,8 @@ pub fn dispatch_cross_surface(
                     continue;
                 }
                 return Err(RunnerError::CrossSurfaceMismatch {
-                    a: bodies[i].0.clone(),
-                    b: bodies[j].0.clone(),
+                    a: surfaces[i].0.clone(),
+                    b: surfaces[j].0.clone(),
                     observed: sim,
                     threshold,
                 });
@@ -186,7 +196,7 @@ mod tests {
         // compared in its place.
         let args = CrossSurfaceArgs {
             response_files: vec!["a.txt".to_owned(), "b.txt".to_owned()],
-            min_similarity: Some(0.5),
+            min_similarity: 0.5,
             capture: Some(CrossSurfaceCapture {
                 selector: "main".to_owned(),
                 to: "b.web.txt".to_owned(),
@@ -212,7 +222,7 @@ mod tests {
     fn declared_capture_missing_from_the_attachment_is_rejected() -> TestResult {
         let args = CrossSurfaceArgs {
             response_files: vec!["a.txt".to_owned(), "b.txt".to_owned()],
-            min_similarity: Some(0.5),
+            min_similarity: 0.5,
             capture: Some(CrossSurfaceCapture {
                 selector: "main".to_owned(),
                 to: "b.txt".to_owned(),
@@ -243,7 +253,7 @@ mod tests {
         let b_path = b.display().to_string();
         let args = CrossSurfaceArgs {
             response_files: vec![a.display().to_string(), b_path.clone()],
-            min_similarity: Some(0.5),
+            min_similarity: 0.5,
             capture: Some(CrossSurfaceCapture {
                 selector: "main".to_owned(),
                 to: b_path,
@@ -276,10 +286,22 @@ mod tests {
         }
         // Scenarios that supply their own baselines still parse.
         let without: CrossSurfaceArgs =
-            from_str("response_files: [a.txt, b.txt]\n").map_err(|e| e.to_string())?;
+            from_str("response_files: [a.txt, b.txt]\nmin_similarity: 0.5\n")
+                .map_err(|e| e.to_string())?;
         if without.capture.is_some() {
             return Err("capture should default to None".to_owned());
         }
         Ok(())
+    }
+
+    #[test]
+    fn a_step_without_min_similarity_does_not_parse() -> TestResult {
+        // The threshold is the gate: no default stands in for one the scenario
+        // never declared.
+        match from_str::<CrossSurfaceArgs>("response_files: [a.txt, b.txt]\n") {
+            Err(e) if e.to_string().contains("min_similarity") => Ok(()),
+            Err(e) => Err(format!("rejected for the wrong reason: {e}")),
+            Ok(args) => Err(format!("an undeclared threshold parsed: {args:?}")),
+        }
     }
 }

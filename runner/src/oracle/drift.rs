@@ -38,6 +38,15 @@ impl Fingerprint {
     pub fn len(&self) -> usize {
         self.tokens.len()
     }
+
+    /// True when the text carried no tokens — blank, whitespace-only, or
+    /// nothing but punctuation. A caller that needs evidence, rather than a
+    /// similarity score, checks this before comparing: two empty fingerprints
+    /// are vacuously identical.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.tokens.is_empty()
+    }
 }
 
 /// Jaccard similarity between two fingerprints: `|A ∩ B| / |A ∪ B|`.

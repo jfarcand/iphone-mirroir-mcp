@@ -3,14 +3,12 @@
 
 use std::fmt::Write as _;
 
-use crate::compile::error::PlaywrightError;
 use crate::compile::playwright_emit::{emit_steps, js_string_literal};
 use crate::compile::playwright_prelude::{ScenarioSource, emit_prelude};
 use crate::compile::report::CAPTURES_ATTACHMENT;
 use crate::error::Result;
 use crate::parser::scenario::Scenario;
-use crate::parser::step::{Browser, SkillStep, TargetArgs, TargetKind};
-use crate::parser::surface::step_kind;
+use crate::parser::step::{Browser, TargetArgs};
 
 /// Output of [`compile_scenario`].
 ///
@@ -40,21 +38,25 @@ pub struct PlaywrightSpec {
 /// `captures` object, which the test attaches as
 /// [`CAPTURES_ATTACHMENT`] — the channel the Rust post-hooks read it back from.
 ///
-/// `source` names the YAML the scenario was loaded from; it becomes the
-/// emitted file's provenance header.
+/// `target` is the `target: { kind: web }` step the scenario's web block opens
+/// with, resolved by [`crate::replay_plan::ScenarioPlan`] — the layer that
+/// decides whether anything can execute the plan at all. `source` names the
+/// YAML the scenario was loaded from; it becomes the emitted file's provenance
+/// header.
 ///
 /// # Errors
 ///
-/// * [`PlaywrightError::Unsupported`] when the scenario has no
-///   `target: { kind: web }` step, declares a non-web kind, or carries a
-///   `measure:` whose `action` has no web equivalent.
-/// * [`PlaywrightError::Encode`] if a label, URL, or name can't be
-///   encoded as a JS string literal.
+/// * [`crate::compile::error::PlaywrightError::Unsupported`] when the scenario
+///   carries a `measure:` whose `action` has no web equivalent.
+/// * [`crate::compile::error::PlaywrightError::Encode`] if a label, URL, or
+///   name can't be encoded as a JS string literal.
 /// * [`crate::error::RunnerError::Format`] for `std::fmt::Write` failure
 ///   (unreachable for `String` but typed for `?` propagation).
-pub fn compile_scenario(scenario: &Scenario, source: &ScenarioSource) -> Result<PlaywrightSpec> {
-    let target = find_web_target(scenario)?;
-
+pub fn compile_scenario(
+    scenario: &Scenario,
+    target: &TargetArgs,
+    source: &ScenarioSource,
+) -> Result<PlaywrightSpec> {
     let browsers = if target.browsers.is_empty() {
         vec![Browser::Chrome]
     } else {
@@ -101,37 +103,13 @@ pub fn compile_scenario(scenario: &Scenario, source: &ScenarioSource) -> Result<
     })
 }
 
-fn find_web_target(scenario: &Scenario) -> Result<&TargetArgs> {
-    for step in &scenario.steps {
-        if let SkillStep::Target(t) = step {
-            return if matches!(t.kind, TargetKind::Web) {
-                Ok(t)
-            } else {
-                Err(PlaywrightError::Unsupported {
-                    reason: format!(
-                        "first target has kind={:?}; only `web` compiles to Playwright",
-                        t.kind
-                    ),
-                }
-                .into())
-            };
-        }
-    }
-    Err(PlaywrightError::Unsupported {
-        reason: format!(
-            "scenario has no `target: {{ kind: web, ... }}` step (first step is `{}`)",
-            scenario.steps.first().map_or("<empty>", step_kind)
-        ),
-    }
-    .into())
-}
-
 #[cfg(test)]
 mod tests {
     use std::error::Error as StdError;
     use std::result::Result as StdResult;
 
     use super::*;
+    use crate::replay_plan::ScenarioPlan;
 
     type TestResult = StdResult<(), Box<dyn StdError>>;
 
@@ -144,7 +122,11 @@ mod tests {
             path: "scenarios/unit.yaml".to_owned(),
             digest: "sha256:0".to_owned(),
         };
-        Ok(compile_scenario(&scenario, &source)?)
+        // The plan resolves the target, exactly as a run and an `--emit` do:
+        // a scenario the plan refuses never reaches the compiler.
+        let plan = ScenarioPlan::build(&scenario.steps)?;
+        let target = plan.web_target(&scenario.steps)?;
+        Ok(compile_scenario(&scenario, target, &source)?)
     }
 
     fn assert_contains(haystack: &str, needle: &str) -> TestResult {
@@ -380,46 +362,6 @@ steps:
             s,
             "_captures.metrics[\"first_token_latency\"] = Date.now() - _t0;",
         )?;
-        Ok(())
-    }
-
-    #[test]
-    fn missing_target_step_returns_error() -> TestResult {
-        let yaml = r#"
-version: 1
-name: no-target
-steps:
-  - tap: "Send"
-"#;
-        let res = compile(yaml);
-        let Err(boxed) = res else {
-            return Err("expected Unsupported".into());
-        };
-        if !boxed
-            .to_string()
-            .contains("no `target: { kind: web, ... }`")
-        {
-            return Err(format!("wrong error: {boxed}").into());
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn non_web_target_returns_error() -> TestResult {
-        let yaml = r#"
-version: 1
-name: ios-target
-steps:
-  - target: { kind: ios, app: "Expo Go" }
-  - tap: "Email"
-"#;
-        let res = compile(yaml);
-        let Err(boxed) = res else {
-            return Err("expected Unsupported".into());
-        };
-        if !boxed.to_string().contains("only `web` compiles") {
-            return Err(format!("wrong error: {boxed}").into());
-        }
         Ok(())
     }
 

@@ -5,14 +5,14 @@ use std::path::{Path, PathBuf};
 
 use tracing::info;
 
-use crate::compile::error::PlaywrightError;
 use crate::compile::playwright::compile_scenario;
 use crate::compile::playwright_prelude::ScenarioSource;
 use crate::compile::workspace::{PlaywrightWorkspace, path_stem};
 use crate::error::Result;
 use crate::parser::sample::SampleManifest;
 use crate::replay::{load_sample_manifest, load_scenario_with_extras};
-use crate::replay_sample::{ScenarioSet, select_scenarios};
+use crate::replay_plan::ScenarioPlan;
+use crate::scenario_set::{ScenarioSet, select_scenarios};
 
 /// One scenario's emitted artifacts.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,9 +38,13 @@ pub struct EmittedScenario {
 ///
 /// # Errors
 ///
-/// * Anything [`load_sample_manifest`] or [`load_scenario_with_extras`] returns.
-/// * [`PlaywrightError::Unsupported`] for a scenario with no web block.
-/// * [`PlaywrightError::Workspace`] when a directory or file can't be written.
+/// * Anything [`load_sample_manifest`], [`select_scenarios`] or
+///   [`load_scenario_with_extras`] returns.
+/// * [`crate::error::RunnerError::NoWebTarget`] for a scenario with no web
+///   block, and [`crate::error::RunnerError::NoExecutorForTargetKind`] for one
+///   whose `target:` names a surface this binary cannot drive.
+/// * [`crate::compile::error::PlaywrightError::Workspace`] when a directory
+///   or file can't be written.
 pub async fn emit_playwright(
     target: &Path,
     set: ScenarioSet,
@@ -61,16 +65,7 @@ fn resolve_targets(target: &Path, set: ScenarioSet) -> Result<(Option<String>, V
         return Ok((None, vec![target.to_path_buf()]));
     }
     let manifest: SampleManifest = load_sample_manifest(&target.join("SAMPLE.md"))?;
-    let selected = select_scenarios(&manifest, set);
-    if selected.is_empty() {
-        return Err(PlaywrightError::Unsupported {
-            reason: format!(
-                "sample {} declares no scenarios in the selected set",
-                target.display()
-            ),
-        }
-        .into());
-    }
+    let selected = select_scenarios(target, &manifest, set)?;
     let resolved = selected.iter().map(|rel| target.join(rel)).collect();
     Ok((Some(path_stem(target)), resolved))
 }
@@ -88,7 +83,9 @@ async fn emit_one(
         Vec::new()
     };
     let scenario = load_scenario_with_extras(source, &extras)?;
-    let spec = compile_scenario(&scenario, &ScenarioSource::read(source)?)?;
+    let plan = ScenarioPlan::build(&scenario.steps)?;
+    let target = plan.web_target(&scenario.steps)?;
+    let spec = compile_scenario(&scenario, target, &ScenarioSource::read(source)?)?;
 
     let workspace = PlaywrightWorkspace::for_scenario(cwd, sample_name, &path_stem(source));
     workspace.materialize(&spec.spec_ts, &spec.browsers).await?;

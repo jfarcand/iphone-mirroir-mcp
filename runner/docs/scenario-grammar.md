@@ -168,14 +168,23 @@ step](#annotation-step).
 ### `target`
 
 Declares the web surface for the scenario's web run. One per scenario, as the
-first step of that run.
+first step of that run — both rules are enforced by `--validate` and by the
+run, because a second declaration compiles to nothing and a late one would let
+web steps execute before the page is navigated.
 
 ```yaml
 - target:
-    kind: web                                       # web|process|http|ios|macos (only web compiles to Playwright)
+    kind: web                                       # the only kind mirroir-run executes
     browsers: [chrome, firefox, webkit]             # default [chrome]
     url: "http://localhost:8081/"                   # initial navigation
 ```
+
+`kind` parses `web|process|http|ios|macos`, but `web` is the only one this
+binary opens a run for; every other kind is refused by name at validate time.
+`ios` and `macos` are mirroir-mcp's surfaces — the Swift MCP server drives the
+device. Subprocess and REST scenarios declare **no** `target:` at all: their
+work is carried by the `spawn:` / `kill:` / `http:` steps, which dispatch in
+Rust and read nothing from a surface declaration.
 
 ### `tap`, `type`, `wait_for`, `assert_visible`, `assert_not_visible`
 
@@ -444,7 +453,7 @@ surface). Uses Jaccard fingerprint similarity over normalized token sets.
     response_files:
       - "${MIRROIR_SAMPLE_DIR}/baselines/surface-web.txt"
       - "${MIRROIR_SAMPLE_DIR}/baselines/surface-ios.txt"
-    min_similarity: 0.7                              # default 0.7
+    min_similarity: 0.5                              # required
     capture:                                         # optional: produce the web baseline
       selector: "main"                               #   scrape this selector's textContent()
       to: "${MIRROIR_SAMPLE_DIR}/baselines/surface-web.txt"  #   into this file (one of response_files)
@@ -463,8 +472,14 @@ a capture aimed elsewhere writes text nothing reads, leaving the comparison to
 run against whatever sits at the listed path — a stale baseline from an earlier
 run compares clean and the check passes for the wrong reason.
 
+`min_similarity` is **required** — the threshold is the gate, and a scenario
+that never declared one holds the run to nothing. A listed file that
+fingerprints to no tokens (blank, whitespace, or punctuation only) is refused
+before any pair is scored: two empty surfaces score a perfect match, so a check
+over them would pass without evidence.
+
 Errors: `CrossSurfaceTooFewFiles`, `CrossSurfaceCaptureTargetNotListed`,
-`CrossSurfaceNotCaptured`, `CrossSurfaceMismatch`.
+`CrossSurfaceNotCaptured`, `CrossSurfaceEmptySurface`, `CrossSurfaceMismatch`.
 
 ---
 

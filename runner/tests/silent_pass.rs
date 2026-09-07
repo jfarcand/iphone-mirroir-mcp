@@ -9,6 +9,8 @@
 
 mod common;
 
+use std::fs;
+
 use common::Sandbox;
 
 /// `- report: fail` is the scenario author saying "this run failed". Skipping
@@ -115,6 +117,213 @@ fn assertion_buried_in_a_condition_is_not_a_pass() -> Result<(), String> {
             "condition-only scenario exited {:?}; nothing was evaluated, so it is not a pass.\n{}",
             run.code,
             run.output()
+        ));
+    }
+    Ok(())
+}
+
+/// Plant a `.mirroir/` plan whose only entry lives under `plan.nice_to_pass`,
+/// optionally with a `default_set:` line. The entry is a local sample whose
+/// directory exists but carries no `SAMPLE.md`, so selecting it fails loudly
+/// on the manifest rather than on composition.
+fn plant_nice_to_pass_only_plan(
+    sandbox: &Sandbox,
+    default_set: Option<&str>,
+) -> Result<String, String> {
+    sandbox.write(".mirroir/samples/demo/scenarios/.keep", "")?;
+    let default_line = default_set.map_or_else(String::new, |set| format!("default_set: {set}\n"));
+    sandbox.write(
+        ".mirroir/mirroir.yaml",
+        &format!(
+            concat!(
+                "version: 1\n",
+                "{}",
+                "plan:\n",
+                "  nice_to_pass:\n",
+                "    - name: demo\n",
+                "      local: samples/demo\n",
+                "      boot:\n",
+                "        command: \"true\"\n",
+            ),
+            default_line
+        ),
+    )
+}
+
+/// A plan that declares entries only under `nice_to_pass` and names no
+/// `default_set:` used to select the empty `must_pass` tier, compose zero
+/// samples, and exit 0 with `"samples": []` — a green run over a plan that
+/// declares real work. The selection has to refuse instead, and say which
+/// tier does hold the entries.
+#[test]
+fn plan_with_only_nice_to_pass_entries_is_not_a_pass() -> Result<(), String> {
+    let sandbox = Sandbox::new()?;
+    let config = plant_nice_to_pass_only_plan(&sandbox, None)?;
+    let home = sandbox.path().display().to_string();
+
+    let run = sandbox.run_with_env(&["--config", &config], &[("HOME", &home)])?;
+    if !run.is_failure() {
+        return Err(format!(
+            "a plan whose only entry sits in nice_to_pass exited {:?}; selecting nothing is not a pass.\n{}",
+            run.code,
+            run.output()
+        ));
+    }
+    let output = run.output();
+    if !output.contains("nice_to_pass") {
+        return Err(format!(
+            "the refusal never names the tier that holds the entries:\n{output}"
+        ));
+    }
+    if !output.contains("default_set") || !output.contains("--scenarios") {
+        return Err(format!(
+            "the refusal never names the two ways to select the entries:\n{output}"
+        ));
+    }
+    Ok(())
+}
+
+/// The companion to the test above: naming the set the entries live in makes
+/// the very same plan select them. The run still fails — the local sample has
+/// no `SAMPLE.md` — but on the manifest, not on the selection. A fix that
+/// merely made every plan fail would pass the test above and fail this one.
+#[test]
+fn default_set_all_selects_the_entry_the_bare_run_filtered_out() -> Result<(), String> {
+    let sandbox = Sandbox::new()?;
+    let config = plant_nice_to_pass_only_plan(&sandbox, Some("all"))?;
+    let home = sandbox.path().display().to_string();
+
+    let run = sandbox.run_with_env(&["--config", &config], &[("HOME", &home)])?;
+    if !run.is_failure() {
+        return Err(format!(
+            "`default_set: all` over a sample with no SAMPLE.md exited {:?}.\n{}",
+            run.code,
+            run.output()
+        ));
+    }
+    let output = run.output();
+    if !output.contains("SAMPLE.md") {
+        return Err(format!(
+            "`default_set: all` did not reach the sample: nothing mentions SAMPLE.md.\n{output}"
+        ));
+    }
+    if output.contains("selected 0 of") {
+        return Err(format!(
+            "`default_set: all` still filtered the entry out.\n{output}"
+        ));
+    }
+    Ok(())
+}
+
+/// The other half of the same hole: when a set *does* select something, the
+/// entries it filtered out used to vanish from the run summary entirely —
+/// `"skipped": 0` while an entry of the plan sat unselected. The report has to
+/// account for every entry the plan declares, or it is not a record of the plan.
+#[test]
+fn a_set_filtered_entry_is_reported_as_skipped_not_dropped() -> Result<(), String> {
+    let sandbox = Sandbox::new()?;
+    sandbox.write(".mirroir/samples/core/scenarios/.keep", "")?;
+    sandbox.write(".mirroir/samples/extra/scenarios/.keep", "")?;
+    let config = sandbox.write(
+        ".mirroir/mirroir.yaml",
+        concat!(
+            "version: 1\n",
+            "plan:\n",
+            "  must_pass:\n",
+            "    - name: core\n",
+            "      local: samples/core\n",
+            "      boot:\n",
+            "        command: \"true\"\n",
+            "  nice_to_pass:\n",
+            "    - name: extra\n",
+            "      local: samples/extra\n",
+            "      boot:\n",
+            "        command: \"true\"\n",
+        ),
+    )?;
+    let home = sandbox.path().display().to_string();
+
+    let run = sandbox.run_with_env(&["--config", &config], &[("HOME", &home)])?;
+    if !run.is_failure() {
+        return Err(format!(
+            "the must_pass sample has no SAMPLE.md; the run exited {:?}.\n{}",
+            run.code,
+            run.output()
+        ));
+    }
+
+    let report_path = sandbox.path().join("mirroir-run-report.json");
+    let report = fs::read_to_string(&report_path).map_err(|e| format!("read run report: {e}"))?;
+    if !report.contains("\"skipped\": 1") {
+        return Err(format!(
+            "`extra` was filtered out by the must_pass set and the totals never counted it:\n{report}"
+        ));
+    }
+    if !report.contains("\"samples\": 2") {
+        return Err(format!(
+            "the summary accounts for fewer samples than the plan declares:\n{report}"
+        ));
+    }
+    if !report.contains("\"name\": \"extra\"") {
+        return Err(format!(
+            "the filtered entry is missing from samples[] entirely:\n{report}"
+        ));
+    }
+    Ok(())
+}
+
+/// Following the remedy the plan-level refusal prints must not land the user
+/// in the same hole one layer down. A `SAMPLE.md` declares its own tiers,
+/// independently of which plan tier the entry sits in, so `default_set:
+/// nice_to_pass` over a sample whose scenarios sit under `must_pass:` selects
+/// no scenario at all. The sample used to report `pass` for replaying nothing
+/// — a worse silent green than the one the plan-level guard closed, because
+/// the report positively claims a sample passed.
+#[test]
+fn a_set_that_selects_no_scenario_inside_the_sample_is_not_a_pass() -> Result<(), String> {
+    let sandbox = Sandbox::new()?;
+    let config = plant_nice_to_pass_only_plan(&sandbox, Some("nice_to_pass"))?;
+    sandbox.write(
+        ".mirroir/samples/demo/scenarios/smoke.yaml",
+        "version: 1\nname: declared pass\nsteps:\n  - report: pass\n",
+    )?;
+    sandbox.write(
+        ".mirroir/samples/demo/SAMPLE.md",
+        concat!(
+            "# Demo\n\n",
+            "```yaml\n",
+            "version: 1\n",
+            "session:\n",
+            "  boot:\n",
+            "    command: \"true\"\n",
+            "  scenarios:\n",
+            "    must_pass:\n",
+            "      - scenarios/smoke.yaml\n",
+            "```\n",
+        ),
+    )?;
+    let home = sandbox.path().display().to_string();
+
+    let run = sandbox.run_with_env(&["--config", &config], &[("HOME", &home)])?;
+    if !run.is_failure() {
+        return Err(format!(
+            "`default_set: nice_to_pass` over a SAMPLE.md that declares only must_pass scenarios exited {:?}; zero scenarios ran, so it is not a pass.\n{}",
+            run.code,
+            run.output()
+        ));
+    }
+    let output = run.output();
+    if !output.contains("must_pass") || !output.contains("nice_to_pass") {
+        return Err(format!(
+            "the refusal names neither the set in effect nor the tier that holds the scenarios:\n{output}"
+        ));
+    }
+
+    let report_path = sandbox.path().join("mirroir-run-report.json");
+    let report = fs::read_to_string(&report_path).map_err(|e| format!("read run report: {e}"))?;
+    if report.contains("\"passed\": 1") {
+        return Err(format!(
+            "the summary claims a sample passed while zero of its scenarios ran:\n{report}"
         ));
     }
     Ok(())

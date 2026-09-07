@@ -4,8 +4,9 @@
 use std::ops::Range;
 
 use crate::error::{Result, RunnerError};
-use crate::parser::step::SkillStep;
+use crate::parser::step::{SkillStep, TargetArgs, TargetKind};
 use crate::parser::surface::{is_annotation, is_web, step_kind};
+use crate::replay_target::{no_web_target, resolve_target};
 
 /// How one scenario executes.
 ///
@@ -32,12 +33,21 @@ impl ScenarioPlan {
     ///
     /// # Errors
     ///
+    /// [`RunnerError::NoExecutorForTargetKind`] when any `target:` declares a
+    /// surface this binary cannot drive, [`RunnerError::SecondTargetDeclared`]
+    /// when it declares its surface twice, and [`RunnerError::NoWebTarget`]
+    /// when it plans web steps no `target: { kind: web }` opens. A plan
+    /// nothing can execute is not a valid plan, so all three are refused here
+    /// rather than deep inside the compiler, where only a run would have
+    /// reached them.
+    ///
     /// [`RunnerError::WebBlockNotContiguous`] when a web step follows a
     /// runner-side step that already ended the scenario's web run. Re-entering
     /// the browser would mean a second invocation with a fresh context —
     /// cookies, storage, auth and in-memory state silently discarded — so the
     /// shape is rejected instead of quietly reordered.
     pub fn build(steps: &[SkillStep]) -> Result<Self> {
+        let declared = resolve_target(steps)?;
         let Some(start) = steps.iter().position(is_web) else {
             return Ok(Self {
                 pre: (0..steps.len()).collect(),
@@ -57,6 +67,18 @@ impl ScenarioPlan {
             .iter()
             .rposition(is_web)
             .map_or(separator, |offset| start + offset + 1);
+
+        // The block compiles to one Playwright invocation, so a browser has to
+        // open it. A web step before the `target:` would run before the page
+        // is navigated, which is why the target must be the block's first step
+        // and not merely present somewhere inside it.
+        let opens_the_block = matches!(
+            declared,
+            Some((index, target)) if index == start && target.kind == TargetKind::Web
+        );
+        if !opens_the_block {
+            return Err(no_web_target(steps));
+        }
 
         for (offset, step) in steps[separator..].iter().enumerate() {
             if is_web(step) {
@@ -94,6 +116,24 @@ impl ScenarioPlan {
     pub fn web(&self) -> Option<Range<usize>> {
         self.web.clone()
     }
+
+    /// The `target: { kind: web }` step the web block opens with.
+    ///
+    /// [`Self::build`] proves the block starts there, so the compiler receives
+    /// the target the plan resolved instead of scanning the scenario for one
+    /// of its own — and validate and run cannot disagree about which target a
+    /// file declares.
+    ///
+    /// # Errors
+    ///
+    /// [`RunnerError::NoWebTarget`] when the scenario plans no web block:
+    /// there is no browser work to compile.
+    pub fn web_target<'a>(&self, steps: &'a [SkillStep]) -> Result<&'a TargetArgs> {
+        match self.web.as_ref().and_then(|block| steps.get(block.start)) {
+            Some(SkillStep::Target(target)) => Ok(target),
+            _ => Err(no_web_target(steps)),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -106,6 +146,7 @@ mod tests {
     use super::ScenarioPlan;
     use crate::error::RunnerError;
     use crate::parser::scenario::Scenario;
+    use crate::parser::step::TargetKind;
 
     type TestResult = StdResult<(), String>;
 
@@ -282,6 +323,128 @@ steps:
                 Ok(())
             }
             other => Err(format!("expected WebBlockNotContiguous, got {other:?}")),
+        }
+    }
+
+    /// `ios` and `macos` are mirroir-mcp surfaces. The plan is what a run
+    /// executes, so a scenario naming one is refused here — where the kind can
+    /// be named — rather than deeper down, where the only symptom is a web
+    /// block nothing compiles.
+    #[test]
+    fn a_target_kind_with_no_executor_is_rejected_naming_the_kind() -> TestResult {
+        let scenario = steps(
+            r#"
+version: 1
+name: ios-target
+steps:
+  - target: { kind: ios, app: "Expo Go" }
+  - launch: "Expo Go"
+  - tap: "Email"
+"#,
+        )?;
+        match ScenarioPlan::build(&scenario.steps) {
+            Err(RunnerError::NoExecutorForTargetKind { index, kind }) => {
+                if index != 0 || kind != TargetKind::Ios {
+                    return Err(format!("wrong payload: index={index} kind={kind:?}"));
+                }
+                Ok(())
+            }
+            other => Err(format!("expected NoExecutorForTargetKind, got {other:?}")),
+        }
+    }
+
+    /// Web steps compile to a Playwright invocation, which has no browser to
+    /// start and no page to navigate unless a `target: { kind: web }` opens
+    /// the block. A scenario that declares no target at all plans exactly that,
+    /// so the plan refuses it instead of reporting a block nothing can run.
+    #[test]
+    fn web_steps_with_no_web_target_are_rejected() -> TestResult {
+        let scenario = steps("version: 1\nname: no-target\nsteps:\n  - tap: \"Send\"\n")?;
+        match ScenarioPlan::build(&scenario.steps) {
+            Err(RunnerError::NoWebTarget {
+                first_step,
+                declared,
+            }) => {
+                if first_step != "tap" || declared != "none" {
+                    return Err(format!(
+                        "wrong payload: first_step={first_step} declared={declared:?}"
+                    ));
+                }
+                Ok(())
+            }
+            other => Err(format!("expected NoWebTarget, got {other:?}")),
+        }
+    }
+
+    /// The `target:` opens the block: a web step before it would run before the
+    /// page is navigated. Declaring the browser late is the same missing-target
+    /// bug as never declaring one.
+    #[test]
+    fn a_web_step_before_the_target_is_rejected() -> TestResult {
+        let scenario = steps(
+            r#"
+version: 1
+name: target declared late
+steps:
+  - assert_visible: "Dashboard"
+  - target: { kind: web, url: "http://x/" }
+"#,
+        )?;
+        match ScenarioPlan::build(&scenario.steps) {
+            Err(RunnerError::NoWebTarget {
+                first_step,
+                declared,
+            }) => {
+                if first_step != "assert_visible" || declared != "web" {
+                    return Err(format!(
+                        "wrong payload: first_step={first_step} declared={declared:?}"
+                    ));
+                }
+                Ok(())
+            }
+            other => Err(format!("expected NoWebTarget, got {other:?}")),
+        }
+    }
+
+    /// The plan resolves the target the compiler receives, so the two cannot
+    /// disagree about which browser a scenario declared.
+    #[test]
+    fn the_plan_hands_the_compiler_the_target_that_opens_the_block() -> TestResult {
+        let scenario = steps(
+            r#"
+version: 1
+name: resolved target
+steps:
+  - spawn: { id: s, command: "echo hi" }
+  - target: { kind: web, url: "http://x/" }
+  - assert_visible: "Dashboard"
+"#,
+        )?;
+        let plan = ScenarioPlan::build(&scenario.steps).map_err(|e| format!("build: {e}"))?;
+        let target = plan
+            .web_target(&scenario.steps)
+            .map_err(|e| format!("web_target: {e}"))?;
+        assert_eq!(target.kind, TargetKind::Web);
+        assert_eq!(target.url.as_deref(), Some("http://x/"));
+        Ok(())
+    }
+
+    /// A scenario with no web block has nothing to compile: asking it for a
+    /// target is an error, not an empty success a caller could mistake for one.
+    #[test]
+    fn a_scenario_with_no_web_block_has_no_target_to_compile() -> TestResult {
+        let scenario = steps(
+            "version: 1\nname: no-web\nsteps:\n  - http: { method: GET, url: \"http://x/\" }\n",
+        )?;
+        let plan = ScenarioPlan::build(&scenario.steps).map_err(|e| format!("build: {e}"))?;
+        match plan.web_target(&scenario.steps) {
+            Err(RunnerError::NoWebTarget { first_step, .. }) => {
+                if first_step != "http" {
+                    return Err(format!("wrong payload: first_step={first_step}"));
+                }
+                Ok(())
+            }
+            other => Err(format!("expected NoWebTarget, got {:?}", other.map(|_| ()))),
         }
     }
 

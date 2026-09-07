@@ -9,10 +9,11 @@ import HelperLib
 /// Renders a linear exploration capture into a `mirroir-run` SkillStep scenario
 /// on the iOS surface, plus the cross-surface baseline text for that flow.
 ///
-/// The emitted YAML parses against the shared step grammar (validate it with
-/// `mirroir-run --validate`). The runner has no iOS executor, so the scenario is
-/// never replayed — it is a faithful baseline of the captured walk and the anchor
-/// a paired web capture is compared against via `cross_surface:`.
+/// The emitted YAML is written in the shared step grammar, but it declares
+/// `target: { kind: ios }` — a surface mirroir-run has no executor for, so the
+/// runner refuses it by name rather than planning it. It is a faithful record of
+/// the captured walk and the anchor a paired web capture is compared against via
+/// `cross_surface:`.
 enum ScenarioStepFormatter {
 
     /// Build the full `<flow>.ios.yaml` scenario document for `screens`.
@@ -46,7 +47,8 @@ enum ScenarioStepFormatter {
     /// Build the `<flow>.parity.yaml` cross-surface gate: pairs the iOS baseline
     /// (emitted here) with a web baseline (produced by the web leg). The runner
     /// compares the two files by Jaccard similarity; the step fails closed until
-    /// the web capture exists. Validate with `mirroir-run --validate`.
+    /// the web capture exists. This gate declares no `target:`, so unlike the iOS
+    /// walk it does validate with `mirroir-run --validate`.
     static func crossSurfaceYAML(name: String, flow: String) -> String {
         let lines = [
             "version: 1",

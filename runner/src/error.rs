@@ -4,6 +4,7 @@
 use std::fmt;
 use std::io;
 use std::ops::RangeInclusive;
+use std::path::PathBuf;
 use std::result::Result as StdResult;
 
 use thiserror::Error;
@@ -11,6 +12,7 @@ use thiserror::Error;
 use crate::compile::error::PlaywrightError;
 use crate::mirroir::error::MirroirError;
 use crate::oracle::error::OracleError;
+use crate::parser::step::TargetKind;
 
 /// `Result` alias used throughout the `mirroir-run` binary.
 ///
@@ -260,6 +262,35 @@ pub enum RunnerError {
         first_error: String,
     },
 
+    /// The scenario set in effect names none of the sample's scenarios, while
+    /// other tiers of its `SAMPLE.md` do declare some. The sample declares
+    /// work; the invocation filtered all of it out, so nothing would replay
+    /// and there is nothing to call a pass.
+    #[error(
+        "sample `{sample_dir}`: scenario set `{selected}` selected 0 of the SAMPLE.md's {total} scenarios; they are declared under: {populated}. Name a set that covers them — `--scenarios` on the command line, or `default_set:` in mirroir.yaml"
+    )]
+    SampleSetMatchedNothing {
+        /// Directory whose `SAMPLE.md` was read.
+        sample_dir: PathBuf,
+        /// The set that was in effect: `must_pass`, `nice_to_pass`, or `all`.
+        selected: String,
+        /// Scenarios the manifest declares across every tier.
+        total: usize,
+        /// Comma-separated tiers that do declare scenarios.
+        populated: String,
+    },
+
+    /// The sample's `SAMPLE.md` declares no scenario in any tier. Unlike
+    /// [`Self::SampleSetMatchedNothing`] no scenario set can rescue this run —
+    /// the manifest itself declares no work.
+    #[error(
+        "sample `{sample_dir}`: SAMPLE.md declares no scenarios in any tier; a sample that replays nothing is not a pass"
+    )]
+    SampleDeclaresNoScenarios {
+        /// Directory whose `SAMPLE.md` was read.
+        sample_dir: PathBuf,
+    },
+
     /// A scenario's web steps are split by a runner-side step. Every scenario
     /// compiles to exactly one Playwright invocation, so a second run of web
     /// steps would execute out of the order the file reads.
@@ -275,6 +306,50 @@ pub enum RunnerError {
         block_end: usize,
         /// Kind of the runner-side step that ended the web run.
         separator_kind: &'static str,
+    },
+
+    /// A `target:` step names a surface this binary has no executor for. Only
+    /// `web` opens one here; `ios` and `macos` belong to mirroir-mcp, which
+    /// talks to the device from Swift, and `process` / `http` work is carried
+    /// by the steps themselves rather than by a surface declaration.
+    #[error(
+        "step {index} declares `target: {{ kind: {kind} }}`, which mirroir-run has no executor for. Only `target: {{ kind: web }}` runs here — it compiles to one Playwright invocation. `ios` and `macos` surfaces are driven by mirroir-mcp, the Swift MCP server; subprocess and REST work needs no `target:` at all, because `spawn:`, `kill:` and `http:` steps dispatch in Rust on their own"
+    )]
+    NoExecutorForTargetKind {
+        /// Index of the `target:` step, as the file reads.
+        index: usize,
+        /// The surface kind it declared.
+        kind: TargetKind,
+    },
+
+    /// A scenario declares its surface twice. The compiler consumes the
+    /// declaration the web block opens with and emits nothing for any other,
+    /// so a second `target:` is a declaration nothing executes — including one
+    /// that switches surface mid-file, whose steps would compile into the
+    /// first surface's run.
+    #[error(
+        "step {index} declares a second `target:`; step {first} already declared this scenario's surface. One scenario runs on one surface: a later `target:` executes nothing, and a second Playwright invocation would start a fresh context, silently discarding the first one's cookies, storage and in-memory state"
+    )]
+    SecondTargetDeclared {
+        /// Index of the `target:` step that already declared the surface.
+        first: usize,
+        /// Index of the second declaration, as the file reads.
+        index: usize,
+    },
+
+    /// A scenario's web steps have no browser to run in. They compile to one
+    /// Playwright invocation, and the `target: { kind: web, ... }` step that
+    /// opens the web block is what tells that invocation which browsers to
+    /// start and where to navigate.
+    #[error(
+        "scenario has no `target: {{ kind: web, ... }}` step opening its web block (first step is `{first_step}`, declared target kind: {declared}). Web steps compile to a Playwright invocation and need a browser to run in"
+    )]
+    NoWebTarget {
+        /// Kind of the scenario's first step, as the file reads.
+        first_step: &'static str,
+        /// The surface the scenario did declare, spelled as the file spells
+        /// it, or `none` when it declared no `target:` at all.
+        declared: &'static str,
     },
 
     /// A web step reached the runner-side dispatcher. Web steps belong to the
@@ -345,6 +420,20 @@ pub enum RunnerError {
     CrossSurfaceTooFewFiles {
         /// How many were supplied.
         count: usize,
+    },
+
+    /// A `cross_surface:` response file fingerprinted to no tokens. Jaccard
+    /// calls two empty token sets identical — the documented answer for drift
+    /// against a recorded baseline — so a blank surface would clear any
+    /// threshold against another blank one and prove nothing. `generate_skill`
+    /// writes a lone newline when a screen yielded no OCR text, which is how an
+    /// empty surface reaches the check in practice.
+    #[error(
+        "cross_surface response file `{path}` has no comparable text: an empty surface cannot substantiate an equivalence check"
+    )]
+    CrossSurfaceEmptySurface {
+        /// The response file whose fingerprint held no tokens.
+        path: String,
     },
 
     /// `cross_surface:` capture writes somewhere the step never reads. The

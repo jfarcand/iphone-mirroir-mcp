@@ -29,7 +29,8 @@ pub struct SampleVerdict {
     pub name: String,
     /// `pass` / `fail` / `drift` / `skipped` / `composed`.
     pub verdict: SampleStatus,
-    /// Optional message when the sample failed or drifted.
+    /// Optional message explaining the verdict: failure detail, drift note, or
+    /// why an entry the plan declares never ran.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -60,7 +61,8 @@ pub struct RunTotals {
     pub failed: usize,
     /// Samples that held structurally but whose semantics moved.
     pub drifted: usize,
-    /// Samples that were skipped (`skip: true` in overrides).
+    /// Samples that never ran: the plan entry declared `skip: true`, or the
+    /// scenario set in effect did not select it.
     pub skipped: usize,
 }
 

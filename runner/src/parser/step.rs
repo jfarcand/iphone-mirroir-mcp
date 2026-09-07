@@ -1,6 +1,7 @@
 // ABOUTME: SkillStep enum + step argument types — port of mirroir's SwiftParser grammar.
 // ABOUTME: Externally tagged so YAML `- launch: "App"` deserializes via the key name as the discriminator.
 
+use std::fmt;
 use std::result::Result as StdResult;
 
 use serde::Deserialize;
@@ -88,7 +89,7 @@ pub enum SkillStep {
     /// `- cross_surface: { response_files: [a, b, ...], min_similarity }` —
     /// compare captured responses from multiple surfaces (web/iOS/http) and
     /// fail when pairwise Jaccard fingerprint similarity drops below
-    /// `min_similarity` (default 0.7).
+    /// `min_similarity`, which every step declares.
     CrossSurface(CrossSurfaceArgs),
 }
 
@@ -271,7 +272,8 @@ pub struct DragArgs {
 /// Arguments for `target` — declares the execution surface for subsequent steps.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct TargetArgs {
-    /// Kind of surface — `web` (Playwright), `process` (tokio), `http` (reqwest), `ios` (mirroir-mcp).
+    /// Kind of surface. Only `web` (Playwright) opens a run here — see
+    /// [`TargetKind::runner_executes`] for which side owns each of the others.
     pub kind: TargetKind,
     /// For `kind: web`, the list of browsers to materialize as Playwright projects.
     /// Empty list defaults to `[chromium]` at compile time.
@@ -285,20 +287,66 @@ pub struct TargetArgs {
     pub app: Option<String>,
 }
 
-/// Target kinds supported by the runner.
+/// Target kinds the grammar parses. Which of them this binary runs is
+/// [`TargetKind::runner_executes`].
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum TargetKind {
     /// Web surface driven via Playwright.
     Web,
-    /// Subprocess target (spawn / kill / log capture).
+    /// Subprocess surface — its work is carried by `spawn:` / `kill:` /
+    /// `assert_log:` steps, which need no `target:`.
     Process,
-    /// HTTP target (REST probes).
+    /// HTTP surface — its work is carried by `http:` steps, which need no
+    /// `target:`.
     Http,
     /// iOS surface delegated to mirroir-mcp.
     Ios,
     /// macOS app surface (mirroir-mcp existing target).
     Macos,
+}
+
+impl TargetKind {
+    /// Whether this binary executes a scenario that declares this surface.
+    ///
+    /// Only `web` does: it compiles to one Playwright invocation, and the
+    /// declaration carries the browsers and the URL that invocation needs.
+    ///
+    /// `ios` and `macos` are mirroir-mcp surfaces — the Swift MCP server
+    /// drives the device. `process` and `http` name no executor either: that
+    /// work lives in `spawn:` / `kill:` / `http:` steps, which dispatch in
+    /// Rust and read nothing from a `target:`, so declaring one as a surface
+    /// names something nothing here opens.
+    ///
+    /// The match is exhaustive on purpose — a new surface must declare which
+    /// side owns it before this compiles.
+    #[must_use]
+    pub const fn runner_executes(self) -> bool {
+        match self {
+            Self::Web => true,
+            Self::Process | Self::Http | Self::Ios | Self::Macos => false,
+        }
+    }
+
+    /// The kind as a scenario spells it, matching the `snake_case` serde
+    /// rename. An error quoting a `target:` back to its author has to use the
+    /// author's spelling, so this is what [`Display`] renders.
+    #[must_use]
+    pub const fn as_yaml(self) -> &'static str {
+        match self {
+            Self::Web => "web",
+            Self::Process => "process",
+            Self::Http => "http",
+            Self::Ios => "ios",
+            Self::Macos => "macos",
+        }
+    }
+}
+
+impl fmt::Display for TargetKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_yaml())
+    }
 }
 
 /// Browsers materialized as Playwright projects in the emitted `playwright.config.ts`.
@@ -425,5 +473,28 @@ target:
         );
         assert_eq!(args.url.as_deref(), Some("http://localhost:8081/"));
         Ok(())
+    }
+
+    /// `web` is the one surface a `target:` can declare here — it compiles to
+    /// Playwright. `ios` and `macos` belong to mirroir-mcp, and `process` and
+    /// `http` name no executor of their own: their work is dispatched by
+    /// `spawn:` / `http:` steps, which need no `target:` at all.
+    #[test]
+    fn only_a_web_target_names_a_surface_this_binary_executes() {
+        assert!(
+            TargetKind::Web.runner_executes(),
+            "web compiles to Playwright"
+        );
+        for kind in [
+            TargetKind::Process,
+            TargetKind::Http,
+            TargetKind::Ios,
+            TargetKind::Macos,
+        ] {
+            assert!(
+                !kind.runner_executes(),
+                "{kind:?} names no executor a `target:` opens"
+            );
+        }
     }
 }

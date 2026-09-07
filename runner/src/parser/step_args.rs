@@ -116,9 +116,10 @@ pub enum ReportVerdict {
 pub struct CrossSurfaceArgs {
     /// Filesystem paths whose contents are compared pairwise.
     pub response_files: Vec<String>,
-    /// Minimum pairwise fingerprint similarity in `[0, 1]`. Defaults to 0.7.
-    #[serde(default)]
-    pub min_similarity: Option<f64>,
+    /// Minimum pairwise fingerprint similarity in `[0, 1]`. Required: the
+    /// threshold *is* the gate, so the scenario declares how close the surfaces
+    /// have to be rather than inheriting a number nobody chose.
+    pub min_similarity: f64,
     /// Optional runner-driven web capture: scrape `selector`'s text into `to`
     /// during the preceding web block (the same Playwright mechanism `judge:`
     /// uses), producing one of the `response_files` baselines instead of

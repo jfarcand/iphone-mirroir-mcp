@@ -21,6 +21,7 @@ use crate::oracle::thresholds::{ThresholdSearch, load_policy};
 use crate::parser::env::substitute;
 use crate::parser::sample::{SAMPLE_SCHEMA_VERSION, SampleManifest, extract_yaml_block};
 use crate::parser::scenario::{SCHEMA_VERSION, Scenario};
+use crate::parser::step::TargetArgs;
 use crate::parser::surface::step_kind;
 use crate::replay_dispatch::verify_measures;
 use crate::replay_plan::ScenarioPlan;
@@ -29,7 +30,8 @@ use crate::target::http::HttpClient;
 use crate::target::process::ProcessRegistry;
 use crate::verdict::RunVerdict;
 
-pub use crate::replay_sample::{ScenarioSet, run_sample};
+pub use crate::replay_sample::run_sample;
+pub use crate::scenario_set::ScenarioSet;
 
 /// Read + env-substitute + parse a scenario YAML file with `version` gating.
 ///
@@ -269,7 +271,9 @@ pub async fn run_scenario_with_context(
                 &path_stem(path),
             );
             let source = ScenarioSource::read(path)?;
-            let captures = run_web_block(&scenario, &source, block.len(), &workspace).await?;
+            let target = plan.web_target(&scenario.steps)?;
+            let captures =
+                run_web_block(&scenario, target, &source, block.len(), &workspace).await?;
             counters.evaluated += block.len();
             verify_measures(&scenario.steps[block], &captures, &mut drift)?;
             captures
@@ -391,11 +395,12 @@ async fn run_hooks(
 /// opens, and the path is logged so a reader can find them.
 async fn run_web_block(
     scenario: &Scenario,
+    target: &TargetArgs,
     source: &ScenarioSource,
     web_steps: usize,
     workspace: &PlaywrightWorkspace,
 ) -> Result<PlaywrightCaptures> {
-    let spec = compile_scenario(scenario, source)?;
+    let spec = compile_scenario(scenario, target, source)?;
     let runner = PlaywrightRunner::from_env()?;
     info!(
         web_steps,

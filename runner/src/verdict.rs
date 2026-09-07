@@ -76,7 +76,8 @@ pub enum SampleStatus {
     Fail,
     /// No scenario failed and at least one drifted.
     Drift,
-    /// The plan entry declared `skip: true`.
+    /// The plan entry never ran: it declared `skip: true`, or the scenario
+    /// set in effect did not select it.
     Skipped,
     /// `--compose-only`: the tree was built and nothing was replayed.
     Composed,

@@ -77,11 +77,11 @@ pub enum MirroirError {
     },
 
     /// At least one sample in a `mirroir-run` invocation reported failures.
-    #[error("mirroir plan: {failed} of {total} samples failed")]
+    #[error("mirroir plan: {failed} of {total} plan entries failed")]
     PlanFailures {
-        /// Number of failed samples.
+        /// Number of plan entries whose sample failed.
         failed: usize,
-        /// Total samples attempted.
+        /// Total plan entries accounted for, replayed or skipped.
         total: usize,
     },
 
@@ -118,6 +118,31 @@ pub enum MirroirError {
     LockfileMissing {
         /// Where the lockfile was expected.
         path: PathBuf,
+    },
+
+    /// The scenario set in effect selected none of the plan's entries, while
+    /// other tiers do hold entries. The plan declares work; the invocation
+    /// filtered all of it out, so there is nothing to replay and nothing to
+    /// call a pass.
+    #[error(
+        "scenario set `{selected}` selected 0 of the plan's {total} entries; entries are declared under: {populated}. Name a set that covers them — `default_set:` in mirroir.yaml, or `--scenarios` on the command line"
+    )]
+    SelectionMatchedNothing {
+        /// The set that was in effect: `must_pass`, `nice_to_pass`, or `all`.
+        selected: String,
+        /// Plan entries declared across every tier.
+        total: usize,
+        /// Comma-separated tiers that do hold entries.
+        populated: String,
+    },
+
+    /// `mirroir.yaml` declares no plan entries in any tier. Unlike
+    /// [`Self::SelectionMatchedNothing`] no scenario set can rescue this run —
+    /// the config itself declares no work.
+    #[error("`{config}` declares no plan entries; a run with nothing to replay is not a pass")]
+    PlanEmpty {
+        /// The `mirroir.yaml` that was loaded.
+        config: PathBuf,
     },
 
     /// `HOME` environment variable is not set; can't locate `~/.mirroir/`.

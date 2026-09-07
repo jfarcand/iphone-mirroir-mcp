@@ -2,28 +2,17 @@
 // ABOUTME: Drives each selected scenario through `run_scenario_with_context` with manifest context active.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use clap::ValueEnum;
 use tracing::{error, info};
 
 use crate::error::{Result, RunnerError};
 use crate::parser::sample::SampleManifest;
 use crate::parser::step::{KillArgs, PortState, SpawnArgs, WaitPortArgs};
 use crate::replay::{ReplayRoots, SampleContext, load_sample_manifest, run_scenario_with_context};
+use crate::scenario_set::{ScenarioSet, select_scenarios};
 use crate::target::process::ProcessRegistry;
 use crate::verdict::RunVerdict;
-
-/// Which set of scenarios from a `SAMPLE.md` session block to drive.
-#[derive(Copy, Clone, Debug, ValueEnum)]
-pub enum ScenarioSet {
-    /// `session.scenarios.must_pass` — these must pass for the sample to be considered green.
-    MustPass,
-    /// `session.scenarios.nice_to_pass` — informational; FAIL doesn't block the sample.
-    NiceToPass,
-    /// Both `must_pass` and `nice_to_pass`.
-    All,
-}
 
 /// Implements `mirroir-run --sample <dir>`.
 ///
@@ -37,6 +26,9 @@ pub enum ScenarioSet {
 /// # Errors
 ///
 /// * Anything [`load_sample_manifest`] returns.
+/// * Anything [`select_scenarios`] returns — a set that drives none of the
+///   sample's scenarios is refused here rather than replayed as a pass over
+///   nothing.
 /// * [`RunnerError::SampleScenarioFailures`] when one or more scenarios failed.
 pub async fn run_sample(
     sample_dir: &Path,
@@ -54,7 +46,7 @@ pub async fn run_sample(
         "sample run starting"
     );
 
-    let selected = select_scenarios(&manifest, set);
+    let selected = select_scenarios(sample_dir, &manifest, set)?;
     let context = SampleContext {
         sample_dir,
         manifest: &manifest,
@@ -164,21 +156,6 @@ async fn boot_session(sample_dir: &Path, manifest: &SampleManifest) -> Result<Pr
     Ok(registry)
 }
 
-/// Build the ordered list of scenario paths the user asked for.
-/// The scenario list `set` names in `manifest`, in declaration order.
-#[must_use]
-pub fn select_scenarios(manifest: &SampleManifest, set: ScenarioSet) -> Vec<PathBuf> {
-    match set {
-        ScenarioSet::MustPass => manifest.session.scenarios.must_pass.clone(),
-        ScenarioSet::NiceToPass => manifest.session.scenarios.nice_to_pass.clone(),
-        ScenarioSet::All => {
-            let mut combined = manifest.session.scenarios.must_pass.clone();
-            combined.extend(manifest.session.scenarios.nice_to_pass.iter().cloned());
-            combined
-        }
-    }
-}
-
 /// Apply manifest defaults to a `spawn:` step that wrote `from: SAMPLE.md`.
 ///
 /// Inline values on the step always win — the manifest only fills fields the
@@ -224,6 +201,7 @@ mod tests {
     use std::env;
     use std::error::Error as StdError;
     use std::fs;
+    use std::path::PathBuf;
     use std::result::Result as StdResult;
 
     use super::*;
@@ -378,42 +356,5 @@ mod tests {
             );
         }
         Ok(())
-    }
-
-    #[test]
-    fn select_scenarios_all_concatenates_in_order() {
-        let manifest = SampleManifest {
-            version: SAMPLE_SCHEMA_VERSION,
-            name: None,
-            description: None,
-            session: Session {
-                boot: Boot {
-                    command: String::new(),
-                    cwd: None,
-                    env: HashMap::new(),
-                    timeout_s: None,
-                },
-                scenarios: Scenarios {
-                    must_pass: vec![PathBuf::from("a.yaml"), PathBuf::from("b.yaml")],
-                    nice_to_pass: vec![PathBuf::from("c.yaml")],
-                },
-                boot_once: false,
-                boot_ready_port: None,
-                boot_ready_timeout_s: None,
-            },
-        };
-        let all = select_scenarios(&manifest, ScenarioSet::All);
-        assert_eq!(
-            all,
-            vec![
-                PathBuf::from("a.yaml"),
-                PathBuf::from("b.yaml"),
-                PathBuf::from("c.yaml"),
-            ]
-        );
-        let must = select_scenarios(&manifest, ScenarioSet::MustPass);
-        assert_eq!(must, vec![PathBuf::from("a.yaml"), PathBuf::from("b.yaml")]);
-        let nice = select_scenarios(&manifest, ScenarioSet::NiceToPass);
-        assert_eq!(nice, vec![PathBuf::from("c.yaml")]);
     }
 }

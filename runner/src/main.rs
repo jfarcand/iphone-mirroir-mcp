@@ -32,6 +32,8 @@ mod replay_dispatch;
 mod replay_plan;
 mod replay_sample;
 mod replay_step;
+mod replay_target;
+mod scenario_set;
 mod target;
 mod verdict;
 

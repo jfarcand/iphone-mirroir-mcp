@@ -19,9 +19,12 @@ use crate::mirroir::run_io::{
     RunTotals, SampleStatus, SampleVerdict, load_and_apply_local_overrides, load_config,
     project_root_for_config, resolve_home_root, write_summary_full,
 };
+use crate::mirroir::run_selection::{
+    ensure_selection_runs_something, select_set, set_filtered_entries,
+};
 use crate::parser::lockfile::Lockfile;
 use crate::parser::mirroir::{
-    ArchetypeRef, ArchetypeRefKind, DefaultScenarioSet, MirroirConfig, PlanEntry, PlanEntrySource,
+    ArchetypeRef, ArchetypeRefKind, MirroirConfig, PlanEntry, PlanEntrySource,
 };
 use crate::replay::{ReplayRoots, ScenarioSet, run_sample};
 use crate::verdict::RunVerdict;
@@ -62,19 +65,24 @@ impl Default for MirroirRunOptions {
 ///    in `Default` mode if stale.
 /// 4. Resolve archetype references against `$HOME/.mirroir/skills/` and the
 ///    project's `.mirroir/archetypes/`.
-/// 5. Compose each plan entry (per archetype source files + plan vars/boot)
-///    into `<repo>/.mirroir/.build/<entry.name>/`. Local entries pass through.
-/// 6. For each composed sample (unless `--compose-only`): invoke
+/// 5. Resolve the scenario set and refuse the run outright when it would
+///    replay nothing — see [`ensure_selection_runs_something`].
+/// 6. Compose each selected plan entry (per archetype source files + plan
+///    vars/boot) into `<repo>/.mirroir/.build/<entry.name>/`. Local entries
+///    pass through; entries the set filtered out are recorded as `skipped`.
+/// 7. For each composed sample (unless `--compose-only`): invoke
 ///    [`run_sample`] using the existing `ScenarioSet::MustPass` (or as
 ///    selected) machinery.
-/// 7. Emit the summary JSON to `summary_path` and return
+/// 8. Emit the summary JSON to `summary_path` and return
 ///    [`MirroirError::PlanFailures`] when any sample failed, or
 ///    [`RunVerdict::Drift`] when none failed and at least one drifted.
 ///
 /// # Errors
 ///
 /// Returns any error from the underlying discovery / parse / resolve /
-/// compose / replay layers, plus the lockfile-mode enforcement variants.
+/// compose / replay layers, plus the lockfile-mode enforcement variants and
+/// the two selection refusals, [`MirroirError::SelectionMatchedNothing`] and
+/// [`MirroirError::PlanEmpty`].
 pub async fn run_mirroir(
     config_path: &Path,
     set: Option<ScenarioSet>,
@@ -107,43 +115,58 @@ pub async fn run_mirroir(
         resolve_all_archetypes(&config, &project_root, &home_root, lockfile_opt.as_ref())?;
 
     let selected_set = select_set(config.default_set, set);
-    let include_nice_to_pass = matches!(selected_set, ScenarioSet::NiceToPass | ScenarioSet::All);
+    ensure_selection_runs_something(config_path, &config.plan, selected_set)?;
     let composed = build_composed_samples(
         &config,
         &resolved_archetypes,
         &project_root,
         options.recompose,
         options.no_compose,
-        include_nice_to_pass,
+        selected_set.includes_nice_to_pass(),
     )?;
+
+    // Entries the scenario set left out never reach compose or replay. They
+    // are still the plan's, so they are reported as `skipped` rather than
+    // dropped: a summary that lists fewer samples than the plan declares
+    // cannot be read as an account of the plan. They sit in the plan's
+    // `nice_to_pass` tier, so appending them after the composed entries is
+    // plan order.
+    let filtered: Vec<SampleVerdict> = set_filtered_entries(&config.plan, selected_set)
+        .iter()
+        .map(|entry| SampleVerdict {
+            name: entry.name.clone(),
+            verdict: SampleStatus::Skipped,
+            error: Some(format!(
+                "not selected by scenario set `{}`",
+                selected_set.label()
+            )),
+        })
+        .collect();
+    let mut totals = RunTotals {
+        skipped: filtered.len(),
+        ..RunTotals::default()
+    };
+    let mut verdicts: Vec<SampleVerdict> = Vec::with_capacity(composed.len() + filtered.len());
 
     if options.compose_only {
         info!(
             samples = composed.len(),
             "compose-only mode; nothing replayed, so nothing passed"
         );
-        // Every sample is `composed`, and the pass / fail / skip counts are all
-        // zero: --compose-only builds the tree and stops, so no scenario has a
-        // verdict yet. Counting the composed samples as passed would report a
-        // green run for work that never executed.
-        write_summary_full(
-            summary_path,
-            config_path,
-            composed
-                .iter()
-                .map(|(entry, _)| SampleVerdict {
-                    name: entry.name.clone(),
-                    verdict: SampleStatus::Composed,
-                    error: None,
-                })
-                .collect(),
-            RunTotals::default(),
-        )?;
+        // Every composed sample is `composed`, and the pass / fail / drift
+        // counts are all zero: --compose-only builds the tree and stops, so no
+        // scenario has a verdict yet. Counting the composed samples as passed
+        // would report a green run for work that never executed. The
+        // set-filtered entries are appended after them, still `skipped`.
+        verdicts.extend(composed.iter().map(|(entry, _)| SampleVerdict {
+            name: entry.name.clone(),
+            verdict: SampleStatus::Composed,
+            error: None,
+        }));
+        verdicts.extend(filtered);
+        write_summary_full(summary_path, config_path, verdicts, totals)?;
         return Ok(RunVerdict::Pass);
     }
-
-    let mut verdicts: Vec<SampleVerdict> = Vec::with_capacity(composed.len());
-    let mut totals = RunTotals::default();
 
     for (entry, sample) in composed {
         if entry.skip {
@@ -190,6 +213,7 @@ pub async fn run_mirroir(
         }
     }
 
+    verdicts.extend(filtered);
     let total = verdicts.len();
     let failed = totals.failed;
     let drifted = totals.drifted;
@@ -202,20 +226,6 @@ pub async fn run_mirroir(
         return Ok(RunVerdict::Drift);
     }
     Ok(RunVerdict::Pass)
-}
-
-/// Resolve the effective scenario set. An explicit CLI `--scenarios` choice
-/// always wins; when the user did not pass one (`None`), the config's
-/// `default_set` is honored, falling back to `MustPass`.
-fn select_set(config_default: Option<DefaultScenarioSet>, cli: Option<ScenarioSet>) -> ScenarioSet {
-    if let Some(set) = cli {
-        return set;
-    }
-    match config_default {
-        Some(DefaultScenarioSet::MustPass) | None => ScenarioSet::MustPass,
-        Some(DefaultScenarioSet::NiceToPass) => ScenarioSet::NiceToPass,
-        Some(DefaultScenarioSet::All) => ScenarioSet::All,
-    }
 }
 
 fn ensure_lockfile(
@@ -383,34 +393,11 @@ mod tests {
     use std::path::Path;
     use std::result::Result as StdResult;
 
-    use super::{DefaultScenarioSet, ScenarioSet, ensure_lockfile, select_set};
+    use super::ensure_lockfile;
     use crate::error::RunnerError;
     use crate::mirroir::error::MirroirError;
     use crate::mirroir::lock::LockfileMode;
     use crate::parser::mirroir::parse_mirroir_config;
-
-    #[test]
-    fn explicit_cli_choice_wins_over_config_default() {
-        let resolved = select_set(Some(DefaultScenarioSet::MustPass), Some(ScenarioSet::All));
-        assert!(matches!(resolved, ScenarioSet::All));
-    }
-
-    #[test]
-    fn config_default_honored_when_cli_absent() {
-        assert!(matches!(
-            select_set(Some(DefaultScenarioSet::All), None),
-            ScenarioSet::All
-        ));
-        assert!(matches!(
-            select_set(Some(DefaultScenarioSet::NiceToPass), None),
-            ScenarioSet::NiceToPass
-        ));
-    }
-
-    #[test]
-    fn falls_back_to_must_pass_when_both_absent() {
-        assert!(matches!(select_set(None, None), ScenarioSet::MustPass));
-    }
 
     #[test]
     fn frozen_missing_lockfile_is_frozen_violation() -> StdResult<(), Box<dyn StdError>> {

@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 //
 // ABOUTME: Emits a runner-consumable .mirroir/apps/<slug>/ iOS oracle leg from a finished exploration.
-// ABOUTME: Writes a --validate-able iOS scenario + cross-surface baseline; never overwrites onboard's web files.
+// ABOUTME: Writes the iOS capture + the cross-surface baseline mirroir-run compares; never overwrites onboard's web files.
 
 import Foundation
 import HelperLib
@@ -113,9 +113,10 @@ enum MirroirAppTreeEmitter {
 
         The **iOS leg** of this app dir is emitted by `generate_skill` from an
         iPhone Mirroring capture. The `scenarios/<flow>.ios.yaml` document is a
-        faithful **linear** record of the captured walk — validate it with
-        `mirroir-run --validate scenarios/<flow>.ios.yaml`. The runner has no iOS
-        executor, so it is never replayed; it is a baseline + cross-surface anchor.
+        faithful **linear** record of the captured walk. It opens
+        `target: { kind: ios }`, a surface mirroir-run has no executor for, so the
+        runner refuses it by name — at `--validate` exactly as at run time. It is
+        a capture artifact and the parity gate's anchor, not a runner scenario.
 
         The **web leg** (real DOM selectors, runnable on `mirroir-run`) is authored
         separately. Cross-surface parity pairs `baselines/<flow>.ios.txt` (emitted

@@ -9,6 +9,10 @@
 //! `judge:` and `cross_surface:` post-hooks read their values back out of it.
 //! Nothing here writes a scraped value to a side-channel file, because that
 //! mechanism no longer exists.
+//!
+//! The last two tests pin the edges where a `cross_surface:` gate has nothing
+//! to hold a run to — an undeclared threshold, a surface with no text — and
+//! fail before any comparison runs.
 
 mod common;
 
@@ -255,6 +259,94 @@ fn a_declared_capture_missing_from_the_attachment_fails_the_run() -> Result<(), 
     if !run.output().contains("carried no text for it") {
         return Err(format!(
             "the failure did not name the missing capture.\n{}",
+            run.output()
+        ));
+    }
+    Ok(())
+}
+
+/// `min_similarity` is the gate: a step that omits it holds the run to nothing
+/// the scenario ever declared. The grammar requires it, so a scenario without
+/// one is refused at parse time rather than compared against an inferred
+/// threshold two identical baselines would clear anyway.
+#[test]
+fn cross_surface_without_min_similarity_is_a_parse_error() -> Result<(), String> {
+    let sandbox = Sandbox::new()?;
+    let ios = sandbox.write("surface-ios.txt", "the shared answer text")?;
+    let web = sandbox.write("surface-web.txt", "the shared answer text")?;
+    let scenario = sandbox.scenario(
+        "cross-no-threshold.yaml",
+        &format!(
+            concat!(
+                "version: 1\n",
+                "name: cross_surface with no declared threshold\n",
+                "steps:\n",
+                "  - cross_surface:\n",
+                "      response_files:\n",
+                "        - \"{ios}\"\n",
+                "        - \"{web}\"\n"
+            ),
+            ios = ios,
+            web = web
+        ),
+    )?;
+
+    let run = sandbox.run(&["--run-scenario", &scenario])?;
+    if !run.is_failure() {
+        return Err(format!(
+            "the run exited {:?}; an undeclared threshold was filled in and the gate passed.\n{}",
+            run.code,
+            run.output()
+        ));
+    }
+    if !run.output().contains("YAML parse failed") {
+        return Err(format!(
+            "the run failed, but not at parse time on the undeclared threshold.\n{}",
+            run.output()
+        ));
+    }
+    Ok(())
+}
+
+/// Two blank surfaces are not a match. Jaccard calls two empty token sets
+/// identical — the documented answer for drift against a recorded baseline,
+/// the wrong one for an equivalence gate — and `generate_skill` writes a lone
+/// newline when the destination screen yielded no OCR text, so a pair of empty
+/// baselines is a shape the check really meets.
+#[test]
+fn cross_surface_with_an_empty_surface_fails() -> Result<(), String> {
+    let sandbox = Sandbox::new()?;
+    let ios = sandbox.write("surface-ios.txt", "\n")?;
+    let web = sandbox.write("surface-web.txt", "\n")?;
+    let scenario = sandbox.scenario(
+        "cross-empty.yaml",
+        &format!(
+            concat!(
+                "version: 1\n",
+                "name: cross_surface over two empty surfaces\n",
+                "steps:\n",
+                "  - cross_surface:\n",
+                "      response_files:\n",
+                "        - \"{ios}\"\n",
+                "        - \"{web}\"\n",
+                "      min_similarity: 0.5\n"
+            ),
+            ios = ios,
+            web = web
+        ),
+    )?;
+
+    let run = sandbox.run(&["--run-scenario", &scenario])?;
+    if !run.is_failure() {
+        return Err(format!(
+            "the run exited {:?}; two surfaces with no text scored a perfect match.\n{}",
+            run.code,
+            run.output()
+        ));
+    }
+    if !run.output().contains("has no comparable text") || !run.output().contains(&ios) {
+        return Err(format!(
+            "the failure did not name the empty surface.\n{}",
             run.output()
         ));
     }

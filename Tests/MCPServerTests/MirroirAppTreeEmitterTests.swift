@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 //
 // ABOUTME: Tests the .mirroir/ iOS-leg emitter — scenario YAML shape, baseline, plan upsert, idempotency.
-// ABOUTME: Emitted scenario shapes are the ones proven to parse by `mirroir-run --validate`.
+// ABOUTME: Shapes are asserted here only; the iOS walk declares a surface mirroir-run refuses by design.
 
 import XCTest
 import HelperLib

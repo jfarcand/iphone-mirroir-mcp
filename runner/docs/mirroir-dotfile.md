@@ -362,9 +362,14 @@ assert they stay equivalent:
   selectors, authored against the running web app by the `mirroir-onboard` skill
   (`.claude/skills/mirroir-onboard/`, the agent + `chrome-devtools-mcp` recorder). `mirroir-run` replays it on Linux CI.
 - **iOS leg** — emitted by `mirroir-mcp`'s `generate_skill … emit=true` from an
-  iPhone Mirroring capture: a `--validate`-only `scenarios/<flow>.ios.yaml`
-  (a faithful linear walk; the runner has no iOS executor, so it is never
-  replayed) plus the cross-surface oracle `baselines/<flow>.ios.txt`.
+  iPhone Mirroring capture: a `scenarios/<flow>.ios.yaml` capture artifact
+  (a faithful linear walk) plus the cross-surface oracle
+  `baselines/<flow>.ios.txt`. It opens `- target: { kind: ios, … }`, a surface
+  this binary has no executor for, so `mirroir-run` refuses it by name — at
+  `--validate` exactly as at run time, since validate builds the plan a run
+  would execute. The iOS walk is the parity gate's anchor, not a scenario
+  `mirroir-run` plans; its shape is pinned by the emitter's own tests in
+  `mirroir-mcp`.
 
 The two meet in a `scenarios/<flow>.parity.yaml` gate (also emitted) that compares
 the iOS baseline against a web baseline by Jaccard similarity:
@@ -400,11 +405,15 @@ needed:
 Without `capture` the runner only **compares** pre-existing files — write
 `baselines/<flow>.web.txt` yourself from the web leg. Either way, until the web
 baseline exists the parity step **fails closed** — a missing file is an error,
-never a silent pass.
+never a silent pass, and so is a file with no text in it: two blank surfaces
+score a perfect match, which is exactly what a screen that yielded no OCR
+elements would leave behind.
 
-`min_similarity` defaults to `0.5` for iOS↔web phrasing divergence; raise it for
-high-entropy screens, and treat low-vocabulary screens (e.g. a bare login form)
-with care — a generic token set can clear a low threshold by coincidence.
+`min_similarity` is **required** — a gate whose threshold depends on whether you
+remembered to type it is not a gate. `0.5` suits iOS↔web phrasing divergence;
+raise it for high-entropy screens, and treat low-vocabulary screens (e.g. a bare
+login form) with care — a generic token set can clear a low threshold by
+coincidence.
 
 `mirroir-run accept` re-records the **web** side of a parity gate: the
 `capture.to` file is rewritten from the live page. It never writes
